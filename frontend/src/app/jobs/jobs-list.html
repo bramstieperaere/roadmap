@@ -1,0 +1,69 @@
+<div class="container py-4" data-testid="jobs-list-page">
+  <h4 class="mb-4 fw-semibold">Analysis Jobs</h4>
+
+  @if (loading()) {
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+  } @else if (jobs().length === 0) {
+    <div class="card">
+      <div class="card-body text-center text-muted py-5" data-testid="no-jobs-message">
+        <i class="bi bi-lightning fs-1 d-block mb-2"></i>
+        No analysis jobs yet. Go to <a routerLink="/settings">Settings</a> to run an analysis on a module.
+      </div>
+    </div>
+  } @else {
+    <div class="card" data-testid="jobs-table-card">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Module</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Summary</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (job of jobs(); track job.id) {
+              <tr class="cursor-pointer" (click)="viewJob(job.id)" [attr.data-testid]="'job-row-' + job.id">
+                <td><code>{{ job.id }}</code></td>
+                <td>
+                  <i class="bi me-1" [class.bi-filetype-java]="job.module_type === 'java'"
+                     [class.bi-code-slash]="job.module_type !== 'java'"></i>
+                  {{ job.module_name }}
+                </td>
+                <td>
+                  <span class="badge" [class]="getStatusBadgeClass(job.status)"
+                        [attr.data-testid]="'job-status-' + job.id">
+                    @if (job.status === 'running') {
+                      <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span>
+                    }
+                    {{ job.status }}
+                  </span>
+                </td>
+                <td>{{ job.created_at | date:'short' }}</td>
+                <td>
+                  @if (job.summary) {
+                    <small class="text-muted">{{ job.summary }}</small>
+                  } @else if (job.error) {
+                    <small class="text-danger">{{ job.error }}</small>
+                  }
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-outline-secondary" [attr.data-testid]="'view-job-' + job.id">
+                    <i class="bi bi-journal-text me-1"></i>Log
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>

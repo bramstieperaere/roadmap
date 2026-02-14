@@ -9,23 +9,23 @@ set PORT=8081
 set CONFIG=
 
 :parse_args
-if "%~1"=="" goto :done_args
+if "%~1"=="" goto done_args
 if /i "%~1"=="--port" (
     set "PORT=%~2"
     shift
     shift
-    goto :parse_args
+    goto parse_args
 )
 if /i "%~1"=="--config" (
     set "CONFIG=%~2"
     shift
     shift
-    goto :parse_args
+    goto parse_args
 )
-if /i "%~1"=="--help" goto :usage
-if /i "%~1"=="-h" goto :usage
+if /i "%~1"=="--help" goto usage
+if /i "%~1"=="-h" goto usage
 echo Unknown option: %~1
-goto :usage
+goto usage
 
 :usage
 echo Usage: start.bat [--port PORT] [--config PATH]
@@ -74,6 +74,10 @@ set "STAMP=%VENV_DIR%\.vendor-installed"
 if not exist "%STAMP%" (
     echo Installing dependencies from vendored packages...
     "%VENV_PYTHON%" -m pip install --no-index --find-links "%SCRIPT_DIR%\vendor" -r "%SCRIPT_DIR%\requirements.txt" --quiet
+    if errorlevel 1 (
+        echo ERROR: Failed to install dependencies.
+        exit /b 1
+    )
     echo. > "%STAMP%"
     echo Dependencies installed.
 ) else (

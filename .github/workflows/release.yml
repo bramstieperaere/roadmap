@@ -37,9 +37,13 @@ jobs:
         working-directory: frontend
         run: npx ng build --configuration production
 
-      # --- Download pip wheels ---
+      # --- Download pip wheels (Linux + Windows) ---
       - name: Download pip wheels
-        run: pip download -r backend/requirements.txt --dest vendor/
+        run: |
+          pip download -r backend/requirements.txt --dest vendor/
+          pip download -r backend/requirements.txt --dest vendor/ \
+            --platform win_amd64 --python-version 3.13 --only-binary :all:
+          pip download colorama --dest vendor/
 
       # --- Assemble release ---
       - name: Extract version from tag
@@ -60,8 +64,12 @@ jobs:
           cp backend/app/config.py "${RELEASE_DIR}/app/"
           cp backend/app/crypto.py "${RELEASE_DIR}/app/"
           cp backend/app/models.py "${RELEASE_DIR}/app/"
+          cp backend/app/models_jobs.py "${RELEASE_DIR}/app/"
           cp backend/app/session.py "${RELEASE_DIR}/app/"
+          cp backend/app/job_store.py "${RELEASE_DIR}/app/"
+          cp backend/app/neo4j_client.py "${RELEASE_DIR}/app/"
           cp -r backend/app/routers "${RELEASE_DIR}/app/routers"
+          cp -r backend/app/analyzers "${RELEASE_DIR}/app/analyzers"
 
           # Remove __pycache__ directories
           find "${RELEASE_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

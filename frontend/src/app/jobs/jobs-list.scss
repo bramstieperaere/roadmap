@@ -1,0 +1,11 @@
+.cursor-pointer {
+  cursor: pointer;
+}
+
+table th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

@@ -66,13 +66,18 @@
                      [value]="repo.path" (input)="updateRepoPath(repoIndex, $any($event.target).value)"
                      [attr.data-testid]="'repo-path-' + repoIndex">
             </div>
+            <button class="btn btn-outline-warning btn-sm" (click)="startAnalysisJob(repoIndex)"
+                    [disabled]="repo.modules.length === 0" title="Run source code analysis"
+                    [attr.data-testid]="'run-analysis-' + repoIndex">
+              <i class="bi bi-lightning me-1"></i>Run Analysis
+            </button>
             <button class="btn btn-outline-info btn-sm" (click)="analyzeRepository(repoIndex)"
-                    [disabled]="analyzing() !== null" title="Analyze repository with AI"
+                    [disabled]="analyzing() !== null" title="Detect modules with AI"
                     [attr.data-testid]="'analyze-repo-' + repoIndex">
               @if (analyzing() === repoIndex) {
                 <span class="spinner-border spinner-border-sm me-1"></span>Analyzing...
               } @else {
-                <i class="bi bi-robot me-1"></i>Analyze
+                <i class="bi bi-robot me-1"></i>Detect Modules
               }
             </button>
             <button class="btn btn-outline-danger btn-sm" (click)="removeRepository(repoIndex)" title="Remove repository"

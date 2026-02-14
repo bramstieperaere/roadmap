@@ -1,6 +1,8 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig } from '../services/settings';
+import { JobsService } from '../services/jobs';
 
 @Component({
   selector: 'app-settings',
@@ -10,6 +12,8 @@ import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig } from '../s
 })
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
+  private jobsService = inject(JobsService);
+  private router = inject(Router);
 
   config = signal<AppConfig>({
     neo4j: { uri: '', username: '', password: '', database: '' },
@@ -178,6 +182,33 @@ export class SettingsComponent implements OnInit {
         this.showMessage(err.error?.detail || 'Analysis failed', 'danger');
       },
     });
+  }
+
+  startAnalysisJob(repoIndex: number) {
+    const repo = this.config().repositories[repoIndex];
+    const javaModules = repo.modules
+      .map((m, i) => ({ module: m, index: i }))
+      .filter(({ module }) => module.type === 'java');
+
+    if (javaModules.length === 0) {
+      this.showMessage('No Java modules to analyze', 'danger');
+      return;
+    }
+
+    let started = 0;
+    for (const { index } of javaModules) {
+      this.jobsService.startJob(repoIndex, index).subscribe({
+        next: () => {
+          started++;
+          if (started === javaModules.length) {
+            this.router.navigate(['/jobs']);
+          }
+        },
+        error: (err) => {
+          this.showMessage(err.error?.detail || 'Failed to start job', 'danger');
+        },
+      });
+    }
   }
 
   dismissMessage() {

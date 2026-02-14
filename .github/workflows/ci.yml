@@ -38,3 +38,66 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npx ng build --configuration production
+
+      # --- Download pip wheels (Linux + Windows) ---
+      - name: Download pip wheels
+        run: |
+          pip download -r backend/requirements.txt --dest vendor/
+          pip download -r backend/requirements.txt --dest vendor/ \
+            --platform win_amd64 --python-version 3.13 --only-binary :all:
+          pip download colorama --dest vendor/
+
+      # --- Assemble build ---
+      - name: Assemble build
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          RELEASE_DIR="roadmap-${SHORT_SHA}"
+
+          mkdir -p "${RELEASE_DIR}/app/static"
+          mkdir -p "${RELEASE_DIR}/vendor"
+
+          # Copy backend app package
+          cp backend/app/__init__.py "${RELEASE_DIR}/app/"
+          cp backend/app/main.py "${RELEASE_DIR}/app/"
+          cp backend/app/config.py "${RELEASE_DIR}/app/"
+          cp backend/app/crypto.py "${RELEASE_DIR}/app/"
+          cp backend/app/models.py "${RELEASE_DIR}/app/"
+          cp backend/app/models_jobs.py "${RELEASE_DIR}/app/"
+          cp backend/app/session.py "${RELEASE_DIR}/app/"
+          cp backend/app/job_store.py "${RELEASE_DIR}/app/"
+          cp backend/app/neo4j_client.py "${RELEASE_DIR}/app/"
+          cp -r backend/app/routers "${RELEASE_DIR}/app/routers"
+          cp -r backend/app/analyzers "${RELEASE_DIR}/app/analyzers"
+
+          # Remove __pycache__ directories
+          find "${RELEASE_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+          # Copy Angular build output into app/static/
+          cp -r frontend/dist/frontend/browser/* "${RELEASE_DIR}/app/static/"
+
+          # Copy vendored wheels
+          cp vendor/* "${RELEASE_DIR}/vendor/"
+
+          # Copy requirements.txt
+          cp backend/requirements.txt "${RELEASE_DIR}/requirements.txt"
+
+          # Copy config example
+          cp backend/config.yaml.example "${RELEASE_DIR}/config.yaml.example"
+
+          # Copy start scripts and README
+          cp release/start.sh "${RELEASE_DIR}/start.sh"
+          cp release/start.bat "${RELEASE_DIR}/start.bat"
+          cp release/README.md "${RELEASE_DIR}/README.md"
+
+          chmod +x "${RELEASE_DIR}/start.sh"
+
+      - name: Create zip archive
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          7z a "roadmap-${SHORT_SHA}.zip" "roadmap-${SHORT_SHA}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: roadmap-${{ github.sha }}
+          path: roadmap-*.zip

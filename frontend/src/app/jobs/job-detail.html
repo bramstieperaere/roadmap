@@ -1,0 +1,85 @@
+<div class="container py-4" data-testid="job-detail-page">
+  <div class="mb-3">
+    <a routerLink="/jobs" class="text-decoration-none" data-testid="back-to-jobs">
+      <i class="bi bi-arrow-left me-1"></i>Back to Jobs
+    </a>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary"></div>
+    </div>
+  } @else if (job(); as j) {
+    <!-- Header card -->
+    <div class="card mb-4" data-testid="job-info-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-lightning me-2"></i>Job <code>{{ j.id }}</code></span>
+        <span class="badge" [class]="getStatusBadgeClass(j.status)" data-testid="job-detail-status">
+          @if (j.status === 'running') {
+            <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span>
+          }
+          {{ j.status }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <small class="text-muted d-block">Module</small>
+            <strong data-testid="job-module-name">{{ j.module_name }}</strong>
+            <span class="badge bg-light text-dark ms-1">{{ j.module_type }}</span>
+          </div>
+          <div class="col-md-4">
+            <small class="text-muted d-block">Repository</small>
+            <span data-testid="job-repo-path">{{ j.repo_path }}</span>
+          </div>
+          <div class="col-md-4">
+            <small class="text-muted d-block">Created</small>
+            <span>{{ j.created_at | date:'medium' }}</span>
+          </div>
+        </div>
+        @if (j.summary) {
+          <div class="mt-3">
+            <small class="text-muted d-block">Summary</small>
+            <span class="text-success" data-testid="job-summary">
+              <i class="bi bi-check-circle me-1"></i>{{ j.summary }}
+            </span>
+          </div>
+        }
+        @if (j.error) {
+          <div class="mt-3">
+            <small class="text-muted d-block">Error</small>
+            <span class="text-danger" data-testid="job-error">
+              <i class="bi bi-exclamation-triangle me-1"></i>{{ j.error }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Log card -->
+    <div class="card" data-testid="job-log-card">
+      <div class="card-header">
+        <i class="bi bi-journal-text me-2"></i>Job Log
+        <span class="badge bg-light text-dark ms-2">{{ j.log.length }} entries</span>
+      </div>
+      <div class="card-body p-0">
+        @if (j.log.length === 0) {
+          <p class="text-muted text-center py-3 mb-0" data-testid="no-log-message">No log entries yet.</p>
+        } @else {
+          <div class="log-container" data-testid="job-log-entries">
+            @for (entry of j.log; track $index) {
+              <div class="log-entry" [attr.data-testid]="'log-entry-' + $index">
+                <span class="log-timestamp">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</span>
+                <span class="log-level badge"
+                      [class.bg-info]="entry.level === 'info'"
+                      [class.bg-warning]="entry.level === 'warn'"
+                      [class.bg-danger]="entry.level === 'error'">{{ entry.level }}</span>
+                <span class="log-message" [class]="getLogLevelClass(entry.level)">{{ entry.message }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
