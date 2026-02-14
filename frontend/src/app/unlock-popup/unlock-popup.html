@@ -1,0 +1,45 @@
+<div class="unlock-overlay" data-testid="unlock-popup">
+  <div class="unlock-card card" data-testid="unlock-card">
+    <div class="card-header text-center">
+      <i class="bi bi-key-fill me-2"></i>Unlock Configuration
+    </div>
+    <div class="card-body">
+      @if (isFirstTime()) {
+        <div class="alert alert-warning small" data-testid="unlock-first-time-warning">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          <strong>First-time setup:</strong> Choose a password to encrypt your configuration.
+          Your settings will be unusable without this password.
+        </div>
+      }
+
+      @if (error(); as err) {
+        <div class="alert alert-danger small" data-testid="unlock-error">
+          {{ err }}
+        </div>
+      }
+
+      <div class="mb-3">
+        <label class="form-label" for="unlock-password">Password</label>
+        <input
+          type="password"
+          id="unlock-password"
+          class="form-control"
+          [value]="password()"
+          (input)="password.set($any($event.target).value)"
+          (keydown.enter)="submit()"
+          placeholder="Enter encryption password"
+          data-testid="unlock-password-input"
+          autofocus>
+      </div>
+
+      <button
+        class="btn btn-primary w-100"
+        (click)="submit()"
+        [disabled]="submitting()"
+        data-testid="unlock-submit">
+        <i class="bi bi-unlock-fill me-1"></i>
+        {{ submitting() ? 'Unlocking...' : 'Unlock' }}
+      </button>
+    </div>
+  </div>
+</div>

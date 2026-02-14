@@ -1,0 +1,112 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # --- Build Angular frontend ---
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npx ng build --configuration production
+
+      # --- Download pip wheels ---
+      - name: Download pip wheels
+        run: pip download -r backend/requirements.txt --dest vendor/
+
+      # --- Assemble release ---
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble release
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          RELEASE_DIR="roadmap-${VERSION}"
+
+          mkdir -p "${RELEASE_DIR}/app/static"
+          mkdir -p "${RELEASE_DIR}/vendor"
+
+          # Copy backend app package
+          cp backend/app/__init__.py "${RELEASE_DIR}/app/"
+          cp backend/app/main.py "${RELEASE_DIR}/app/"
+          cp backend/app/config.py "${RELEASE_DIR}/app/"
+          cp backend/app/crypto.py "${RELEASE_DIR}/app/"
+          cp backend/app/models.py "${RELEASE_DIR}/app/"
+          cp backend/app/session.py "${RELEASE_DIR}/app/"
+          cp -r backend/app/routers "${RELEASE_DIR}/app/routers"
+
+          # Remove __pycache__ directories
+          find "${RELEASE_DIR}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+          # Copy Angular build output into app/static/
+          cp -r frontend/dist/frontend/browser/* "${RELEASE_DIR}/app/static/"
+
+          # Copy vendored wheels
+          cp vendor/* "${RELEASE_DIR}/vendor/"
+
+          # Copy requirements.txt
+          cp backend/requirements.txt "${RELEASE_DIR}/requirements.txt"
+
+          # Copy config example
+          cp backend/config.yaml.example "${RELEASE_DIR}/config.yaml.example"
+
+          # Copy start scripts and README
+          cp release/start.sh "${RELEASE_DIR}/start.sh"
+          cp release/start.bat "${RELEASE_DIR}/start.bat"
+          cp release/README.md "${RELEASE_DIR}/README.md"
+
+          chmod +x "${RELEASE_DIR}/start.sh"
+
+      - name: Create zip archive
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          7z a "roadmap-${VERSION}.zip" "roadmap-${VERSION}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: roadmap-${{ steps.version.outputs.VERSION }}
+          path: roadmap-${{ steps.version.outputs.VERSION }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true

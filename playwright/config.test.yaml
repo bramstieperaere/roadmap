@@ -1,0 +1,10 @@
+neo4j:
+  uri: bolt://localhost:7688
+  username: neo4j
+  password: testpassword
+  database: neo4j
+
+repositories: []
+ai_providers: []
+ai_tasks: []
+encryption_salt: null

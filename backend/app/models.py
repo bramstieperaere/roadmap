@@ -1,0 +1,58 @@
+from typing import Literal, Optional
+
+from pydantic import BaseModel
+
+
+class Neo4jConfig(BaseModel):
+    uri: str = "bolt://localhost:7687"
+    username: str = "neo4j"
+    password: str = "roadmap"
+    database: str = "neo4j"
+
+
+class ModuleConfig(BaseModel):
+    name: str
+    type: Literal["java", "angular"]
+    relative_path: str
+
+
+class RepositoryConfig(BaseModel):
+    path: str
+    modules: list[ModuleConfig] = []
+
+
+class AIProviderConfig(BaseModel):
+    name: str
+    base_url: str = "https://api.openai.com/v1"
+    api_key: str = ""
+    default_model: str = "gpt-4o"
+
+
+class AITaskConfig(BaseModel):
+    task_type: str
+    provider_name: str
+
+
+class AppConfig(BaseModel):
+    neo4j: Neo4jConfig = Neo4jConfig()
+    repositories: list[RepositoryConfig] = []
+    ai_providers: list[AIProviderConfig] = []
+    ai_tasks: list[AITaskConfig] = []
+    encryption_salt: Optional[str] = None
+
+
+class UnlockRequest(BaseModel):
+    password: str
+
+
+class LockStatusResponse(BaseModel):
+    locked: bool
+    has_encrypted_fields: bool
+
+
+class AnalyzeRequest(BaseModel):
+    repo_index: int
+
+
+class AnalyzeResponse(BaseModel):
+    modules: list[ModuleConfig]

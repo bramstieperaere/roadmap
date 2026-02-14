@@ -1,0 +1,6 @@
+<app-header></app-header>
+<router-outlet />
+
+@if (showUnlockPopup()) {
+  <app-unlock-popup [isFirstTime]="isFirstTime()" (unlocked)="onUnlocked()" />
+}

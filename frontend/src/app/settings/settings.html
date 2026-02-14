@@ -1,0 +1,251 @@
+<div class="container py-4" data-testid="settings-page">
+  <h4 class="mb-4 fw-semibold">Settings</h4>
+
+  <!-- Alert messages -->
+  @if (message(); as msg) {
+    <div class="alert alert-dismissible fade show" [class.alert-success]="msg.type === 'success'" [class.alert-danger]="msg.type === 'danger'" role="alert" data-testid="settings-alert">
+      {{ msg.text }}
+      <button type="button" class="btn-close" (click)="dismissMessage()"></button>
+    </div>
+  }
+
+  <!-- Neo4j Connection -->
+  <div class="card mb-4" data-testid="neo4j-card">
+    <div class="card-header">
+      <i class="bi bi-database me-2"></i>Neo4j Connection
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">URI</label>
+          <input type="text" class="form-control" [value]="config().neo4j.uri"
+                 (input)="updateNeo4jField('uri', $any($event.target).value)" data-testid="neo4j-uri">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Database</label>
+          <input type="text" class="form-control" [value]="config().neo4j.database"
+                 (input)="updateNeo4jField('database', $any($event.target).value)" data-testid="neo4j-database">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-control" [value]="config().neo4j.username"
+                 (input)="updateNeo4jField('username', $any($event.target).value)" data-testid="neo4j-username">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" [value]="config().neo4j.password"
+                 (input)="updateNeo4jField('password', $any($event.target).value)" data-testid="neo4j-password">
+        </div>
+      </div>
+      <div class="mt-3">
+        <button class="btn btn-outline-secondary btn-sm" (click)="testConnection()" [disabled]="testingConnection()" data-testid="neo4j-test-connection">
+          <i class="bi bi-plug me-1"></i>
+          {{ testingConnection() ? 'Testing...' : 'Test Connection' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Repositories -->
+  <div class="card mb-4" data-testid="repositories-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-folder2-open me-2"></i>Repositories</span>
+      <button class="btn btn-outline-primary btn-sm" (click)="addRepository()" data-testid="add-repository">
+        <i class="bi bi-plus-lg me-1"></i>Add Repository
+      </button>
+    </div>
+    <div class="card-body">
+      @for (repo of config().repositories; track $index) {
+        @let repoIndex = $index;
+        @let repoLast = $last;
+        <div class="repo-block" [attr.data-testid]="'repo-' + repoIndex">
+          <div class="d-flex gap-2 align-items-end mb-2">
+            <div class="flex-grow-1">
+              <label class="form-label">Repository Path</label>
+              <input type="text" class="form-control" placeholder="/path/to/git/repo"
+                     [value]="repo.path" (input)="updateRepoPath(repoIndex, $any($event.target).value)"
+                     [attr.data-testid]="'repo-path-' + repoIndex">
+            </div>
+            <button class="btn btn-outline-info btn-sm" (click)="analyzeRepository(repoIndex)"
+                    [disabled]="analyzing() !== null" title="Analyze repository with AI"
+                    [attr.data-testid]="'analyze-repo-' + repoIndex">
+              @if (analyzing() === repoIndex) {
+                <span class="spinner-border spinner-border-sm me-1"></span>Analyzing...
+              } @else {
+                <i class="bi bi-robot me-1"></i>Analyze
+              }
+            </button>
+            <button class="btn btn-outline-danger btn-sm" (click)="removeRepository(repoIndex)" title="Remove repository"
+                    [attr.data-testid]="'remove-repo-' + repoIndex">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+
+          <!-- Modules -->
+          <div class="ms-4 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <small class="text-muted fw-semibold text-uppercase">Modules</small>
+              <button class="btn btn-outline-secondary btn-sm" (click)="addModule(repoIndex)"
+                      [attr.data-testid]="'add-module-' + repoIndex">
+                <i class="bi bi-plus me-1"></i>Add Module
+              </button>
+            </div>
+            @for (mod of repo.modules; track $index) {
+              <div class="row g-2 mb-2 align-items-end" [attr.data-testid]="'module-' + repoIndex + '-' + $index">
+                <div class="col">
+                  <label class="form-label">Name</label>
+                  <input type="text" class="form-control form-control-sm" [value]="mod.name"
+                         (input)="updateModule(repoIndex, $index, 'name', $any($event.target).value)"
+                         [attr.data-testid]="'module-name-' + repoIndex + '-' + $index">
+                </div>
+                <div class="col-auto" style="min-width: 140px">
+                  <label class="form-label">Type</label>
+                  <select class="form-select form-select-sm" [value]="mod.type"
+                          (change)="updateModule(repoIndex, $index, 'type', $any($event.target).value)"
+                          [attr.data-testid]="'module-type-' + repoIndex + '-' + $index">
+                    <option value="java">Java</option>
+                    <option value="angular">Angular</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label">Relative Path</label>
+                  <input type="text" class="form-control form-control-sm" [value]="mod.relative_path"
+                         (input)="updateModule(repoIndex, $index, 'relative_path', $any($event.target).value)"
+                         [attr.data-testid]="'module-path-' + repoIndex + '-' + $index">
+                </div>
+                <div class="col-auto">
+                  <button class="btn btn-outline-danger btn-sm" (click)="removeModule(repoIndex, $index)" title="Remove module"
+                          [attr.data-testid]="'remove-module-' + repoIndex + '-' + $index">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+              </div>
+            }
+            @empty {
+              <p class="text-muted small mb-0" data-testid="no-modules-message">No modules configured. Click "Add Module" or "Analyze" to detect modules.</p>
+            }
+          </div>
+
+          @if (!repoLast) {
+            <hr>
+          }
+        </div>
+      }
+      @empty {
+        <p class="text-muted" data-testid="no-repos-message">No repositories configured. Click "Add Repository" to get started.</p>
+      }
+    </div>
+  </div>
+
+  <!-- AI Providers -->
+  <div class="card mb-4" data-testid="ai-providers-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-cpu me-2"></i>AI Providers</span>
+      <button class="btn btn-outline-primary btn-sm" (click)="addAIProvider()" data-testid="add-ai-provider">
+        <i class="bi bi-plus-lg me-1"></i>Add Provider
+      </button>
+    </div>
+    <div class="card-body">
+      @for (provider of config().ai_providers; track $index) {
+        @let providerIndex = $index;
+        @let providerLast = $last;
+        <div class="provider-block" [attr.data-testid]="'ai-provider-' + providerIndex">
+          <div class="row g-3 mb-2">
+            <div class="col-md-4">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" placeholder="e.g. OpenAI"
+                     [value]="provider.name" (input)="updateAIProvider(providerIndex, 'name', $any($event.target).value)"
+                     [attr.data-testid]="'ai-provider-name-' + providerIndex">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Base URL</label>
+              <input type="text" class="form-control" placeholder="https://api.openai.com/v1"
+                     [value]="provider.base_url" (input)="updateAIProvider(providerIndex, 'base_url', $any($event.target).value)"
+                     [attr.data-testid]="'ai-provider-url-' + providerIndex">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">API Key</label>
+              <input type="password" class="form-control" placeholder="sk-..."
+                     [value]="provider.api_key" (input)="updateAIProvider(providerIndex, 'api_key', $any($event.target).value)"
+                     [attr.data-testid]="'ai-provider-key-' + providerIndex">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Default Model</label>
+              <input type="text" class="form-control" placeholder="gpt-4o"
+                     [value]="provider.default_model" (input)="updateAIProvider(providerIndex, 'default_model', $any($event.target).value)"
+                     [attr.data-testid]="'ai-provider-model-' + providerIndex">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button class="btn btn-outline-danger btn-sm w-100" (click)="removeAIProvider(providerIndex)" title="Remove provider"
+                      [attr.data-testid]="'remove-ai-provider-' + providerIndex">
+                <i class="bi bi-trash me-1"></i>Remove
+              </button>
+            </div>
+          </div>
+          @if (!providerLast) {
+            <hr>
+          }
+        </div>
+      }
+      @empty {
+        <p class="text-muted" data-testid="no-providers-message">No AI providers configured. Click "Add Provider" to set up an OpenAI-compatible API.</p>
+      }
+    </div>
+  </div>
+
+  <!-- AI Tasks -->
+  <div class="card mb-4" data-testid="ai-tasks-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-list-task me-2"></i>AI Tasks</span>
+      <button class="btn btn-outline-primary btn-sm" (click)="addAITask()" data-testid="add-ai-task">
+        <i class="bi bi-plus-lg me-1"></i>Add Task
+      </button>
+    </div>
+    <div class="card-body">
+      @for (task of config().ai_tasks; track $index) {
+        @let taskIndex = $index;
+        @let taskLast = $last;
+        <div class="row g-3 mb-2" [attr.data-testid]="'ai-task-' + taskIndex">
+          <div class="col-md-4">
+            <label class="form-label">Task Type</label>
+            <select class="form-select" [value]="task.task_type"
+                    (change)="updateAITask(taskIndex, 'task_type', $any($event.target).value)"
+                    [attr.data-testid]="'ai-task-type-' + taskIndex">
+              <option value="repository_analysis">Repository Analysis</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Provider</label>
+            <select class="form-select"
+                    (change)="updateAITask(taskIndex, 'provider_name', $any($event.target).value)"
+                    [attr.data-testid]="'ai-task-provider-' + taskIndex">
+              <option value="" [selected]="!task.provider_name">-- Select Provider --</option>
+              @for (p of config().ai_providers; track p.name) {
+                <option [value]="p.name" [selected]="p.name === task.provider_name">{{ p.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-outline-danger btn-sm w-100" (click)="removeAITask(taskIndex)" title="Remove task"
+                    [attr.data-testid]="'remove-ai-task-' + taskIndex">
+              <i class="bi bi-trash me-1"></i>Remove
+            </button>
+          </div>
+        </div>
+        @if (!taskLast) {
+          <hr>
+        }
+      }
+      @empty {
+        <p class="text-muted" data-testid="no-tasks-message">No AI tasks configured. Click "Add Task" to map a task type to an AI provider.</p>
+      }
+    </div>
+  </div>
+
+  <!-- Save -->
+  <div class="d-flex justify-content-end">
+    <button class="btn btn-primary" (click)="save()" data-testid="save-settings">
+      <i class="bi bi-check-lg me-1"></i>Save Settings
+    </button>
+  </div>
+</div>

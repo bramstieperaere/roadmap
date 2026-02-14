@@ -1,0 +1,31 @@
+.navbar {
+  background-color: var(--rm-primary);
+  padding: 0.5rem 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.025em;
+}
+
+.nav-link {
+  font-size: 1.15rem;
+  opacity: 0.85;
+
+  &:hover, &.active {
+    opacity: 1;
+  }
+}
+
+.lock-icon {
+  color: #f6c23e;
+  font-size: 1.1rem;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

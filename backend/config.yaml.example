@@ -1,0 +1,15 @@
+neo4j:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: roadmap
+  database: neo4j
+
+repositories:
+  - path: C:/path/to/checked-out-repo
+    modules:
+      - name: my-java-module
+        type: java
+        relative_path: my-java-module
+      - name: my-angular-app
+        type: angular
+        relative_path: frontend

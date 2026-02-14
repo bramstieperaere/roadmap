@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+backend/venv/
+
+# Config (contains credentials)
+backend/config.yaml
+
+# Node
+node_modules/
+
+# Angular
+frontend/.angular/
+frontend/dist/
+
+# Embedded frontend build (local testing)
+backend/app/static/
+
+# Playwright
+playwright/test-results/
+playwright/playwright-report/
+playwright/blob-report/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env

@@ -1,0 +1,40 @@
+@use 'bootstrap/scss/bootstrap';
+@use 'bootstrap-icons/font/bootstrap-icons.css';
+
+:root {
+  --rm-primary: #1a3a5c;
+  --rm-primary-light: #2c5282;
+  --rm-accent: #3182ce;
+  --rm-bg: #f8f9fa;
+  --rm-surface: #ffffff;
+  --rm-text: #2d3748;
+  --rm-text-muted: #718096;
+  --rm-border: #e2e8f0;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--rm-bg);
+  color: var(--rm-text);
+  font-size: 0.9375rem;
+}
+
+.btn-primary {
+  background-color: var(--rm-primary);
+  border-color: var(--rm-primary);
+
+  &:hover {
+    background-color: var(--rm-primary-light);
+    border-color: var(--rm-primary-light);
+  }
+}
+
+.card {
+  border: 1px solid var(--rm-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
