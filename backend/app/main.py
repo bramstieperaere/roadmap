@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.routers import settings, encryption, analysis, jobs
+from app.routers import settings, encryption, analysis, jobs, query
 
 app = FastAPI(title="Roadmap", description="Software project documentation tool")
 
@@ -19,6 +19,7 @@ app.include_router(settings.router)
 app.include_router(encryption.router)
 app.include_router(analysis.router)
 app.include_router(jobs.router)
+app.include_router(query.router)
 
 # --- Embedded frontend (production builds only) ---
 _STATIC_DIR = Path(__file__).resolve().parent / "static"

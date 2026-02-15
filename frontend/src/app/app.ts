@@ -32,5 +32,6 @@ export class App implements OnInit {
   onUnlocked() {
     this.showUnlockPopup.set(false);
     this.header.checkLockStatus();
+    this.encryptionService.emitUnlocked();
   }
 }

@@ -98,10 +98,17 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             neo4j_driver, all_classes)
         self.log_info(f"Created {import_count} IMPORTS relationships")
 
+        # Phase 6: Resolve method calls
+        self.log_info("Resolving method calls...")
+        calls_count = self._create_calls_relationships(
+            neo4j_driver, all_classes)
+        self.log_info(f"Created {calls_count} CALLS relationships")
+
         summary = (f"{stats['packages']} packages, "
                    f"{stats['classes']} classes, "
                    f"{stats['methods']} methods, "
-                   f"{import_count} imports")
+                   f"{import_count} imports, "
+                   f"{calls_count} calls")
         if stats["parse_errors"] > 0:
             summary += f", {stats['parse_errors']} parse errors"
 
@@ -154,7 +161,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         self._extract_types_from_nodes(
             type_nodes, package_name, is_test,
             str(rel_path), imports, star_imports,
-            classes, parent_name=None)
+            classes, source, parent_name=None)
 
         return {"package": package_name, "classes": classes}
 
@@ -186,6 +193,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                                   is_test: bool, file_path: str,
                                   imports: list, star_imports: list,
                                   classes: list,
+                                  source_bytes: bytes,
                                   parent_name: Optional[str]):
         for node in nodes:
             kind = _TYPE_DECLARATIONS.get(node.type)
@@ -207,7 +215,15 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             modifiers = self._get_modifiers(node)
             is_abstract = "abstract" in modifiers
             visibility = self._visibility_from_modifiers(modifiers)
-            methods = self._extract_methods(node)
+
+            # Extract source code for this class declaration
+            source_code = source_bytes[
+                node.start_byte:node.end_byte].decode("utf-8")
+            class_start_line = node.start_point[0]
+
+            fields = self._extract_fields(node)
+            methods = self._extract_methods(node, class_start_line)
+            supertypes = self._extract_supertypes(node)
 
             cls_info = {
                 "name": simple_name,
@@ -221,6 +237,9 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 "imports": imports,
                 "star_imports": star_imports,
                 "methods": methods,
+                "source_code": source_code,
+                "fields": fields,
+                "supertypes": supertypes,
             }
             classes.append(cls_info)
 
@@ -233,7 +252,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     self._extract_types_from_nodes(
                         inner_types, package_name, is_test,
                         file_path, imports, star_imports,
-                        classes, parent_name=full_name)
+                        classes, source_bytes,
+                        parent_name=full_name)
 
     def _get_modifiers(self, node: Node) -> set[str]:
         modifiers = set()
@@ -255,7 +275,67 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             return "private"
         return "package-private"
 
-    def _extract_methods(self, type_node: Node) -> list[dict]:
+    def _extract_supertypes(self, type_node: Node) -> list[str]:
+        """Extract simple type names from extends/implements clauses."""
+        supertypes = []
+        for child in type_node.children:
+            # class extends: superclass node
+            if child.type == "superclass":
+                for sc in child.children:
+                    if sc.type in ("type_identifier", "generic_type"):
+                        name = sc.text.decode("utf-8")
+                        if "<" in name:
+                            name = name[:name.index("<")]
+                        supertypes.append(name.strip())
+            # class implements / interface extends: super_interfaces
+            # or extends_interfaces
+            elif child.type in ("super_interfaces",
+                                "extends_interfaces"):
+                for sc in child.children:
+                    if sc.type == "type_list":
+                        for t in sc.children:
+                            if t.type in ("type_identifier",
+                                          "generic_type"):
+                                name = t.text.decode("utf-8")
+                                if "<" in name:
+                                    name = name[:name.index("<")]
+                                supertypes.append(name.strip())
+                    elif sc.type in ("type_identifier",
+                                     "generic_type"):
+                        name = sc.text.decode("utf-8")
+                        if "<" in name:
+                            name = name[:name.index("<")]
+                        supertypes.append(name.strip())
+        return supertypes
+
+    def _extract_fields(self, type_node: Node) -> dict[str, str]:
+        """Extract field declarations: field_name -> simple type name."""
+        fields = {}
+        body = type_node.child_by_field_name("body")
+        if not body:
+            return fields
+        for child in body.children:
+            if child.type == "field_declaration":
+                type_node_f = child.child_by_field_name("type")
+                if not type_node_f:
+                    continue
+                # Get simple type name (strip generics)
+                type_text = type_node_f.text.decode("utf-8")
+                # Handle generics: List<String> -> List
+                if "<" in type_text:
+                    type_text = type_text[:type_text.index("<")]
+                type_text = type_text.strip()
+                # Find declarator(s)
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        name_node = decl.child_by_field_name("name")
+                        if name_node:
+                            fields[name_node.text.decode("utf-8")] = \
+                                type_text
+        return fields
+
+    def _extract_methods(self, type_node: Node,
+                         class_start_line: int) -> list[dict]:
         methods = []
         body = type_node.child_by_field_name("body")
         if not body:
@@ -273,6 +353,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
 
                 params = self._format_params(child)
                 mods = self._get_modifiers(child)
+                invocations = self._extract_invocations(child)
 
                 methods.append({
                     "name": name,
@@ -281,10 +362,16 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     "is_static": "static" in mods,
                     "is_abstract": "abstract" in mods,
                     "visibility": self._visibility_from_modifiers(mods),
+                    "invocations": invocations,
+                    "start_line": child.start_point[0]
+                    - class_start_line,
+                    "end_line": child.end_point[0]
+                    - class_start_line,
                 })
             elif child.type == "constructor_declaration":
                 params = self._format_params(child)
                 mods = self._get_modifiers(child)
+                invocations = self._extract_invocations(child)
 
                 methods.append({
                     "name": "<init>",
@@ -293,8 +380,35 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     "is_static": False,
                     "is_abstract": False,
                     "visibility": self._visibility_from_modifiers(mods),
+                    "invocations": invocations,
+                    "start_line": child.start_point[0]
+                    - class_start_line,
+                    "end_line": child.end_point[0]
+                    - class_start_line,
                 })
         return methods
+
+    def _extract_invocations(self, method_node: Node) -> list[dict]:
+        """Extract method invocations from a method body."""
+        body = method_node.child_by_field_name("body")
+        if not body:
+            return []
+        invocations = []
+        self._walk_invocations(body, invocations)
+        return invocations
+
+    def _walk_invocations(self, node: Node, invocations: list[dict]):
+        """Recursively find method_invocation nodes."""
+        if node.type == "method_invocation":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                inv = {"name": name_node.text.decode("utf-8")}
+                obj_node = node.child_by_field_name("object")
+                if obj_node:
+                    inv["receiver"] = obj_node.text.decode("utf-8")
+                invocations.append(inv)
+        for child in node.children:
+            self._walk_invocations(child, invocations)
 
     def _format_params(self, method_node: Node) -> str:
         params_node = method_node.child_by_field_name("parameters")
@@ -356,7 +470,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 c.is_abstract = $is_abstract,
                 c.is_test = $is_test,
                 c.file_path = $file_path,
-                c.visibility = $visibility
+                c.visibility = $visibility,
+                c.source_code = $source_code
             MERGE (p)-[:CONTAINS_CLASS]->(c)
         """, {
             "package": cls["package"],
@@ -367,29 +482,37 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             "is_test": cls["is_test"],
             "file_path": cls["file_path"],
             "visibility": cls["visibility"],
+            "source_code": cls["source_code"],
         })
 
     def _create_method_node(self, driver, class_full_name: str,
                             method: dict):
+        full_name = f"{class_full_name}.{method['name']}"
         run_cypher_write(driver, """
             MATCH (c:Class {full_name: $class_name})
             CREATE (m:Method {
                 name: $name,
+                full_name: $full_name,
                 return_type: $return_type,
                 parameters: $parameters,
                 is_static: $is_static,
                 is_abstract: $is_abstract,
-                visibility: $visibility
+                visibility: $visibility,
+                start_line: $start_line,
+                end_line: $end_line
             })
             CREATE (c)-[:HAS_METHOD]->(m)
         """, {
             "class_name": class_full_name,
             "name": method["name"],
+            "full_name": full_name,
             "return_type": method["return_type"],
             "parameters": method["parameters"],
             "is_static": method["is_static"],
             "is_abstract": method["is_abstract"],
             "visibility": method["visibility"],
+            "start_line": method["start_line"],
+            "end_line": method["end_line"],
         })
 
     def _create_import_relationships(self, driver,
@@ -422,5 +545,151 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 """, {"source": cls["full_name"],
                       "targets": list(targets)})
                 count += len(targets)
+
+        return count
+
+    def _find_method_owner(self, called_name: str,
+                           target_class: str,
+                           class_methods: dict[str, set[str]],
+                           class_hierarchy: dict[str, list[str]],
+                           ) -> Optional[str]:
+        """Find which class in the hierarchy owns the method."""
+        visited = set()
+        queue = [target_class]
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            if (current in class_methods
+                    and called_name in class_methods[current]):
+                return current
+            queue.extend(class_hierarchy.get(current, []))
+        return None
+
+    def _create_calls_relationships(self, driver,
+                                    all_classes: list[dict]) -> int:
+        # Build lookup: class_full_name -> set of method names
+        class_methods = {}
+        for cls in all_classes:
+            class_methods[cls["full_name"]] = {
+                m["name"] for m in cls["methods"]}
+
+        # Build lookup: simple class name -> [full_name]
+        class_by_simple = {}
+        for cls in all_classes:
+            class_by_simple.setdefault(
+                cls["name"], []).append(cls["full_name"])
+
+        # Build class hierarchy: full_name -> [parent full_names]
+        class_hierarchy: dict[str, list[str]] = {}
+        for cls in all_classes:
+            parent_import_map = {}
+            for imp in cls["imports"]:
+                simple = imp.rsplit(".", 1)[-1]
+                parent_import_map[simple] = imp
+            parents = []
+            for st in cls.get("supertypes", []):
+                if st in parent_import_map:
+                    parents.append(parent_import_map[st])
+                elif st in class_by_simple:
+                    candidates = class_by_simple[st]
+                    if len(candidates) == 1:
+                        parents.append(candidates[0])
+            if parents:
+                class_hierarchy[cls["full_name"]] = parents
+
+        count = 0
+        seen = set()
+        synthetic_created = set()
+
+        for cls in all_classes:
+            # Build import map: simple_name -> full_name
+            import_map = {}
+            for imp in cls["imports"]:
+                simple = imp.rsplit(".", 1)[-1]
+                import_map[simple] = imp
+
+            # Build field map: field_name -> resolved full class name
+            field_type_map = {}
+            for field_name, type_name in cls.get("fields", {}).items():
+                if type_name in import_map:
+                    field_type_map[field_name] = import_map[type_name]
+                elif type_name in class_by_simple:
+                    candidates = class_by_simple[type_name]
+                    if len(candidates) == 1:
+                        field_type_map[field_name] = candidates[0]
+
+            for method in cls["methods"]:
+                caller = f"{cls['full_name']}.{method['name']}"
+
+                for inv in method.get("invocations", []):
+                    target_class = None
+                    called_name = inv["name"]
+                    receiver = inv.get("receiver")
+
+                    if receiver is None or receiver == "this":
+                        target_class = cls["full_name"]
+                    elif receiver in import_map:
+                        target_class = import_map[receiver]
+                    elif receiver in class_by_simple:
+                        candidates = class_by_simple[receiver]
+                        if len(candidates) == 1:
+                            target_class = candidates[0]
+                    elif receiver in field_type_map:
+                        target_class = field_type_map[receiver]
+
+                    if not target_class:
+                        continue
+
+                    # Find which class in the hierarchy owns
+                    # the called method
+                    owner = self._find_method_owner(
+                        called_name, target_class,
+                        class_methods, class_hierarchy)
+                    # If method not found in hierarchy but
+                    # target class is known, create a synthetic
+                    # method node (inherited from external parent)
+                    if (not owner
+                            and target_class in class_methods):
+                        owner = target_class
+                        syn_full = f"{target_class}.{called_name}"
+                        if syn_full not in synthetic_created:
+                            synthetic_created.add(syn_full)
+                            run_cypher_write(driver, """
+                                MATCH (c:Class {
+                                    full_name: $class_name})
+                                CREATE (m:Method {
+                                    name: $name,
+                                    full_name: $full_name,
+                                    return_type: 'Object',
+                                    parameters: '',
+                                    is_static: false,
+                                    is_abstract: false,
+                                    visibility: 'public',
+                                    start_line: -1,
+                                    end_line: -1
+                                })
+                                CREATE (c)-[:HAS_METHOD]->(m)
+                            """, {
+                                "class_name": target_class,
+                                "name": called_name,
+                                "full_name": syn_full,
+                            })
+                            class_methods[target_class].add(
+                                called_name)
+                    if owner:
+                        callee = f"{owner}.{called_name}"
+                        if callee != caller:
+                            pair = (caller, callee)
+                            if pair not in seen:
+                                seen.add(pair)
+                                run_cypher_write(driver, """
+                                    MATCH (a:Method {full_name: $caller})
+                                    MATCH (b:Method {full_name: $callee})
+                                    MERGE (a)-[:CALLS]->(b)
+                                """, {"caller": caller,
+                                      "callee": callee})
+                                count += 1
 
         return count

@@ -56,3 +56,34 @@ class AnalyzeRequest(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     modules: list[ModuleConfig]
+
+
+class QueryRequest(BaseModel):
+    question: str
+
+
+class GraphNode(BaseModel):
+    id: str
+    labels: list[str]
+    properties: dict
+
+
+class GraphRelationship(BaseModel):
+    id: str
+    type: str
+    start_node_id: str
+    end_node_id: str
+    properties: dict
+
+
+class ExpandRequest(BaseModel):
+    node_id: str
+    operation: str
+    depth: int = 3
+
+
+class QueryResponse(BaseModel):
+    cypher: str
+    nodes: list[GraphNode]
+    relationships: list[GraphRelationship]
+    error: Optional[str] = None

@@ -1,7 +1,9 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig } from '../services/settings';
+import { EncryptionService } from '../services/encryption';
 import { JobsService } from '../services/jobs';
 
 @Component({
@@ -12,8 +14,10 @@ import { JobsService } from '../services/jobs';
 })
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
+  private encryptionService = inject(EncryptionService);
   private jobsService = inject(JobsService);
   private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
 
   config = signal<AppConfig>({
     neo4j: { uri: '', username: '', password: '', database: '' },
@@ -26,6 +30,13 @@ export class SettingsComponent implements OnInit {
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
 
   ngOnInit() {
+    this.loadSettings();
+    this.encryptionService.unlocked$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => this.loadSettings());
+  }
+
+  private loadSettings() {
     this.settingsService.getSettings().subscribe({
       next: (config) => this.config.set(config),
       error: () => this.showMessage('Failed to load settings', 'danger'),

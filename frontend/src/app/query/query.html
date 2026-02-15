@@ -1,0 +1,133 @@
+<div class="query-page" (click)="dismissContextMenu()" data-testid="query-page">
+  <div class="query-bar" data-testid="query-bar">
+    <div class="container-fluid">
+      <div class="d-flex gap-2 align-items-center py-2">
+        <div class="flex-grow-1">
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Ask about your codebase..."
+            [ngModel]="question()"
+            (ngModelChange)="question.set($event)"
+            (keydown.enter)="submitQuery()"
+            [disabled]="loading()"
+            data-testid="query-input"
+          />
+        </div>
+        <button
+          class="btn btn-primary"
+          (click)="submitQuery()"
+          [disabled]="loading() || !question().trim()"
+          data-testid="query-submit"
+        >
+          @if (loading()) {
+            <span class="spinner-border spinner-border-sm me-1"></span>
+          }
+          <i class="bi bi-search me-1"></i>Query
+        </button>
+        <button
+          class="btn btn-outline-secondary"
+          (click)="clearGraph()"
+          title="Clear graph"
+          data-testid="query-clear"
+        >
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (generatedCypher()) {
+    <div class="cypher-bar" data-testid="cypher-bar">
+      <div class="container-fluid">
+        <div class="d-flex align-items-center gap-3 py-1">
+          <code class="flex-grow-1 text-truncate" [title]="generatedCypher()">
+            {{ generatedCypher() }}
+          </code>
+          <span class="badge bg-light text-dark">
+            {{ nodeCount() }} nodes, {{ edgeCount() }} edges
+          </span>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <div class="container-fluid py-2">
+      <div class="alert alert-danger mb-0 py-2" data-testid="query-error">
+        <i class="bi bi-exclamation-triangle me-1"></i>{{ errorMessage() }}
+      </div>
+    </div>
+  }
+
+  @if (infoMessage()) {
+    <div class="container-fluid py-2">
+      <div class="alert alert-info mb-0 py-2">
+        <i class="bi bi-info-circle me-1"></i>{{ infoMessage() }}
+      </div>
+    </div>
+  }
+
+  <div class="graph-wrapper" [class.with-source]="sourceVisible()">
+    <div class="graph-toolbar">
+      <button class="toggle-btn" [class.active]="togglePub()" (click)="toggleFilter('pub')" title="Public methods">
+        <span class="toggle-symbol" style="color: #51cf66">&#9679;</span> Pub
+      </button>
+      <button class="toggle-btn" [class.active]="togglePriv()" (click)="toggleFilter('priv')" title="Private/protected methods">
+        <span class="toggle-symbol" style="color: #ff6b6b">&#9679;</span> Priv
+      </button>
+      <button class="toggle-btn" [class.active]="toggleCtor()" (click)="toggleFilter('ctor')" title="Constructors">
+        <span class="toggle-symbol" style="color: #339af0">&#9670;</span> Ctor
+      </button>
+      <button class="toggle-btn" [class.active]="toggleArgs()" (click)="toggleFilter('args')" title="Method parameters">
+        <span class="toggle-symbol" style="color: #fcc419">()</span> Args
+      </button>
+    </div>
+    <div class="graph-container" #graphContainer data-testid="graph-container"></div>
+
+    @if (sourceVisible()) {
+      <div class="source-panel">
+        <div class="source-panel-header">
+          <span class="source-panel-title">{{ sourceClassName() || 'Source' }}</span>
+          <button class="btn btn-sm btn-link source-panel-close" (click)="closeSource()">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="source-panel-body" #sourceBody>
+          <pre class="source-code"><code>@for (line of highlightedLines(); track $index) {<span
+            class="source-line"
+            [class.highlighted]="isLineHighlighted($index)"
+            [attr.data-line]="$index + 1"
+            [innerHTML]="line"
+></span>}</code></pre>
+        </div>
+      </div>
+    }
+
+    @if (contextMenuVisible()) {
+      <div
+        class="radial-menu"
+        [style.left.px]="contextMenuX()"
+        [style.top.px]="contextMenuY()"
+        (click)="$event.stopPropagation()"
+        data-testid="radial-menu"
+      >
+        <div class="radial-center"></div>
+        @for (item of contextMenuItems(); track item.action) {
+          <button
+            class="radial-item"
+            [style.left.px]="item.x"
+            [style.top.px]="item.y"
+            [style.border-color]="item.color"
+            [style.color]="item.color"
+            (click)="executeMenuAction(item.action)"
+            [title]="item.label"
+          >
+            <i [class]="'bi ' + item.icon"></i>
+            <span class="radial-label" [style.color]="item.color">{{ item.label }}</span>
+          </button>
+        }
+      </div>
+    }
+  </div>
+</div>

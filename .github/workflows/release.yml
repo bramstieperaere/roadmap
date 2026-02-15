@@ -68,6 +68,7 @@ jobs:
           cp backend/app/session.py "${RELEASE_DIR}/app/"
           cp backend/app/job_store.py "${RELEASE_DIR}/app/"
           cp backend/app/neo4j_client.py "${RELEASE_DIR}/app/"
+          cp backend/app/cypher_validator.py "${RELEASE_DIR}/app/"
           cp -r backend/app/routers "${RELEASE_DIR}/app/routers"
           cp -r backend/app/analyzers "${RELEASE_DIR}/app/analyzers"
 
