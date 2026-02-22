@@ -2,6 +2,15 @@
   <div class="query-bar" data-testid="query-bar">
     <div class="container-fluid">
       <div class="d-flex gap-2 align-items-center py-2">
+        <button
+          class="btn btn-sm sidebar-toggle"
+          [class.active]="sidebarOpen()"
+          (click)="toggleSidebar()"
+          title="Toggle browser"
+          data-testid="sidebar-toggle"
+        >
+          <i class="bi bi-layout-sidebar"></i>
+        </button>
         <div class="flex-grow-1">
           <input
             type="text"
@@ -68,25 +77,85 @@
     </div>
   }
 
+  <div class="content-area">
+    @if (sidebarOpen()) {
+      <div class="sidebar" data-testid="browse-sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-search-wrapper">
+            <app-node-search
+              (nodeSelected)="onSearchSelected($event)"
+              data-testid="sidebar-search"
+            />
+          </div>
+          <button
+            class="sidebar-collapse-btn"
+            (click)="toggleSidebar()"
+            title="Collapse panel"
+          >
+            <i class="bi bi-chevron-bar-left"></i>
+          </button>
+        </div>
+        <div class="sidebar-section sidebar-tree">
+          <div class="sidebar-section-header">
+            <select
+              class="perspective-select"
+              [ngModel]="perspective()"
+              (ngModelChange)="switchPerspective($event)"
+              data-testid="perspective-select"
+            >
+              <option value="java">Java</option>
+              <option value="architecture">Architecture</option>
+            </select>
+          </div>
+          @if (perspective() === 'java') {
+            <app-node-tree
+              perspective="technical"
+              (nodeSelected)="onTreeSelected($event)"
+              data-testid="sidebar-tree"
+            />
+          } @else {
+            <app-node-tree
+              perspective="architecture"
+              (nodeSelected)="onTreeSelected($event)"
+              data-testid="sidebar-tree-arch"
+            />
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="sidebar-collapsed" data-testid="browse-sidebar-collapsed">
+        <button
+          class="sidebar-expand-btn"
+          (click)="toggleSidebar()"
+          title="Expand panel"
+        >
+          <i class="bi bi-chevron-bar-right"></i>
+        </button>
+      </div>
+    }
+
   <div class="graph-wrapper" [class.with-source]="sourceVisible()">
-    <div class="graph-toolbar">
-      <button class="toggle-btn" [class.active]="togglePub()" (click)="toggleFilter('pub')" title="Public methods">
-        <span class="toggle-symbol" style="color: #51cf66">&#9679;</span> Pub
-      </button>
-      <button class="toggle-btn" [class.active]="togglePriv()" (click)="toggleFilter('priv')" title="Private/protected methods">
-        <span class="toggle-symbol" style="color: #ff6b6b">&#9679;</span> Priv
-      </button>
-      <button class="toggle-btn" [class.active]="toggleCtor()" (click)="toggleFilter('ctor')" title="Constructors">
-        <span class="toggle-symbol" style="color: #339af0">&#9670;</span> Ctor
-      </button>
-      <button class="toggle-btn" [class.active]="toggleArgs()" (click)="toggleFilter('args')" title="Method parameters">
-        <span class="toggle-symbol" style="color: #fcc419">()</span> Args
-      </button>
-    </div>
+    @if (perspective() === 'java') {
+      <div class="graph-toolbar">
+        <button class="toggle-btn" [class.active]="togglePub()" (click)="toggleFilter('pub')" title="Public methods">
+          <span class="toggle-symbol" style="color: #51cf66">&#9679;</span> Pub
+        </button>
+        <button class="toggle-btn" [class.active]="togglePriv()" (click)="toggleFilter('priv')" title="Private/protected methods">
+          <span class="toggle-symbol" style="color: #ff6b6b">&#9679;</span> Priv
+        </button>
+        <button class="toggle-btn" [class.active]="toggleCtor()" (click)="toggleFilter('ctor')" title="Constructors">
+          <span class="toggle-symbol" style="color: #339af0">&#9670;</span> Ctor
+        </button>
+        <button class="toggle-btn" [class.active]="toggleArgs()" (click)="toggleFilter('args')" title="Method parameters">
+          <span class="toggle-symbol" style="color: #fcc419">()</span> Args
+        </button>
+      </div>
+    }
     <div class="graph-container" #graphContainer data-testid="graph-container"></div>
 
-    @if (sourceVisible()) {
-      <div class="source-panel">
+    @if (perspective() === 'java' && sourceVisible()) {
+      <div class="sash" (mousedown)="startSashDrag($event)"></div>
+      <div class="source-panel" [style.width.px]="sourcePanelWidth()">
         <div class="source-panel-header">
           <span class="source-panel-title">{{ sourceClassName() || 'Source' }}</span>
           <button class="btn btn-sm btn-link source-panel-close" (click)="closeSource()">
@@ -129,5 +198,6 @@
         }
       </div>
     }
+  </div>
   </div>
 </div>

@@ -9,18 +9,22 @@ CONFIG=""
 
 # --- Parse arguments ---
 usage() {
-    echo "Usage: $0 [--port PORT] [--config PATH]"
+    echo "Usage: $0 [--port PORT] [--config PATH] [--key KEY]"
     echo ""
     echo "Options:"
     echo "  --port PORT      Port to listen on (default: 8081)"
     echo "  --config PATH    Path to config.yaml (default: auto-created next to app/)"
+    echo "  --key KEY        Encryption key to auto-unlock at startup (or set ROADMAP_KEY env var)"
     exit 1
 }
+
+KEY=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --port)   PORT="$2"; shift 2 ;;
         --config) CONFIG="$2"; shift 2 ;;
+        --key)    KEY="$2"; shift 2 ;;
         --help|-h) usage ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
@@ -72,6 +76,11 @@ fi
 # --- Set config path ---
 if [ -n "$CONFIG" ]; then
     export ROADMAP_CONFIG_PATH="$CONFIG"
+fi
+
+# --- Set encryption key ---
+if [ -n "$KEY" ]; then
+    export ROADMAP_KEY="$KEY"
 fi
 
 # --- Start the server ---

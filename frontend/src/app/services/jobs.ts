@@ -40,6 +40,11 @@ export interface StartJobResponse {
   message: string;
 }
 
+export interface StartRepoResponse {
+  job_ids: string[];
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class JobsService {
   private http = inject(HttpClient);
@@ -48,6 +53,12 @@ export class JobsService {
     return this.http.post<StartJobResponse>('/api/jobs/start', {
       repo_index: repoIndex,
       module_index: moduleIndex,
+    });
+  }
+
+  startRepo(repoIndex: number): Observable<StartRepoResponse> {
+    return this.http.post<StartRepoResponse>('/api/jobs/start-repo', {
+      repo_index: repoIndex,
     });
   }
 

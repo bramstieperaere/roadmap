@@ -2,7 +2,7 @@ import { Component, inject, OnInit, signal, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig } from '../services/settings';
+import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, KNOWN_TECHNOLOGIES } from '../services/settings';
 import { EncryptionService } from '../services/encryption';
 import { JobsService } from '../services/jobs';
 
@@ -28,6 +28,10 @@ export class SettingsComponent implements OnInit {
   testingConnection = signal(false);
   analyzing = signal<number | null>(null);
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
+  activeTab = signal<'neo4j' | 'repos' | 'providers' | 'tasks'>('neo4j');
+  selectedRepoIndex = signal<number | null>(null);
+  editingSection = signal<string | null>(null);
+  private configBackup: AppConfig | null = null;
 
   ngOnInit() {
     this.loadSettings();
@@ -38,19 +42,55 @@ export class SettingsComponent implements OnInit {
 
   private loadSettings() {
     this.settingsService.getSettings().subscribe({
-      next: (config) => this.config.set(config),
+      next: (config) => {
+        for (const repo of config.repositories) {
+          if (!repo.name && repo.path) repo.name = deriveRepoName(repo.path);
+        }
+        this.config.set(config);
+      },
       error: () => this.showMessage('Failed to load settings', 'danger'),
     });
   }
 
-  save() {
-    this.settingsService.updateSettings(this.config()).subscribe({
-      next: (config) => {
-        this.config.set(config);
-        this.showMessage('Settings saved successfully', 'success');
-      },
-      error: () => this.showMessage('Failed to save settings', 'danger'),
-    });
+  // Section editing
+  startEditing(section: string) {
+    this.configBackup = structuredClone(this.config());
+    this.editingSection.set(section);
+  }
+
+  cancelEditing() {
+    if (this.configBackup) {
+      this.config.set(this.configBackup);
+      const section = this.editingSection();
+      if (section?.startsWith('repo-')) {
+        const idx = parseInt(section.split('-')[1]);
+        if (idx >= this.config().repositories.length) {
+          this.selectedRepoIndex.set(
+            this.config().repositories.length > 0 ? this.config().repositories.length - 1 : null,
+          );
+        }
+      }
+    }
+    this.editingSection.set(null);
+    this.configBackup = null;
+  }
+
+  saveSection() {
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Settings saved');
+  }
+
+  switchTab(tab: 'neo4j' | 'repos' | 'providers' | 'tasks') {
+    if (this.editingSection()) this.cancelEditing();
+    this.activeTab.set(tab);
+  }
+
+  selectRepo(index: number) {
+    if (this.editingSection()?.startsWith('repo-') && this.editingSection() !== 'repo-' + index) {
+      this.cancelEditing();
+    }
+    this.selectedRepoIndex.set(index);
   }
 
   testConnection() {
@@ -69,10 +109,14 @@ export class SettingsComponent implements OnInit {
 
   // Repositories
   addRepository() {
+    this.configBackup = structuredClone(this.config());
     this.config.update((c) => ({
       ...c,
-      repositories: [...c.repositories, { path: '', modules: [] }],
+      repositories: [...c.repositories, { name: '', path: '', modules: [] }],
     }));
+    const newIndex = this.config().repositories.length - 1;
+    this.selectedRepoIndex.set(newIndex);
+    this.editingSection.set('repo-' + newIndex);
   }
 
   removeRepository(index: number) {
@@ -80,17 +124,45 @@ export class SettingsComponent implements OnInit {
       ...c,
       repositories: c.repositories.filter((_, i) => i !== index),
     }));
+    const sel = this.selectedRepoIndex();
+    if (sel === index) this.selectedRepoIndex.set(null);
+    else if (sel !== null && sel > index) this.selectedRepoIndex.update((v) => v! - 1);
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Repository removed');
   }
+
+  readonly knownTechnologies = KNOWN_TECHNOLOGIES;
 
   addModule(repoIndex: number) {
     this.config.update((c) => {
       const repos = [...c.repositories];
       repos[repoIndex] = {
         ...repos[repoIndex],
-        modules: [...repos[repoIndex].modules, { name: '', type: 'java', relative_path: '' }],
+        modules: [...repos[repoIndex].modules, { name: '', type: 'java', relative_path: '', technologies: [] }],
       };
       return { ...c, repositories: repos };
     });
+  }
+
+  toggleTechnology(repoIndex: number, moduleIndex: number, tech: string) {
+    this.config.update((c) => {
+      const repos = [...c.repositories];
+      const modules = [...repos[repoIndex].modules];
+      const current = modules[moduleIndex].technologies || [];
+      const technologies = current.includes(tech)
+        ? current.filter((t) => t !== tech)
+        : [...current, tech];
+      modules[moduleIndex] = { ...modules[moduleIndex], technologies };
+      repos[repoIndex] = { ...repos[repoIndex], modules };
+      return { ...c, repositories: repos };
+    });
+  }
+
+  technologiesForType(type: string): { key: string; label: string }[] {
+    return Object.entries(KNOWN_TECHNOLOGIES)
+      .filter(([, v]) => v.types.includes(type))
+      .map(([key, v]) => ({ key, label: v.label }));
   }
 
   removeModule(repoIndex: number, moduleIndex: number) {
@@ -111,10 +183,21 @@ export class SettingsComponent implements OnInit {
     }));
   }
 
+  updateRepoName(index: number, name: string) {
+    this.config.update((c) => {
+      const repos = [...c.repositories];
+      repos[index] = { ...repos[index], name };
+      return { ...c, repositories: repos };
+    });
+  }
+
   updateRepoPath(index: number, path: string) {
     this.config.update((c) => {
       const repos = [...c.repositories];
-      repos[index] = { ...repos[index], path };
+      const oldName = repos[index].name;
+      const oldDerived = deriveRepoName(repos[index].path);
+      const name = !oldName || oldName === oldDerived ? deriveRepoName(path) : oldName;
+      repos[index] = { ...repos[index], path, name };
       return { ...c, repositories: repos };
     });
   }
@@ -131,10 +214,15 @@ export class SettingsComponent implements OnInit {
 
   // AI Providers
   addAIProvider() {
+    this.configBackup = structuredClone(this.config());
     this.config.update((c) => ({
       ...c,
-      ai_providers: [...c.ai_providers, { name: '', base_url: 'https://api.openai.com/v1', api_key: '', default_model: 'gpt-4o' }],
+      ai_providers: [
+        ...c.ai_providers,
+        { name: '', base_url: 'https://api.openai.com/v1', api_key: '', default_model: 'gpt-4o' },
+      ],
     }));
+    this.editingSection.set('provider-' + (this.config().ai_providers.length - 1));
   }
 
   removeAIProvider(index: number) {
@@ -142,6 +230,9 @@ export class SettingsComponent implements OnInit {
       ...c,
       ai_providers: c.ai_providers.filter((_, i) => i !== index),
     }));
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Provider removed');
   }
 
   updateAIProvider(index: number, field: keyof AIProviderConfig, value: string) {
@@ -154,10 +245,12 @@ export class SettingsComponent implements OnInit {
 
   // AI Tasks
   addAITask() {
+    this.configBackup = structuredClone(this.config());
     this.config.update((c) => ({
       ...c,
       ai_tasks: [...c.ai_tasks, { task_type: 'repository_analysis', provider_name: '' }],
     }));
+    this.editingSection.set('task-' + (this.config().ai_tasks.length - 1));
   }
 
   removeAITask(index: number) {
@@ -165,6 +258,9 @@ export class SettingsComponent implements OnInit {
       ...c,
       ai_tasks: c.ai_tasks.filter((_, i) => i !== index),
     }));
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Task removed');
   }
 
   updateAITask(index: number, field: string, value: string) {
@@ -197,37 +293,44 @@ export class SettingsComponent implements OnInit {
 
   startAnalysisJob(repoIndex: number) {
     const repo = this.config().repositories[repoIndex];
-    const javaModules = repo.modules
-      .map((m, i) => ({ module: m, index: i }))
-      .filter(({ module }) => module.type === 'java');
-
-    if (javaModules.length === 0) {
-      this.showMessage('No Java modules to analyze', 'danger');
+    if (!repo.modules.length) {
+      this.showMessage('No modules to analyze', 'danger');
       return;
     }
 
-    let started = 0;
-    for (const { index } of javaModules) {
-      this.jobsService.startJob(repoIndex, index).subscribe({
-        next: () => {
-          started++;
-          if (started === javaModules.length) {
-            this.router.navigate(['/jobs']);
-          }
-        },
-        error: (err) => {
-          this.showMessage(err.error?.detail || 'Failed to start job', 'danger');
-        },
-      });
-    }
+    this.jobsService.startRepo(repoIndex).subscribe({
+      next: () => this.router.navigate(['/jobs']),
+      error: (err) => {
+        this.showMessage(err.error?.detail || 'Failed to start analysis', 'danger');
+      },
+    });
   }
 
   dismissMessage() {
     this.message.set(null);
   }
 
+  private persistConfig(successMessage: string) {
+    this.settingsService.updateSettings(this.config()).subscribe({
+      next: (config) => {
+        for (const repo of config.repositories) {
+          if (!repo.name && repo.path) repo.name = deriveRepoName(repo.path);
+        }
+        this.config.set(config);
+        this.showMessage(successMessage, 'success');
+      },
+      error: () => this.showMessage('Failed to save settings', 'danger'),
+    });
+  }
+
   private showMessage(text: string, type: 'success' | 'danger') {
     this.message.set({ text, type });
     setTimeout(() => this.message.set(null), 4000);
   }
+}
+
+function deriveRepoName(path: string): string {
+  if (!path) return '';
+  const segments = path.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+  return segments[segments.length - 1] || '';
 }

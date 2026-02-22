@@ -1,0 +1,86 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.node-tree {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8125rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  white-space: nowrap;
+
+  &:hover {
+    background: #f1f3f5;
+  }
+}
+
+.expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #868e96;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 3px;
+  font-size: 0.75rem;
+
+  &:hover {
+    background: #dee2e6;
+    color: #495057;
+  }
+
+  .spinner-border {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
+    color: #868e96;
+  }
+}
+
+.expand-spacer {
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.row-icon {
+  color: #868e96;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.row-label {
+  border: none;
+  background: none;
+  padding: 0 4px;
+  cursor: pointer;
+  color: #212529;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    color: var(--rm-primary, #1a3a5c);
+    text-decoration: underline;
+  }
+}

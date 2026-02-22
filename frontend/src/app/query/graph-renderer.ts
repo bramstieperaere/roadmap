@@ -71,6 +71,30 @@ const FONT_HEADER_BADGE = '600 9px Nunito, sans-serif';
 const FONT_METHOD = '12px Nunito, sans-serif';
 const FONT_STANDALONE = '600 12px Nunito, sans-serif';
 
+// Arch node colors by label
+const ARCH_COLORS: Record<string, { bg: number; hex: string }> = {
+  RESTInterface:  { bg: 0x339af0, hex: '#339af0' },
+  RESTEndpoint:   { bg: 0x74c0fc, hex: '#74c0fc' },
+  FeignClient:    { bg: 0x845ef7, hex: '#845ef7' },
+  FeignEndpoint:  { bg: 0xb197fc, hex: '#b197fc' },
+  JMSDestination: { bg: 0x20c997, hex: '#20c997' },
+  JMSListener:    { bg: 0x51cf66, hex: '#51cf66' },
+  JMSProducer:    { bg: 0xff922b, hex: '#ff922b' },
+  ScheduledTask:  { bg: 0xfcc419, hex: '#fcc419' },
+  HTTPClient:     { bg: 0x5c7cfa, hex: '#5c7cfa' },
+  Repository:     { bg: 0x22b8cf, hex: '#22b8cf' },
+  Microservice:   { bg: 0x1a3a5c, hex: '#1a3a5c' },
+};
+
+function getArchColor(labels: string[]): { bg: number; hex: string } {
+  for (const label of labels) {
+    if (ARCH_COLORS[label]) return ARCH_COLORS[label];
+  }
+  return { bg: 0x6366f1, hex: '#6366f1' };
+}
+
+export type PerspectiveMode = 'java' | 'arch';
+
 
 // ----- Helpers -----
 
@@ -155,6 +179,7 @@ export class GraphRenderer {
 
   private currentLayout: GraphLayout = new TreeLayout();
   private globalToggles = { pub: true, priv: true, ctor: true, args: true };
+  private perspective: PerspectiveMode = 'java';
 
   private hoveredMesh: THREE.Mesh | null = null;
   private isDragging = false;
@@ -203,12 +228,27 @@ export class GraphRenderer {
 
   // ----- Public API -----
 
+  setPerspective(mode: PerspectiveMode) {
+    if (this.perspective === mode) return;
+    this.perspective = mode;
+    this.clear();
+  }
+
+  getPerspective(): PerspectiveMode {
+    return this.perspective;
+  }
+
   setData(nodes: GraphNode[], relationships: GraphRelationship[]) {
     this.clear();
     this.addData(nodes, relationships);
   }
 
   addData(nodes: GraphNode[], relationships: GraphRelationship[]) {
+    if (this.perspective === 'arch') {
+      this.addDataArch(nodes, relationships);
+      return;
+    }
+
     const methodParentMap = new Map<string, string>();
     for (const rel of relationships) {
       if (rel.type === 'HAS_METHOD') {
@@ -218,13 +258,11 @@ export class GraphRenderer {
 
     const classNodes: GraphNode[] = [];
     const methodNodes: GraphNode[] = [];
-    const otherNodes: GraphNode[] = [];
 
     for (const node of nodes) {
       if (this.classGroups.has(node.id) || this.methodEntries.has(node.id) || this.standaloneNodes.has(node.id)) continue;
       if (node.labels.includes('Class')) classNodes.push(node);
       else if (node.labels.includes('Method')) methodNodes.push(node);
-      else otherNodes.push(node);
     }
 
     for (const node of classNodes) this.createClassGroup(node);
@@ -233,11 +271,31 @@ export class GraphRenderer {
       if (parentId && this.classGroups.has(parentId)) this.addMethodToClass(node, parentId);
     }
     for (const cg of this.classGroups.values()) this.recalcClassSize(cg);
-    for (const node of otherNodes) this.createStandaloneNode(node);
 
     for (const rel of relationships) {
       if (rel.type === 'HAS_METHOD') continue;
       if (this.edges.some(e => e.line.userData['relId'] === rel.id)) continue;
+      const srcKnown = this.classGroups.has(rel.start_node_id) || this.methodEntries.has(rel.start_node_id);
+      const tgtKnown = this.classGroups.has(rel.end_node_id) || this.methodEntries.has(rel.end_node_id);
+      if (!srcKnown || !tgtKnown) continue;
+      this.createEdge(rel);
+    }
+
+    this.runLayout();
+  }
+
+  private addDataArch(nodes: GraphNode[], relationships: GraphRelationship[]) {
+    for (const node of nodes) {
+      if (this.standaloneNodes.has(node.id)) continue;
+      if (!node.labels.includes('Arch')) continue;
+      this.createArchNode(node);
+    }
+
+    for (const rel of relationships) {
+      if (this.edges.some(e => e.line.userData['relId'] === rel.id)) continue;
+      const srcKnown = this.standaloneNodes.has(rel.start_node_id);
+      const tgtKnown = this.standaloneNodes.has(rel.end_node_id);
+      if (!srcKnown || !tgtKnown) continue;
       this.createEdge(rel);
     }
 
@@ -282,10 +340,21 @@ export class GraphRenderer {
   resize() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
-    if (w > 0 && h > 0) {
-      this.renderer.setSize(w, h);
-      this.fitCamera();
-    }
+    if (w <= 0 || h <= 0) return;
+    this.renderer.setSize(w, h);
+
+    // Preserve current center and vertical span, adjust for new aspect ratio
+    const cx = (this.camera.left + this.camera.right) / 2;
+    const cy = (this.camera.top + this.camera.bottom) / 2;
+    const viewH = (this.camera.top - this.camera.bottom) / 2;
+    const aspect = w / h;
+    const viewW = viewH * aspect;
+
+    this.camera.left = cx - viewW;
+    this.camera.right = cx + viewW;
+    this.camera.top = cy + viewH;
+    this.camera.bottom = cy - viewH;
+    this.camera.updateProjectionMatrix();
   }
 
   getNodeCount(): number {
@@ -775,6 +844,78 @@ export class GraphRenderer {
     this.allMeshes.push(mesh);
   }
 
+  private createArchNode(node: GraphNode) {
+    const name = (node.properties['name'] as string)
+      || (node.properties['full_name'] as string) || '?';
+    // For endpoints, show http_method + path
+    const httpMethod = node.properties['http_method'] as string | undefined;
+    const path = node.properties['path'] as string | undefined;
+    const displayName = httpMethod && path ? `${httpMethod} ${path}` : name;
+
+    // Type badge from labels (e.g., "REST Interface", "Feign Client")
+    const typeBadge = this.getArchTypeBadge(node.labels);
+    const color = getArchColor(node.labels);
+
+    const nameWidth = measureText(displayName, FONT_STANDALONE);
+    const badgeWidth = typeBadge ? measureText(typeBadge, FONT_HEADER_BADGE) + 12 : 0;
+    const w = Math.max(160, Math.max(nameWidth, badgeWidth) + 32);
+    const h = typeBadge ? 48 : 32;
+
+    const tex = makeTexture(w, h, (ctx, tw, th) => {
+      ctx.fillStyle = color.hex;
+      this.roundRect(ctx, 0, 0, tw, th, 6);
+      ctx.fill();
+
+      if (typeBadge) {
+        // Badge on top
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = FONT_HEADER_BADGE;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'center';
+        ctx.fillText(typeBadge, tw / 2, 6, tw - 16);
+        // Name below
+        ctx.fillStyle = '#ffffff';
+        ctx.font = FONT_STANDALONE;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(displayName, tw / 2, th - 6, tw - 16);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = FONT_STANDALONE;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillText(displayName, tw / 2, th / 2, tw - 16);
+      }
+    });
+
+    const geo = new THREE.PlaneGeometry(w, h);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData['nodeId'] = node.id;
+    mesh.userData['labels'] = node.labels;
+
+    const group = new THREE.Group();
+    group.add(mesh);
+
+    this.scene.add(group);
+    this.standaloneNodes.set(node.id, group);
+    this.allMeshes.push(mesh);
+  }
+
+  private getArchTypeBadge(labels: string[]): string {
+    if (labels.includes('RESTInterface')) return 'REST';
+    if (labels.includes('RESTEndpoint')) return 'ENDPOINT';
+    if (labels.includes('FeignClient')) return 'FEIGN';
+    if (labels.includes('FeignEndpoint')) return 'ENDPOINT';
+    if (labels.includes('JMSDestination')) return 'JMS';
+    if (labels.includes('JMSListener')) return 'LISTENER';
+    if (labels.includes('JMSProducer')) return 'PRODUCER';
+    if (labels.includes('ScheduledTask')) return 'SCHEDULED';
+    if (labels.includes('HTTPClient')) return 'HTTP';
+    if (labels.includes('Repository')) return 'REPOSITORY';
+    if (labels.includes('Microservice')) return 'SERVICE';
+    return '';
+  }
+
   private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -791,7 +932,8 @@ export class GraphRenderer {
 
   private createEdge(rel: GraphRelationship) {
     const isCalls = rel.type === 'CALLS';
-    const color = isCalls ? COLOR_EDGE_CALLS : COLOR_EDGE_IMPORTS;
+    const isArchLink = rel.type === 'HAS_ENDPOINT' || rel.type === 'LISTENS_ON' || rel.type === 'SENDS_TO' || rel.type === 'IMPLEMENTED_BY';
+    const color = isCalls ? COLOR_EDGE_CALLS : isArchLink ? 0x868e96 : COLOR_EDGE_IMPORTS;
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position',
@@ -848,8 +990,10 @@ export class GraphRenderer {
     for (const cg of this.classGroups.values()) {
       layoutNodes.push({ id: cg.id, width: cg.width, height: cg.height });
     }
-    for (const [id] of this.standaloneNodes) {
-      layoutNodes.push({ id, width: 120, height: 32 });
+    for (const [id, group] of this.standaloneNodes) {
+      const mesh = group.children[0] as THREE.Mesh;
+      const geo = mesh.geometry as THREE.PlaneGeometry;
+      layoutNodes.push({ id, width: geo.parameters.width, height: geo.parameters.height });
     }
 
     if (layoutNodes.length === 0) return;

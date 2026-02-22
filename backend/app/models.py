@@ -14,9 +14,11 @@ class ModuleConfig(BaseModel):
     name: str
     type: Literal["java", "angular"]
     relative_path: str
+    technologies: list[str] = []
 
 
 class RepositoryConfig(BaseModel):
+    name: str = ""
     path: str
     modules: list[ModuleConfig] = []
 

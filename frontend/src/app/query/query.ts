@@ -1,9 +1,12 @@
 import {
-  Component, inject, signal, computed, effect, OnDestroy, ElementRef, ViewChild, AfterViewInit,
+  Component, inject, signal, computed, effect, untracked, OnDestroy, ElementRef, ViewChild, AfterViewInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { QueryService } from '../services/query';
-import { GraphRenderer } from './graph-renderer';
+import { GraphRenderer, PerspectiveMode } from './graph-renderer';
+import { NodeSearch } from '../components/node-search/node-search';
+import { NodeTree } from '../components/node-tree/node-tree';
+import { SearchResult, TreeChild } from '../services/browse';
 import hljs from 'highlight.js/lib/core';
 import java from 'highlight.js/lib/languages/java';
 
@@ -11,7 +14,7 @@ hljs.registerLanguage('java', java);
 
 @Component({
   selector: 'app-query',
-  imports: [FormsModule],
+  imports: [FormsModule, NodeSearch, NodeTree],
   templateUrl: './query.html',
   styleUrl: './query.scss',
 })
@@ -40,6 +43,9 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
   sourceCode = signal('');
   sourceMethods = signal<{ id: string; name: string; startLine: number; endLine: number }[]>([]);
   highlightedMethodId = signal('');
+  sourcePanelWidth = signal(420);
+  sidebarOpen = signal(true);
+  perspective = signal<'java' | 'architecture'>('java');
 
   highlightedLines = computed(() => {
     const code = this.sourceCode();
@@ -61,16 +67,18 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       const methodId = this.highlightedMethodId();
-      if (!methodId || !this.sourceBody) return;
-      const method = this.sourceMethods().find(m => m.id === methodId);
+      if (!methodId) return;
+      // Read sourceMethods without tracking to avoid re-triggering on class reload
+      const methods = untracked(() => this.sourceMethods());
+      const method = methods.find(m => m.id === methodId);
       if (!method || method.startLine < 0) return;
-      // Defer until after Angular renders the new source lines
+      // Defer until after Angular renders the source panel and lines
       setTimeout(() => {
         const el = this.sourceBody?.nativeElement.querySelector(
           `.source-line[data-line="${method.startLine + 1}"]`
         ) as HTMLElement | null;
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
+      }, 50);
     });
   }
 
@@ -87,14 +95,15 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
       ctor: this.toggleCtor(), args: this.toggleArgs(),
     });
     this.renderer.onNodeRightClick = (nodeId, labels, screenX, screenY) => {
+      const isArch = labels.includes('Arch');
       const isClass = labels.includes('Class');
       const isMethod = labels.includes('Method');
-      if (!isClass && !isMethod) return;
+      if (!isClass && !isMethod && !isArch) return;
 
-      // Right-click also selects the node
-      if (isClass) {
+      // Right-click also selects the node (Java mode)
+      if (isClass && !isArch) {
         this.selectClass(nodeId);
-      } else {
+      } else if (isMethod && !isArch) {
         const classId = this.renderer?.getMethodClassId(nodeId);
         if (classId) {
           this.selectClass(classId);
@@ -108,7 +117,11 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
       const rect = this.graphContainer.nativeElement.getBoundingClientRect();
       this.contextMenuX.set(screenX - rect.left);
       this.contextMenuY.set(screenY - rect.top);
-      this.contextMenuItems.set(this.buildRadialItems(isClass ? 'Class' : 'Method'));
+      if (isArch) {
+        this.contextMenuItems.set(this.buildRadialItems('Arch'));
+      } else {
+        this.contextMenuItems.set(this.buildRadialItems(isClass ? 'Class' : 'Method'));
+      }
       this.contextMenuVisible.set(true);
     };
     this.renderer.onClassClick = (classId) => {
@@ -153,14 +166,18 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  private buildRadialItems(type: 'Class' | 'Method') {
+  private buildRadialItems(type: 'Class' | 'Method' | 'Arch') {
     let isFocused = false;
     if (type === 'Method' && this.contextMenuNodeId) {
       const classId = this.renderer?.getMethodClassId(this.contextMenuNodeId);
       if (classId) isFocused = this.renderer?.hasMethodFocus(classId) || false;
     }
 
-    const defs = type === 'Class' ? [
+    const defs = type === 'Arch' ? [
+      { label: 'Downstream', icon: 'bi-arrow-down-right', action: 'arch_downstream', color: '#339af0' },
+      { label: 'Upstream', icon: 'bi-arrow-up-left', action: 'arch_upstream', color: '#845ef7' },
+      { label: 'Delete', icon: 'bi-trash', action: 'delete', color: '#ff6b6b' },
+    ] : type === 'Class' ? [
       { label: 'Downstream', icon: 'bi-arrow-down-right', action: 'class_downstream', color: '#339af0' },
       { label: 'Upstream', icon: 'bi-arrow-up-left', action: 'class_upstream', color: '#845ef7' },
       { label: 'Imports', icon: 'bi-box-arrow-up-right', action: 'show_imports', color: '#22b8cf' },
@@ -282,8 +299,86 @@ export class QueryComponent implements AfterViewInit, OnDestroy {
     setTimeout(() => this.renderer?.resize(), 0);
   }
 
+  startSashDrag(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = this.sourcePanelWidth();
+    const wrapperWidth = this.graphContainer.nativeElement.parentElement!.clientWidth;
+    const maxWidth = wrapperWidth - 100; // leave at least 100px for graph
+
+    const onMove = (e: MouseEvent) => {
+      const delta = startX - e.clientX;
+      const newWidth = Math.max(200, Math.min(startWidth + delta, maxWidth));
+      this.sourcePanelWidth.set(newWidth);
+      this.renderer?.resize();
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   dismissContextMenu() {
     this.contextMenuVisible.set(false);
+  }
+
+  toggleSidebar() {
+    this.sidebarOpen.update(v => !v);
+    setTimeout(() => this.renderer?.resize(), 0);
+  }
+
+  onSearchSelected(node: SearchResult) {
+    this._loadNode(node.id, 'show_node');
+  }
+
+  onTreeSelected(node: TreeChild) {
+    // Skip virtual category nodes
+    if (node.id.startsWith('virtual:')) return;
+    const op = this.perspective() === 'architecture'
+      ? 'show_arch_node' : 'show_java_node';
+    this._loadNode(node.id, op);
+  }
+
+  switchPerspective(value: 'java' | 'architecture') {
+    this.perspective.set(value);
+    this.clearGraph();
+    const mode: PerspectiveMode = value === 'architecture' ? 'arch' : 'java';
+    this.renderer?.setPerspective(mode);
+    if (value === 'architecture') {
+      this.closeSource();
+    }
+  }
+
+  private _loadNode(nodeId: string, operation: string) {
+    this.loading.set(true);
+    this.errorMessage.set('');
+    this.infoMessage.set('');
+    this.contextMenuVisible.set(false);
+
+    this.queryService.expandNode(nodeId, operation).subscribe({
+      next: (result) => {
+        this.loading.set(false);
+        this.generatedCypher.set(result.cypher);
+        if (result.error) {
+          this.errorMessage.set(result.error);
+        } else {
+          this.renderer?.addData(result.nodes, result.relationships);
+          this.updateCounts();
+        }
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.errorMessage.set(err.error?.detail || 'Failed to load node');
+      },
+    });
   }
 
   private autoSelectFirstClass() {

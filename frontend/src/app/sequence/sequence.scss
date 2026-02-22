@@ -1,0 +1,151 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.sequence-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.sequence-bar {
+  background: var(--rm-surface);
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.selector {
+  width: 220px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8125rem;
+}
+
+.diagram-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+
+  &.with-source .diagram-container {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.diagram-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  .with-source & {
+    position: relative;
+  }
+}
+
+.source-panel {
+  width: 420px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rm-border);
+  background: #1e1e2e;
+  color: #cdd6f4;
+}
+
+.source-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  background: #181825;
+  border-bottom: 1px solid #313244;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.source-panel-title {
+  color: #cba6f7;
+}
+
+.source-panel-close {
+  color: #6c7086;
+  padding: 0;
+  line-height: 1;
+  text-decoration: none;
+
+  &:hover {
+    color: #cdd6f4;
+  }
+}
+
+.source-panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.source-code {
+  margin: 0;
+  padding: 0.5rem 0;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  background: transparent;
+  color: inherit;
+  tab-size: 4;
+
+  code {
+    background: transparent;
+    color: inherit;
+  }
+}
+
+.source-line {
+  display: block;
+  padding: 0 0.75rem 0 3rem;
+  position: relative;
+  white-space: pre;
+
+  &::before {
+    content: attr(data-line);
+    position: absolute;
+    left: 0;
+    width: 2.5rem;
+    text-align: right;
+    color: #585b70;
+    user-select: none;
+    padding-right: 0.5rem;
+  }
+
+  &.highlighted {
+    background: rgba(203, 166, 247, 0.15);
+    border-left: 2px solid #cba6f7;
+    padding-left: calc(3rem - 2px);
+  }
+}
+
+// Syntax highlighting — Catppuccin Mocha palette
+:host ::ng-deep .source-code {
+  .hljs-keyword { color: #cba6f7; }
+  .hljs-type { color: #f9e2af; }
+  .hljs-built_in { color: #89dceb; }
+  .hljs-title { color: #89b4fa; }
+  .hljs-title.function_ { color: #89b4fa; }
+  .hljs-title.class_ { color: #f9e2af; }
+  .hljs-string { color: #a6e3a1; }
+  .hljs-number { color: #fab387; }
+  .hljs-literal { color: #fab387; }
+  .hljs-comment { color: #6c7086; font-style: italic; }
+  .hljs-meta { color: #f38ba8; }
+  .hljs-meta .hljs-keyword { color: #f38ba8; }
+  .hljs-params { color: #cdd6f4; }
+  .hljs-variable { color: #f5c2e7; }
+  .hljs-attr { color: #89b4fa; }
+  .hljs-operator { color: #89dceb; }
+  .hljs-punctuation { color: #bac2de; }
+  .hljs-subst { color: #cdd6f4; }
+}

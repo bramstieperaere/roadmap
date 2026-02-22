@@ -23,12 +23,22 @@ export interface QueryResponse {
   error: string | null;
 }
 
+export interface EntryClass {
+  id: string;
+  name: string;
+  methods: { id: string; name: string }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class QueryService {
   private http = inject(HttpClient);
 
   executeQuery(question: string): Observable<QueryResponse> {
     return this.http.post<QueryResponse>('/api/query', { question });
+  }
+
+  getEntryClasses(): Observable<EntryClass[]> {
+    return this.http.get<EntryClass[]>('/api/query/entry-classes');
   }
 
   expandNode(nodeId: string, operation: string, depth = 3): Observable<QueryResponse> {

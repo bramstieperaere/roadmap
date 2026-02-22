@@ -13,9 +13,16 @@ export interface ModuleConfig {
   name: string;
   type: 'java' | 'angular';
   relative_path: string;
+  technologies: string[];
 }
 
+export const KNOWN_TECHNOLOGIES: Record<string, { label: string; types: string[] }> = {
+  'spring-web': { label: 'Spring Web', types: ['java'] },
+  'spring-jms': { label: 'Spring JMS', types: ['java'] },
+};
+
 export interface RepositoryConfig {
+  name: string;
   path: string;
   modules: ModuleConfig[];
 }

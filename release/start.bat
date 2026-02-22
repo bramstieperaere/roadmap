@@ -22,17 +22,24 @@ if /i "%~1"=="--config" (
     shift
     goto parse_args
 )
+if /i "%~1"=="--key" (
+    set "KEY=%~2"
+    shift
+    shift
+    goto parse_args
+)
 if /i "%~1"=="--help" goto usage
 if /i "%~1"=="-h" goto usage
 echo Unknown option: %~1
 goto usage
 
 :usage
-echo Usage: start.bat [--port PORT] [--config PATH]
+echo Usage: start.bat [--port PORT] [--config PATH] [--key KEY]
 echo.
 echo Options:
 echo   --port PORT      Port to listen on (default: 8081)
 echo   --config PATH    Path to config.yaml (default: auto-created next to app/)
+echo   --key KEY        Encryption key to auto-unlock at startup (or set ROADMAP_KEY env var)
 exit /b 1
 
 :done_args
@@ -87,6 +94,11 @@ if not exist "%STAMP%" (
 :: --- Set config path ---
 if not "%CONFIG%"=="" (
     set "ROADMAP_CONFIG_PATH=%CONFIG%"
+)
+
+:: --- Set encryption key ---
+if not "%KEY%"=="" (
+    set "ROADMAP_KEY=%KEY%"
 )
 
 :: --- Start the server ---

@@ -1,0 +1,73 @@
+<div class="sequence-page">
+  <div class="sequence-bar">
+    <div class="container-fluid">
+      <div class="d-flex gap-2 align-items-center py-2">
+        <select
+          class="form-select form-select-sm selector"
+          [ngModel]="selectedClassId()"
+          (ngModelChange)="onClassChange($event)"
+          [disabled]="loading()"
+        >
+          <option value="">Select class...</option>
+          @for (cls of entryClasses(); track cls.id) {
+            <option [value]="cls.id">{{ cls.name }}</option>
+          }
+        </select>
+
+        <select
+          class="form-select form-select-sm selector"
+          [ngModel]="selectedMethodId()"
+          (ngModelChange)="onMethodChange($event)"
+          [disabled]="loading() || !selectedClassId()"
+        >
+          <option value="">Select method...</option>
+          @for (m of selectedClassMethods(); track m.id) {
+            <option [value]="m.id">{{ m.name }}</option>
+          }
+        </select>
+
+        <button
+          class="btn btn-primary btn-sm"
+          (click)="drawSequence()"
+          [disabled]="loading() || !selectedMethodId()"
+        >
+          @if (loading()) {
+            <span class="spinner-border spinner-border-sm me-1"></span>
+          }
+          <i class="bi bi-play-fill me-1"></i>Draw
+        </button>
+      </div>
+    </div>
+  </div>
+
+  @if (errorMessage()) {
+    <div class="container-fluid py-2">
+      <div class="alert alert-danger mb-0 py-2">
+        <i class="bi bi-exclamation-triangle me-1"></i>{{ errorMessage() }}
+      </div>
+    </div>
+  }
+
+  <div class="diagram-wrapper" [class.with-source]="sourceVisible()">
+    <div class="diagram-container" #diagramContainer></div>
+
+    @if (sourceVisible()) {
+      <div class="source-panel">
+        <div class="source-panel-header">
+          <span class="source-panel-title">{{ sourceClassName() || 'Source' }}</span>
+          <button class="btn btn-sm btn-link source-panel-close" (click)="closeSource()">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="source-panel-body" #sourceBody>
+          <pre class="source-code"><code>@for (line of highlightedLines(); track $index) {<span
+            class="source-line"
+            [class.highlighted]="isLineHighlighted($index)"
+            [attr.data-line]="$index + 1"
+            [innerHTML]="line"
+></span>}</code></pre>
+        </div>
+      </div>
+    }
+  </div>
+</div>

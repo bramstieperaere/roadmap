@@ -20,9 +20,10 @@ export class TreeLayout implements GraphLayout {
       callsInCount.set(n.id, 0);
     }
 
+    const DIRECTED_TYPES = new Set(['CALLS', 'HAS_ENDPOINT', 'LISTENS_ON', 'SENDS_TO']);
     const seenEdge = new Set<string>();
     for (const edge of edges) {
-      if (edge.type !== 'CALLS') continue;
+      if (!DIRECTED_TYPES.has(edge.type)) continue;
       if (edge.sourceId === edge.targetId) continue;
       if (!nodeMap.has(edge.sourceId) || !nodeMap.has(edge.targetId)) continue;
       const key = `${edge.sourceId}->${edge.targetId}`;

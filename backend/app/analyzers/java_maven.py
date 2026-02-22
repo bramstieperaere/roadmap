@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -31,7 +32,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         self._parser = Parser(JAVA_LANGUAGE)
 
     def run(self, repo_path: str, module_name: str,
-            relative_path: str, neo4j_driver) -> str:
+            relative_path: str, neo4j_driver,
+            repo_name: str = "") -> str:
         module_path = Path(repo_path) / relative_path
         self.log_info(f"Starting analysis of module '{module_name}' "
                       f"at {module_path}")
@@ -39,9 +41,9 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         # Phase 1: Clear existing data for this module
         self._clear_module_data(neo4j_driver, module_name)
 
-        # Phase 2: Create Module node
+        # Phase 2: Create Repository + Module nodes
         self._create_module_node(neo4j_driver, module_name,
-                                 relative_path, repo_path)
+                                 relative_path, repo_path, repo_name)
 
         # Phase 3: Walk directory for .java files
         java_files = self._walk_java_files(module_path)
@@ -92,13 +94,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     f"[{i}/{len(java_files)}] Failed {rel}: "
                     f"{type(e).__name__}: {e}")
 
-        # Phase 5: Cross-reference imports
-        self.log_info("Cross-referencing imports...")
-        import_count = self._create_import_relationships(
-            neo4j_driver, all_classes)
-        self.log_info(f"Created {import_count} IMPORTS relationships")
-
-        # Phase 6: Resolve method calls
+        # Phase 5: Resolve method calls
         self.log_info("Resolving method calls...")
         calls_count = self._create_calls_relationships(
             neo4j_driver, all_classes)
@@ -107,7 +103,6 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         summary = (f"{stats['packages']} packages, "
                    f"{stats['classes']} classes, "
                    f"{stats['methods']} methods, "
-                   f"{import_count} imports, "
                    f"{calls_count} calls")
         if stats["parse_errors"] > 0:
             summary += f", {stats['parse_errors']} parse errors"
@@ -150,7 +145,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             self.log_warn(f"Partial parse (syntax errors): {rel}")
 
         package_name = self._extract_package(root)
-        imports, star_imports = self._extract_imports(root)
+        imports, star_imports, static_method_imports = \
+            self._extract_imports(root)
 
         rel_path = file_path.relative_to(module_path)
         is_test = str(rel_path).replace("\\", "/").startswith("src/test/")
@@ -161,6 +157,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         self._extract_types_from_nodes(
             type_nodes, package_name, is_test,
             str(rel_path), imports, star_imports,
+            static_method_imports,
             classes, source, parent_name=None)
 
         return {"package": package_name, "classes": classes}
@@ -176,22 +173,34 @@ class JavaMavenAnalyzer(BaseAnalyzer):
     def _extract_imports(self, root: Node):
         imports = []
         star_imports = []
+        static_method_imports = {}  # method_name -> class_fqn
         for child in root.children:
             if child.type == "import_declaration":
                 text = child.text.decode("utf-8").strip()
                 text = (text.removeprefix("import ")
                         .removesuffix(";").strip())
-                if text.startswith("static "):
+                is_static = text.startswith("static ")
+                if is_static:
                     text = text.removeprefix("static ").strip()
                 if text.endswith(".*"):
                     star_imports.append(text.removesuffix(".*"))
+                elif is_static:
+                    # Static import: last part is the member name
+                    last_dot = text.rfind(".")
+                    if last_dot > 0:
+                        class_fqn = text[:last_dot]
+                        member_name = text[last_dot + 1:]
+                        static_method_imports[member_name] = class_fqn
+                        # Also add the class itself as a regular import
+                        imports.append(class_fqn)
                 else:
                     imports.append(text)
-        return imports, star_imports
+        return imports, star_imports, static_method_imports
 
     def _extract_types_from_nodes(self, nodes, package_name: str,
                                   is_test: bool, file_path: str,
                                   imports: list, star_imports: list,
+                                  static_method_imports: dict,
                                   classes: list,
                                   source_bytes: bytes,
                                   parent_name: Optional[str]):
@@ -216,14 +225,27 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             is_abstract = "abstract" in modifiers
             visibility = self._visibility_from_modifiers(modifiers)
 
-            # Extract source code for this class declaration
-            source_code = source_bytes[
-                node.start_byte:node.end_byte].decode("utf-8")
-            class_start_line = node.start_point[0]
+            # Source code: full file for top-level, class body for inner
+            if parent_name:
+                source_code = source_bytes[
+                    node.start_byte:node.end_byte].decode("utf-8")
+                class_start_line = node.start_point[0]
+            else:
+                source_code = source_bytes.decode("utf-8")
+                class_start_line = 0  # full file, lines are absolute
 
             fields = self._extract_fields(node)
             methods = self._extract_methods(node, class_start_line)
             supertypes = self._extract_supertypes(node)
+            annotations = self._extract_annotations(node)
+
+            # Resolve annotation simple names to FQNs
+            import_map = self._build_import_map(imports, star_imports)
+            annotations = self._resolve_annotation_fqns(
+                annotations, import_map, package_name)
+            for m in methods:
+                m["annotations"] = self._resolve_annotation_fqns(
+                    m.get("annotations", []), import_map, package_name)
 
             cls_info = {
                 "name": simple_name,
@@ -236,10 +258,12 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 "visibility": visibility,
                 "imports": imports,
                 "star_imports": star_imports,
+                "static_method_imports": static_method_imports,
                 "methods": methods,
                 "source_code": source_code,
                 "fields": fields,
                 "supertypes": supertypes,
+                "annotations": annotations,
             }
             classes.append(cls_info)
 
@@ -252,6 +276,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     self._extract_types_from_nodes(
                         inner_types, package_name, is_test,
                         file_path, imports, star_imports,
+                        static_method_imports,
                         classes, source_bytes,
                         parent_name=full_name)
 
@@ -265,6 +290,113 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                         modifiers.add(text)
                 break
         return modifiers
+
+    def _extract_annotations(self, node: Node) -> list[dict]:
+        """Extract annotations from a class or method declaration node."""
+        annotations = []
+        for child in node.children:
+            if child.type == "modifiers":
+                for mod_child in child.children:
+                    if mod_child.type == "marker_annotation":
+                        # @RestController (no arguments)
+                        name_node = mod_child.child_by_field_name("name")
+                        if name_node:
+                            annotations.append({
+                                "name": name_node.text.decode("utf-8"),
+                                "arguments": None,
+                            })
+                    elif mod_child.type == "annotation":
+                        # @GetMapping("/users") or @RequestMapping(value="/api", method=GET)
+                        name_node = mod_child.child_by_field_name("name")
+                        if not name_node:
+                            continue
+                        ann_name = name_node.text.decode("utf-8")
+                        args = self._extract_annotation_arguments(mod_child)
+                        annotations.append({
+                            "name": ann_name,
+                            "arguments": args,
+                        })
+                break
+        return annotations
+
+    def _extract_annotation_arguments(self, ann_node: Node) -> dict:
+        """Extract arguments from an annotation node into a dict."""
+        args = {}
+        arg_list = ann_node.child_by_field_name("arguments")
+        if not arg_list:
+            return args
+        for child in arg_list.children:
+            if child.type == "element_value_pair":
+                key_node = child.child_by_field_name("key")
+                value_node = child.child_by_field_name("value")
+                if key_node and value_node:
+                    key = key_node.text.decode("utf-8")
+                    value = self._annotation_value(value_node)
+                    args[key] = value
+            elif child.type in ("string_literal", "string_fragment"):
+                # Shorthand: @GetMapping("/users") → value = "/users"
+                val = child.text.decode("utf-8").strip('"')
+                args["value"] = val
+            elif child.type == "element_value_array_initializer":
+                # Shorthand array: @GetMapping({"/a", "/b"})
+                vals = self._annotation_array_values(child)
+                args["value"] = vals
+        return args
+
+    def _annotation_value(self, node: Node):
+        """Extract a single annotation value (string, field access, or array)."""
+        if node.type == "string_literal":
+            return node.text.decode("utf-8").strip('"')
+        elif node.type == "element_value_array_initializer":
+            return self._annotation_array_values(node)
+        elif node.type == "field_access":
+            return node.text.decode("utf-8")
+        else:
+            return node.text.decode("utf-8")
+
+    def _build_import_map(self, imports: list[str],
+                          star_imports: list[str]) -> dict[str, str]:
+        """Build a map from simple name to FQN from explicit imports."""
+        import_map = {}
+        for imp in imports:
+            simple = imp.rsplit(".", 1)[-1]
+            import_map[simple] = imp
+        # Store star imports for fallback resolution
+        import_map["__star_imports__"] = star_imports
+        return import_map
+
+    def _resolve_annotation_fqns(self, annotations: list[dict],
+                                 import_map: dict,
+                                 package_name: str) -> list[dict]:
+        """Resolve annotation simple names to fully qualified names."""
+        star_imports = import_map.get("__star_imports__", [])
+        resolved = []
+        for ann in annotations:
+            simple_name = ann["name"]
+            fqn = import_map.get(simple_name)
+            if not fqn:
+                # Try star imports (use first matching package)
+                for star_pkg in star_imports:
+                    fqn = f"{star_pkg}.{simple_name}"
+                    break
+            if not fqn and package_name:
+                # Same package (no import needed)
+                fqn = f"{package_name}.{simple_name}"
+            resolved.append({
+                "name": fqn or simple_name,
+                "arguments": ann.get("arguments"),
+            })
+        return resolved
+
+    def _annotation_array_values(self, node: Node) -> list[str]:
+        """Extract values from an array initializer like {"/a", "/b"}."""
+        vals = []
+        for child in node.children:
+            if child.type == "string_literal":
+                vals.append(child.text.decode("utf-8").strip('"'))
+            elif child.type not in ("{", "}", ","):
+                vals.append(child.text.decode("utf-8"))
+        return vals
 
     def _visibility_from_modifiers(self, modifiers: set[str]) -> str:
         if "public" in modifiers:
@@ -354,6 +486,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 params = self._format_params(child)
                 mods = self._get_modifiers(child)
                 invocations = self._extract_invocations(child)
+                annotations = self._extract_annotations(child)
 
                 methods.append({
                     "name": name,
@@ -363,6 +496,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     "is_abstract": "abstract" in mods,
                     "visibility": self._visibility_from_modifiers(mods),
                     "invocations": invocations,
+                    "annotations": annotations,
                     "start_line": child.start_point[0]
                     - class_start_line,
                     "end_line": child.end_point[0]
@@ -381,6 +515,7 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     "is_abstract": False,
                     "visibility": self._visibility_from_modifiers(mods),
                     "invocations": invocations,
+                    "annotations": [],
                     "start_line": child.start_point[0]
                     - class_start_line,
                     "end_line": child.end_point[0]
@@ -433,28 +568,61 @@ class JavaMavenAnalyzer(BaseAnalyzer):
     # ----- Neo4j Operations -----
 
     def _clear_module_data(self, driver, module_name: str):
+        """Clear data for a single module. Used by single-module runs.
+        For full-repo runs, Phase 0 in the pipeline handles cleanup."""
         self.log_info(f"Clearing existing data for module '{module_name}'")
+        # Clean Arch nodes linked to classes
         run_cypher_write(driver, """
-            MATCH (m:Module {name: $name})
+            MATCH (m:Java:Module {name: $name})
+                  -[:CONTAINS_PACKAGE]->(:Java:Package)
+                  -[:CONTAINS_CLASS]->(c:Java:Class)
+            OPTIONAL MATCH (a:Arch)-[:IMPLEMENTED_BY]->(c)
+            DETACH DELETE a
+        """, {"name": module_name})
+        # Clean Arch nodes linked to methods
+        run_cypher_write(driver, """
+            MATCH (m:Java:Module {name: $name})
+                  -[:CONTAINS_PACKAGE]->(:Java:Package)
+                  -[:CONTAINS_CLASS]->(:Java:Class)
+                  -[:HAS_METHOD]->(meth:Java:Method)
+            OPTIONAL MATCH (a:Arch)-[:IMPLEMENTED_BY]->(meth)
+            DETACH DELETE a
+        """, {"name": module_name})
+        # Clean orphan Arch nodes
+        run_cypher_write(driver, """
+            MATCH (a:Arch)
+            WHERE NOT EXISTS { MATCH (a)-[]-() }
+            DELETE a
+        """)
+        # Delete module and its descendants
+        run_cypher_write(driver, """
+            MATCH (m:Java:Module {name: $name})
             OPTIONAL MATCH (m)-[*]->(n)
             DETACH DELETE n, m
         """, {"name": module_name})
 
     def _create_module_node(self, driver, module_name: str,
-                            relative_path: str, repo_path: str):
+                            relative_path: str, repo_path: str,
+                            repo_name: str):
+        # Repository node is pre-created by the pipeline (Phase 0)
+        # MERGE as safety net for single-module runs
         run_cypher_write(driver, """
-            MERGE (m:Module {name: $name})
-            SET m.path = $path, m.repository = $repo
-        """, {"name": module_name, "path": relative_path,
-              "repo": repo_path})
+            MERGE (r:Java:Repository {path: $repo_path})
+            ON CREATE SET r.name = $repo_name
+            MERGE (m:Java:Module {name: $module_name})
+            SET m.path = $relative_path
+            MERGE (r)-[:CONTAINS_MODULE]->(m)
+        """, {"repo_path": repo_path, "repo_name": repo_name,
+              "module_name": module_name,
+              "relative_path": relative_path})
 
     def _create_package_node(self, driver, module_name: str,
                              package_name: str):
         short_name = (package_name.rsplit(".", 1)[-1]
                       if "." in package_name else package_name)
         run_cypher_write(driver, """
-            MATCH (m:Module {name: $module_name})
-            MERGE (p:Package {full_name: $full_name})
+            MATCH (m:Java:Module {name: $module_name})
+            MERGE (p:Java:Package {full_name: $full_name})
             SET p.name = $name
             MERGE (m)-[:CONTAINS_PACKAGE]->(p)
         """, {"module_name": module_name,
@@ -462,16 +630,22 @@ class JavaMavenAnalyzer(BaseAnalyzer):
               "name": short_name})
 
     def _create_class_node(self, driver, cls: dict):
+        annotations = cls.get("annotations", [])
+        supertypes = cls.get("supertypes", [])
         run_cypher_write(driver, """
-            MATCH (p:Package {full_name: $package})
-            MERGE (c:Class {full_name: $full_name})
+            MATCH (p:Java:Package {full_name: $package})
+            MERGE (c:Java:Class {full_name: $full_name})
             SET c.name = $name,
                 c.kind = $kind,
                 c.is_abstract = $is_abstract,
                 c.is_test = $is_test,
                 c.file_path = $file_path,
                 c.visibility = $visibility,
-                c.source_code = $source_code
+                c.source_code = $source_code,
+                c.annotations = $annotations,
+                c.supertypes = $supertypes,
+                c.imports = $imports,
+                c.star_imports = $star_imports
             MERGE (p)-[:CONTAINS_CLASS]->(c)
         """, {
             "package": cls["package"],
@@ -483,14 +657,19 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             "file_path": cls["file_path"],
             "visibility": cls["visibility"],
             "source_code": cls["source_code"],
+            "annotations": json.dumps(annotations) if annotations else "[]",
+            "supertypes": json.dumps(supertypes) if supertypes else "[]",
+            "imports": cls.get("imports", []),
+            "star_imports": cls.get("star_imports", []),
         })
 
     def _create_method_node(self, driver, class_full_name: str,
                             method: dict):
         full_name = f"{class_full_name}.{method['name']}"
+        annotations = method.get("annotations", [])
         run_cypher_write(driver, """
-            MATCH (c:Class {full_name: $class_name})
-            CREATE (m:Method {
+            MATCH (c:Java:Class {full_name: $class_name})
+            CREATE (m:Java:Method {
                 name: $name,
                 full_name: $full_name,
                 return_type: $return_type,
@@ -499,7 +678,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 is_abstract: $is_abstract,
                 visibility: $visibility,
                 start_line: $start_line,
-                end_line: $end_line
+                end_line: $end_line,
+                annotations: $annotations
             })
             CREATE (c)-[:HAS_METHOD]->(m)
         """, {
@@ -513,40 +693,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
             "visibility": method["visibility"],
             "start_line": method["start_line"],
             "end_line": method["end_line"],
+            "annotations": json.dumps(annotations) if annotations else "[]",
         })
-
-    def _create_import_relationships(self, driver,
-                                     all_classes: list[dict]) -> int:
-        known_classes = {cls["full_name"] for cls in all_classes}
-        count = 0
-
-        for cls in all_classes:
-            targets = set()
-
-            for imp in cls["imports"]:
-                if imp in known_classes:
-                    targets.add(imp)
-
-            for star_pkg in cls["star_imports"]:
-                for known in known_classes:
-                    pkg_of_known = (known.rsplit(".", 1)[0]
-                                    if "." in known else "")
-                    if pkg_of_known == star_pkg:
-                        targets.add(known)
-
-            targets.discard(cls["full_name"])
-
-            if targets:
-                run_cypher_write(driver, """
-                    MATCH (source:Class {full_name: $source})
-                    UNWIND $targets AS target_name
-                    MATCH (target:Class {full_name: target_name})
-                    MERGE (source)-[:IMPORTS]->(target)
-                """, {"source": cls["full_name"],
-                      "targets": list(targets)})
-                count += len(targets)
-
-        return count
 
     def _find_method_owner(self, called_name: str,
                            target_class: str,
@@ -610,6 +758,9 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 simple = imp.rsplit(".", 1)[-1]
                 import_map[simple] = imp
 
+            # Static method imports: method_name -> class_fqn
+            static_imports = cls.get("static_method_imports", {})
+
             # Build field map: field_name -> resolved full class name
             field_type_map = {}
             for field_name, type_name in cls.get("fields", {}).items():
@@ -629,7 +780,11 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                     receiver = inv.get("receiver")
 
                     if receiver is None or receiver == "this":
-                        target_class = cls["full_name"]
+                        # Check static method imports first
+                        if called_name in static_imports:
+                            target_class = static_imports[called_name]
+                        else:
+                            target_class = cls["full_name"]
                     elif receiver in import_map:
                         target_class = import_map[receiver]
                     elif receiver in class_by_simple:
@@ -657,9 +812,9 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                         if syn_full not in synthetic_created:
                             synthetic_created.add(syn_full)
                             run_cypher_write(driver, """
-                                MATCH (c:Class {
+                                MATCH (c:Java:Class {
                                     full_name: $class_name})
-                                CREATE (m:Method {
+                                CREATE (m:Java:Method {
                                     name: $name,
                                     full_name: $full_name,
                                     return_type: 'Object',
@@ -685,8 +840,8 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                             if pair not in seen:
                                 seen.add(pair)
                                 run_cypher_write(driver, """
-                                    MATCH (a:Method {full_name: $caller})
-                                    MATCH (b:Method {full_name: $callee})
+                                    MATCH (a:Java:Method {full_name: $caller})
+                                    MATCH (b:Java:Method {full_name: $callee})
                                     MERGE (a)-[:CALLS]->(b)
                                 """, {"caller": caller,
                                       "callee": callee})

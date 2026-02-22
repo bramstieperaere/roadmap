@@ -1,0 +1,42 @@
+<div class="node-tree" data-testid="node-tree">
+  @if (rootLoading()) {
+    <div class="text-center py-3">
+      <span class="spinner-border spinner-border-sm text-secondary"></span>
+    </div>
+  } @else if (rows().length === 0) {
+    <div class="text-muted small px-3 py-2">No data</div>
+  } @else {
+    @for (row of rows(); track row.id; let i = $index) {
+      <div
+        class="tree-row"
+        [style.padding-left.px]="12 + row.depth * 20"
+        data-testid="tree-row"
+      >
+        @if (row.hasChildren) {
+          <button
+            class="expand-btn"
+            (click)="toggleExpand(i)"
+            data-testid="tree-expand"
+          >
+            @if (row.loading) {
+              <span class="spinner-border spinner-border-sm"></span>
+            } @else {
+              <i [class]="'bi ' + (row.expanded ? 'bi-chevron-down' : 'bi-chevron-right')"></i>
+            }
+          </button>
+        } @else {
+          <span class="expand-spacer"></span>
+        }
+        <i [class]="'bi ' + getIcon(row.kind) + ' row-icon'"></i>
+        <button
+          class="row-label"
+          (click)="selectNode(row)"
+          [title]="row.name"
+          data-testid="tree-select"
+        >
+          {{ row.name }}
+        </button>
+      </div>
+    }
+  }
+</div>

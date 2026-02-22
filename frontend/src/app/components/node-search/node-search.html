@@ -1,0 +1,37 @@
+<div class="node-search" data-testid="node-search">
+  <div class="position-relative">
+    <i class="bi bi-search search-icon"></i>
+    <input
+      #searchInput
+      type="text"
+      class="form-control form-control-sm search-input"
+      placeholder="Search classes, methods, endpoints..."
+      [ngModel]="query()"
+      (ngModelChange)="onInput($event)"
+      (keydown)="onKeydown($event)"
+      (blur)="onBlur()"
+      (focus)="results().length > 0 && open.set(true)"
+      data-testid="node-search-input"
+    />
+  </div>
+
+  @if (open() && results().length > 0) {
+    <div class="search-dropdown" data-testid="node-search-dropdown">
+      @for (result of results(); track result.id; let i = $index) {
+        <button
+          class="search-item"
+          [class.active]="i === activeIndex()"
+          (mousedown)="select(result)"
+          data-testid="node-search-item"
+        >
+          <i [class]="'bi ' + getIcon(result.labels) + ' item-icon'"></i>
+          <span class="item-name">{{ result.name }}</span>
+          <span class="item-type">{{ getTypeLabel(result.labels) }}</span>
+          @if (result.detail && result.detail !== result.name) {
+            <span class="item-detail">{{ result.detail }}</span>
+          }
+        </button>
+      }
+    </div>
+  }
+</div>

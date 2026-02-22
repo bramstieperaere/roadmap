@@ -12,7 +12,8 @@ def get_neo4j_driver():
 def run_cypher_write(driver, query: str, parameters: dict = None):
     config = load_config_decrypted()
     with driver.session(database=config.neo4j.database) as session:
-        session.run(query, parameters or {})
+        result = session.run(query, parameters or {})
+        result.consume()
 
 
 def run_cypher_read_graph(driver, query: str, parameters: dict = None) -> dict:

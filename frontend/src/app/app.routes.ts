@@ -10,4 +10,5 @@ export const routes: Routes = [
   { path: 'jobs', component: JobsListComponent },
   { path: 'jobs/:id', component: JobDetailComponent },
   { path: 'query', loadComponent: () => import('./query/query').then(m => m.QueryComponent) },
+  { path: 'sequence', loadComponent: () => import('./sequence/sequence').then(m => m.SequenceComponent) },
 ];

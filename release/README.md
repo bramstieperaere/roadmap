@@ -35,6 +35,7 @@ The application starts at **http://localhost:8081**.
 ```
 --port PORT      Listen port (default: 8081)
 --config PATH    Path to config.yaml (default: created automatically)
+--key KEY        Encryption key to auto-unlock at startup
 ```
 
 Examples:
@@ -42,11 +43,13 @@ Examples:
 ```bash
 ./start.sh --port 9090
 ./start.sh --port 9090 --config /etc/roadmap/config.yaml
+./start.sh --key mypassword
 ```
 
 ```
 start.bat --port 9090
 start.bat --port 9090 --config C:\roadmap\config.yaml
+start.bat --key mypassword
 ```
 
 ## First Run
@@ -76,6 +79,22 @@ On first visit the application prompts for an encryption password. This password
 sensitive fields (database password, API keys) in `config.yaml`. You will need this
 password every time the server restarts. There is no password recovery — if lost, delete
 `config.yaml` and reconfigure.
+
+To skip the manual unlock step, provide the encryption key at startup:
+
+```bash
+# Via command-line argument
+./start.sh --key mypassword
+
+# Via environment variable
+ROADMAP_KEY=mypassword ./start.sh
+
+# Windows
+set ROADMAP_KEY=mypassword && start.bat
+```
+
+The `--key` argument takes precedence if both are set. On successful auto-unlock the
+server logs `[STARTUP] Auto-unlocked via ROADMAP_KEY`.
 
 ### Neo4j Connection
 

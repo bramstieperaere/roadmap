@@ -38,8 +38,17 @@ class StartJobRequest(BaseModel):
     module_index: int
 
 
+class StartRepoRequest(BaseModel):
+    repo_index: int
+
+
 class StartJobResponse(BaseModel):
     job_id: str
+    message: str
+
+
+class StartRepoResponse(BaseModel):
+    job_ids: list[str]
     message: str
 
 
