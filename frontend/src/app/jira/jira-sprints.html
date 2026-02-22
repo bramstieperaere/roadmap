@@ -1,0 +1,58 @@
+<div class="section-page" data-testid="jira-sprints-page">
+  <div class="section-topbar">
+    <h5 class="mb-0 fw-semibold">Sprints</h5>
+    <div class="d-flex align-items-center gap-2">
+      @if (data(); as d) {
+        <span class="cache-info">
+          @if (d.from_cache) {
+            <i class="bi bi-database me-1"></i>Cached
+          } @else {
+            <i class="bi bi-cloud-download me-1"></i>Fresh
+          }
+          <span class="text-muted ms-1">{{ d._cached_at | date:'short' }}</span>
+        </span>
+      }
+      <button class="btn btn-outline-secondary btn-sm" (click)="refresh()" [disabled]="loading()" data-testid="refresh-sprints">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="section-content">
+    @if (loading()) {
+      <div class="d-flex justify-content-center py-5">
+        <span class="spinner-border"></span>
+      </div>
+    } @else if (error()) {
+      <div class="alert alert-danger m-3">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
+      </div>
+    } @else if (data(); as d) {
+      <table class="issue-table" data-testid="sprints-table">
+        <thead>
+          <tr>
+            <th style="width: 120px">State</th>
+            <th>Name</th>
+            <th style="width: 140px">Start</th>
+            <th style="width: 140px">End</th>
+            <th style="width: 140px">Completed</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (sprint of d.sprints; track sprint.id) {
+            <tr class="issue-row" (click)="openSprint(sprint)" [attr.data-testid]="'sprint-' + sprint.id">
+              <td><span class="badge" [class]="getStateClass(sprint.state)">{{ sprint.state }}</span></td>
+              <td class="issue-key">{{ sprint.name }}</td>
+              <td class="text-muted">{{ sprint.start_date | date:'mediumDate' }}</td>
+              <td class="text-muted">{{ sprint.end_date | date:'mediumDate' }}</td>
+              <td class="text-muted">{{ sprint.complete_date ? (sprint.complete_date | date:'mediumDate') : '—' }}</td>
+            </tr>
+          }
+          @empty {
+            <tr><td colspan="5" class="text-muted text-center py-3">No sprints found.</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>

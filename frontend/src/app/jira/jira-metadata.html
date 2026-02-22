@@ -1,0 +1,212 @@
+<div class="section-page" data-testid="jira-metadata-page">
+  <div class="section-topbar">
+    <h5 class="mb-0 fw-semibold">Metadata</h5>
+    <div class="d-flex align-items-center gap-2">
+      @if (metadata(); as m) {
+        <span class="cache-info">
+          @if (m.from_cache) {
+            <i class="bi bi-database me-1"></i>Cached
+          } @else {
+            <i class="bi bi-cloud-download me-1"></i>Fresh
+          }
+          <span class="text-muted ms-1">{{ m._cached_at | date:'short' }}</span>
+        </span>
+      }
+      <button class="btn btn-outline-secondary btn-sm" (click)="refresh()" [disabled]="loading()" data-testid="refresh-metadata">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="section-content">
+    @if (loading()) {
+      <div class="d-flex justify-content-center py-5">
+        <span class="spinner-border"></span>
+      </div>
+    } @else if (error()) {
+      <div class="alert alert-danger m-3" data-testid="metadata-error">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
+      </div>
+    } @else if (metadata(); as m) {
+      <!-- Section pills -->
+      <div class="section-pills">
+        @for (section of sections; track section.id) {
+          <button
+            class="pill"
+            [class.active]="activeSection() === section.id"
+            (click)="activeSection.set(section.id)"
+            [attr.data-testid]="'pill-' + section.id"
+          >
+            <i class="bi" [class]="section.icon"></i>
+            {{ section.label }}
+            <span class="pill-count">
+              @switch (section.id) {
+                @case ('components') { {{ m.components.length }} }
+                @case ('versions') { {{ m.versions.length }} }
+                @case ('issue_types') { {{ m.issue_types.length }} }
+                @case ('priorities') { {{ m.priorities.length }} }
+                @case ('epics') { {{ m.epics.length }} }
+                @case ('labels') { {{ m.labels.length }} }
+              }
+            </span>
+          </button>
+        }
+      </div>
+
+      <!-- Section content -->
+      <div class="meta-section-content">
+        @switch (activeSection()) {
+          <!-- Components -->
+          @case ('components') {
+            @if (m.components.length) {
+              <table class="meta-table" data-testid="components-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Lead</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (c of m.components; track c.id) {
+                    <tr>
+                      <td class="fw-semibold">{{ c.name }}</td>
+                      <td class="text-muted">{{ c.description }}</td>
+                      <td>{{ c.lead || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="text-muted p-3">No components defined.</p>
+            }
+          }
+
+          <!-- Versions -->
+          @case ('versions') {
+            @if (m.versions.length) {
+              <table class="meta-table" data-testid="versions-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Release Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (v of m.versions; track v.id) {
+                    <tr>
+                      <td class="fw-semibold">{{ v.name }}</td>
+                      <td>{{ v.release_date || '—' }}</td>
+                      <td>
+                        @if (v.archived) {
+                          <span class="badge bg-secondary">Archived</span>
+                        } @else if (v.released) {
+                          <span class="badge bg-success">Released</span>
+                        } @else {
+                          <span class="badge bg-primary">Unreleased</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="text-muted p-3">No versions defined.</p>
+            }
+          }
+
+          <!-- Issue Types & Statuses -->
+          @case ('issue_types') {
+            @if (m.issue_types.length) {
+              <div class="type-cards" data-testid="issue-types-section">
+                @for (t of m.issue_types; track t.id) {
+                  <div class="type-card">
+                    <h6 class="type-name">{{ t.name }}</h6>
+                    <div class="status-list">
+                      @for (s of t.statuses; track s.id) {
+                        <span class="status-badge" [class]="getCategoryClass(s.category)">{{ s.name }}</span>
+                      }
+                      @empty {
+                        <span class="text-muted small">No statuses</span>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="text-muted p-3">No issue types found.</p>
+            }
+          }
+
+          <!-- Priorities -->
+          @case ('priorities') {
+            @if (m.priorities.length) {
+              <table class="meta-table" data-testid="priorities-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px"></th>
+                    <th>Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of m.priorities; track p.id) {
+                    <tr>
+                      <td>
+                        @if (p.icon_url) {
+                          <img [src]="p.icon_url" [alt]="p.name" width="16" height="16">
+                        }
+                      </td>
+                      <td>{{ p.name }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="text-muted p-3">No priorities found.</p>
+            }
+          }
+
+          <!-- Epics -->
+          @case ('epics') {
+            @if (m.epics.length) {
+              <table class="meta-table" data-testid="epics-table">
+                <thead>
+                  <tr>
+                    <th style="width: 120px">Key</th>
+                    <th>Summary</th>
+                    <th style="width: 120px">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (e of m.epics; track e.key) {
+                    <tr class="epic-row" (click)="openIssue(e.key)">
+                      <td class="epic-key">{{ e.key }}</td>
+                      <td>{{ e.summary }}</td>
+                      <td><span class="status-badge" [class]="getStatusClass(e.status)">{{ e.status }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="text-muted p-3">No epics found.</p>
+            }
+          }
+
+          <!-- Labels -->
+          @case ('labels') {
+            @if (m.labels.length) {
+              <div class="labels-container" data-testid="labels-section">
+                @for (label of m.labels; track label) {
+                  <span class="badge label-badge">{{ label }}</span>
+                }
+              </div>
+            } @else {
+              <p class="text-muted p-3">No labels found.</p>
+            }
+          }
+        }
+      </div>
+    }
+  </div>
+</div>

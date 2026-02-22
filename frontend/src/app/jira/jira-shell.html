@@ -1,0 +1,49 @@
+<div class="jira-shell" data-testid="jira-shell">
+  <nav class="jira-sidebar">
+    @if (state.loadingProjects()) {
+      <div class="p-3 text-center">
+        <span class="spinner-border spinner-border-sm"></span>
+      </div>
+    } @else {
+      <div class="sidebar-label">Projects</div>
+      @for (project of state.projects(); track project.key) {
+        <div class="sidebar-project">
+          <button
+            class="sidebar-project-btn"
+            [class.active]="state.selectedProjectKey() === project.key"
+            (click)="selectProject(project.key)"
+            [attr.data-testid]="'project-' + project.key"
+          >
+            <i class="bi bi-kanban"></i>
+            <span class="project-name">{{ project.name || project.key }}</span>
+          </button>
+          @if (state.selectedProjectKey() === project.key) {
+            <div class="sidebar-sub-nav">
+              <a class="sidebar-sub-item" routerLink="/jira/sprint" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">
+                <i class="bi bi-play-circle"></i>Current Sprint
+              </a>
+              <a class="sidebar-sub-item" routerLink="/jira/sprints" routerLinkActive="active">
+                <i class="bi bi-clock-history"></i>Past Sprints
+              </a>
+              <a class="sidebar-sub-item" routerLink="/jira/backlog" routerLinkActive="active">
+                <i class="bi bi-list-ul"></i>Backlog
+              </a>
+              <a class="sidebar-sub-item" routerLink="/jira/metadata" routerLinkActive="active">
+                <i class="bi bi-info-circle"></i>Metadata
+              </a>
+            </div>
+          }
+        </div>
+      }
+      @empty {
+        <p class="text-muted small px-3 py-2">
+          No projects configured.<br>
+          <a routerLink="/settings">Go to Settings</a>
+        </p>
+      }
+    }
+  </nav>
+  <div class="jira-shell-content">
+    <router-outlet></router-outlet>
+  </div>
+</div>

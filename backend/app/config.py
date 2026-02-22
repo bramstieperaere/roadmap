@@ -28,6 +28,8 @@ def load_config_decrypted() -> AppConfig:
         return config
     if is_encrypted(config.neo4j.password):
         config.neo4j.password = decrypt_value(config.neo4j.password, key)
+    if is_encrypted(config.atlassian.api_token):
+        config.atlassian.api_token = decrypt_value(config.atlassian.api_token, key)
     for provider in config.ai_providers:
         if is_encrypted(provider.api_key):
             provider.api_key = decrypt_value(provider.api_key, key)
@@ -42,6 +44,8 @@ def save_config(config: AppConfig) -> None:
             config.encryption_salt = base64.b64encode(salt).decode()
         if not is_encrypted(config.neo4j.password):
             config.neo4j.password = encrypt_value(config.neo4j.password, key)
+        if config.atlassian.api_token and not is_encrypted(config.atlassian.api_token):
+            config.atlassian.api_token = encrypt_value(config.atlassian.api_token, key)
         for provider in config.ai_providers:
             if not is_encrypted(provider.api_key):
                 provider.api_key = encrypt_value(provider.api_key, key)
