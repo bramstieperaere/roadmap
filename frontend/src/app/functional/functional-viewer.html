@@ -1,0 +1,241 @@
+@if (pageId()) {
+  <!-- ═══════════════════ DETAIL VIEW ═══════════════════ -->
+  <div class="section-page" data-testid="functional-doc-view">
+    <div class="section-topbar">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm" (click)="goBackToIndex()" data-testid="back-to-index">
+          <i class="bi bi-arrow-left me-1"></i>Index
+        </button>
+        @if (doc(); as d) {
+          <span class="badge" [class]="docTypeBadgeClass(d.doc_type)">{{ d.doc_type }}</span>
+          @if (d.domain) {
+            <span class="badge bg-outline-domain">{{ d.domain }}</span>
+          }
+        }
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        @if (doc(); as d) {
+          <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/confluence/page', d.source_id]" title="View source page">
+            <i class="bi bi-journal-text me-1"></i>Source
+          </a>
+        }
+      </div>
+    </div>
+
+    <div class="section-content">
+      @if (loadingDoc()) {
+        <div class="d-flex justify-content-center py-5">
+          <span class="spinner-border"></span>
+        </div>
+      } @else if (docError()) {
+        <div class="p-4">
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-2"></i>{{ docError() }}
+          </div>
+        </div>
+      } @else if (doc(); as d) {
+        <div class="doc-body">
+          <!-- Header -->
+          <h3>{{ d.title }}</h3>
+          <p class="doc-summary">{{ d.summary }}</p>
+
+          @if (d.tags.length > 0) {
+            <div class="doc-tags mb-3">
+              @for (tag of d.tags; track tag) {
+                <span class="badge bg-light text-dark tag-chip">{{ tag }}</span>
+              }
+            </div>
+          }
+
+          <!-- Metadata -->
+          @if (metadataEntries(d).length > 0) {
+            <div class="doc-section">
+              <h6 class="section-label"><i class="bi bi-info-circle me-1"></i>Metadata</h6>
+              <table class="meta-table">
+                @for (entry of metadataEntries(d); track entry[0]) {
+                  <tr>
+                    <td class="meta-key">{{ entry[0] }}</td>
+                    <td>{{ entry[1] }}</td>
+                  </tr>
+                }
+              </table>
+            </div>
+          }
+
+          <!-- Sections -->
+          @if (d.sections.length > 0) {
+            <div class="doc-section">
+              <h6 class="section-label"><i class="bi bi-layout-text-sidebar me-1"></i>Content</h6>
+              @for (section of d.sections; track $index) {
+                <div class="content-block">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    @if (section.heading) {
+                      <strong>{{ section.heading }}</strong>
+                    }
+                    <span class="badge badge-sm" [class]="sectionTypeBadgeClass(section.section_type)">{{ section.section_type }}</span>
+                  </div>
+                  <div class="content-text">{{ section.content }}</div>
+                  @if (section.entities_mentioned.length > 0) {
+                    <div class="entities-row">
+                      @for (entity of section.entities_mentioned; track entity) {
+                        <span class="badge bg-light text-dark entity-chip">{{ entity }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Field Mappings -->
+          @if (d.field_mappings.length > 0) {
+            <div class="doc-section">
+              <h6 class="section-label"><i class="bi bi-arrow-left-right me-1"></i>Field Mappings</h6>
+              <table class="issue-table">
+                <thead>
+                  <tr>
+                    <th>Source System</th>
+                    <th>Source Field</th>
+                    <th></th>
+                    <th>Target System</th>
+                    <th>Target Field</th>
+                    <th>Transform</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (fm of d.field_mappings; track $index) {
+                    <tr>
+                      <td>{{ fm.source_system }}</td>
+                      <td><code>{{ fm.source_field }}</code></td>
+                      <td><i class="bi bi-arrow-right text-muted"></i></td>
+                      <td>{{ fm.target_system }}</td>
+                      <td><code>{{ fm.target_field }}</code></td>
+                      <td class="text-muted">{{ fm.transform || '-' }}</td>
+                      <td class="text-muted">{{ fm.remarks || '-' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <!-- References -->
+          @if (d.references.length > 0) {
+            <div class="doc-section">
+              <h6 class="section-label"><i class="bi bi-link-45deg me-1"></i>References</h6>
+              <div class="ref-list">
+                @for (ref of d.references; track $index) {
+                  <span class="ref-item">
+                    <i class="bi" [class]="refIcon(ref.ref_type)"></i>
+                    {{ ref.label || ref.ref_id }}
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Meta footer -->
+          <div class="doc-footer text-muted">
+            <span>Processed {{ d.processed_at | date:'medium' }}</span>
+            @if (d.version_by) {
+              <span>Last edited by {{ d.version_by }}</span>
+            }
+            @if (d.version_when) {
+              <span>on {{ d.version_when | date:'medium' }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+} @else if (!spaceKey()) {
+  <!-- ═══════════════════ SPACE PICKER ═══════════════════ -->
+  <div class="section-page" data-testid="functional-space-picker">
+    <div class="section-topbar">
+      <h5 class="mb-0 fw-semibold">Functional Docs</h5>
+    </div>
+    <div class="section-content">
+      @if (loadingSpaces()) {
+        <div class="d-flex justify-content-center py-5">
+          <span class="spinner-border"></span>
+        </div>
+      } @else if (spaces().length === 0) {
+        <div class="p-4">
+          <div class="alert alert-warning">
+            <i class="bi bi-info-circle me-2"></i>No Confluence spaces configured.
+            <br><small class="text-muted">Add spaces in <a routerLink="/settings">Settings</a>, then process them from <a routerLink="/confluence">Confluence</a>.</small>
+          </div>
+        </div>
+      } @else {
+        <div class="p-4">
+          <p class="text-muted mb-3">Select a space to view processed functional documentation.</p>
+          <div class="d-flex flex-wrap gap-2">
+            @for (space of spaces(); track space.key) {
+              <button class="btn btn-outline-primary" (click)="selectSpace(space.key)">
+                <i class="bi bi-journal-text me-1"></i>{{ space.name || space.key }}
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+} @else {
+  <!-- ═══════════════════ INDEX VIEW ═══════════════════ -->
+  <div class="section-page" data-testid="functional-index-view">
+    <div class="section-topbar">
+      <h5 class="mb-0 fw-semibold">Functional Docs: {{ spaceKey() }}</h5>
+      <div class="d-flex align-items-center gap-2">
+        @if (index(); as idx) {
+          <span class="text-muted small">{{ idx.processed }} docs, processed {{ idx.processed_at | date:'short' }}</span>
+        }
+      </div>
+    </div>
+
+    <div class="section-content">
+      @if (loadingIndex()) {
+        <div class="d-flex justify-content-center py-5">
+          <span class="spinner-border"></span>
+        </div>
+      } @else if (indexError()) {
+        <div class="p-4">
+          <div class="alert alert-warning">
+            <i class="bi bi-info-circle me-2"></i>{{ indexError() }}
+            <br><small class="text-muted">Process pages from the <a routerLink="/confluence">Confluence</a> page first.</small>
+          </div>
+        </div>
+      } @else if (index(); as idx) {
+        <table class="issue-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Domain</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of idx.documents; track entry.page_id) {
+              <tr class="issue-row" (click)="openDoc(entry)">
+                <td class="fw-medium">{{ entry.title }}</td>
+                <td><span class="badge" [class]="docTypeBadgeClass(entry.doc_type)">{{ entry.doc_type }}</span></td>
+                <td>
+                  @if (entry.domain) {
+                    <span class="badge bg-outline-domain">{{ entry.domain }}</span>
+                  }
+                </td>
+                <td class="text-muted summary-cell">{{ entry.summary }}</td>
+              </tr>
+            }
+            @empty {
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">No documents processed yet.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </div>
+}

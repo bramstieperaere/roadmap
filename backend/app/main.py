@@ -2,11 +2,12 @@ import base64
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import settings, encryption, analysis, jobs, query, browse
+from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional
 
 app = FastAPI(title="Roadmap", description="Software project documentation tool")
 
@@ -54,6 +55,14 @@ def _auto_unlock():
 
     print("[STARTUP] Auto-unlocked via ROADMAP_KEY", flush=True)
 
+class NoCacheAPIMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(NoCacheAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
@@ -67,6 +76,9 @@ app.include_router(analysis.router)
 app.include_router(jobs.router)
 app.include_router(query.router)
 app.include_router(browse.router)
+app.include_router(jira.router)
+app.include_router(confluence.router)
+app.include_router(functional.router)
 
 # --- Embedded frontend (production builds only) ---
 _STATIC_DIR = Path(__file__).resolve().parent / "static"

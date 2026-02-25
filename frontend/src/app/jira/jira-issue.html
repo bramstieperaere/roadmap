@@ -1,0 +1,260 @@
+<div class="issue-page" data-testid="jira-issue-page">
+  @if (loading()) {
+    <div class="d-flex justify-content-center py-5">
+      <span class="spinner-border"></span>
+    </div>
+  } @else if (error()) {
+    <div class="p-4">
+      <button class="btn btn-outline-secondary btn-sm mb-3" (click)="goBack()">
+        <i class="bi bi-arrow-left me-1"></i>Back to Board
+      </button>
+      <div class="alert alert-danger" data-testid="issue-error">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
+      </div>
+    </div>
+  } @else if (issue(); as i) {
+    <!-- Top bar -->
+    <div class="issue-topbar">
+      <button class="btn btn-outline-secondary btn-sm" (click)="goBack()" data-testid="back-to-board">
+        <i class="bi bi-arrow-left me-1"></i>Sprint
+      </button>
+      <div class="d-flex align-items-center gap-2">
+        <span class="cache-info">
+          @if (i.from_cache) {
+            <i class="bi bi-database me-1"></i>Cached
+          } @else {
+            <i class="bi bi-cloud-download me-1"></i>Fresh
+          }
+          <span class="text-muted ms-1">{{ i._cached_at | date:'short' }}</span>
+        </span>
+        <button class="btn btn-outline-secondary btn-sm" (click)="refreshIssue()" [disabled]="loading()" data-testid="refresh-issue">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="issue-body">
+      <!-- Section nav -->
+      <nav class="issue-nav">
+        <button class="nav-item" [class.active]="activeSection() === 'details'" (click)="scrollTo('details')"><i class="bi bi-info-circle"></i>Details</button>
+        @if (i.description) {
+          <button class="nav-item" [class.active]="activeSection() === 'description'" (click)="scrollTo('description')"><i class="bi bi-text-left"></i>Description</button>
+        }
+        @if (i.subtasks.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'subtasks'" (click)="scrollTo('subtasks')"><i class="bi bi-list-check"></i>Subtasks</button>
+        }
+        @if (i.issuelinks.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'links'" (click)="scrollTo('links')"><i class="bi bi-link-45deg"></i>Links</button>
+        }
+        @if (i.comments.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'comments'" (click)="scrollTo('comments')"><i class="bi bi-chat-left-text"></i>Comments</button>
+        }
+        @if (i.branches.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'branches'" (click)="scrollTo('branches')"><i class="bi bi-diagram-2"></i>Branches</button>
+        }
+        @if (i.commits.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'commits'" (click)="scrollTo('commits')"><i class="bi bi-git"></i>Commits</button>
+        }
+        @if (i.pull_requests.length) {
+          <button class="nav-item" [class.active]="activeSection() === 'prs'" (click)="scrollTo('prs')"><i class="bi bi-arrow-left-right"></i>Pull Requests</button>
+        }
+      </nav>
+
+      <!-- Content -->
+      <div class="issue-content">
+        <!-- Header -->
+        <div class="issue-header" id="section-details">
+          <span class="issue-key-title" data-testid="issue-key">{{ i.key }}</span>
+          <h4 class="mb-0" data-testid="issue-summary">{{ i.summary }}</h4>
+        </div>
+
+        <!-- Metadata -->
+        <div class="issue-meta">
+          <div class="meta-item">
+            <label>Status</label>
+            <span class="badge status-badge" [class]="getStatusClass(i.status)">{{ i.status }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Type</label>
+            <span>{{ i.issuetype }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Priority</label>
+            <span>{{ i.priority || '—' }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Assignee</label>
+            <span>{{ i.assignee || 'Unassigned' }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Reporter</label>
+            <span>{{ i.reporter || '—' }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Created</label>
+            <span>{{ i.created | date:'medium' }}</span>
+          </div>
+          <div class="meta-item">
+            <label>Updated</label>
+            <span>{{ i.updated | date:'medium' }}</span>
+          </div>
+          @if (i.labels.length) {
+            <div class="meta-item">
+              <label>Labels</label>
+              <span>
+                @for (label of i.labels; track label) {
+                  <span class="badge bg-light text-dark border me-1">{{ label }}</span>
+                }
+              </span>
+            </div>
+          }
+          @if (i.components.length) {
+            <div class="meta-item">
+              <label>Components</label>
+              <span>{{ i.components.join(', ') }}</span>
+            </div>
+          }
+          @if (i.fix_versions.length) {
+            <div class="meta-item">
+              <label>Fix Versions</label>
+              <span>{{ i.fix_versions.join(', ') }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Description -->
+        @if (i.description) {
+          <div class="issue-section" id="section-description">
+            <h6 class="section-label">Description</h6>
+            <div class="description-body" data-testid="issue-description">{{ i.description }}</div>
+          </div>
+        }
+
+        <!-- Subtasks -->
+        @if (i.subtasks.length) {
+          <div class="issue-section" id="section-subtasks">
+            <h6 class="section-label">Subtasks ({{ i.subtasks.length }})</h6>
+            <table class="link-table">
+              <tbody>
+                @for (sub of i.subtasks; track sub.key) {
+                  <tr class="link-row" (click)="openIssue(sub.key)">
+                    <td class="link-key">{{ sub.key }}</td>
+                    <td>{{ sub.summary }}</td>
+                    <td><span class="badge status-badge" [class]="getStatusClass(sub.status)">{{ sub.status }}</span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Links -->
+        @if (i.issuelinks.length) {
+          <div class="issue-section" id="section-links">
+            <h6 class="section-label">Links ({{ i.issuelinks.length }})</h6>
+            <table class="link-table">
+              <tbody>
+                @for (link of i.issuelinks; track link.key) {
+                  <tr class="link-row" (click)="openIssue(link.key)">
+                    <td class="text-muted" style="width: 140px">{{ link.type }}</td>
+                    <td class="link-key" style="width: 120px">{{ link.key }}</td>
+                    <td>{{ link.summary }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Comments -->
+        @if (i.comments.length) {
+          <div class="issue-section" id="section-comments">
+            <h6 class="section-label">Comments ({{ i.comments.length }})</h6>
+            @for (comment of i.comments; track $index) {
+              <div class="comment-card">
+                <div class="comment-header">
+                  <span class="fw-semibold">{{ comment.author }}</span>
+                  <span class="text-muted ms-2">{{ comment.created | date:'medium' }}</span>
+                </div>
+                <div class="comment-body">{{ comment.body }}</div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Branches -->
+        @if (i.branches.length) {
+          <div class="issue-section" id="section-branches">
+            <h6 class="section-label"><i class="bi bi-diagram-2 me-1"></i>Branches ({{ i.branches.length }})</h6>
+            <table class="link-table">
+              <tbody>
+                @for (branch of i.branches; track branch.name) {
+                  <tr>
+                    <td>
+                      @if (branch.url) {
+                        <a [href]="branch.url" target="_blank" rel="noopener" class="link-key text-decoration-none">{{ branch.name }}</a>
+                      } @else {
+                        <span class="link-key">{{ branch.name }}</span>
+                      }
+                    </td>
+                    <td class="text-muted">{{ branch.repository }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Commits -->
+        @if (i.commits.length) {
+          <div class="issue-section" id="section-commits">
+            <h6 class="section-label"><i class="bi bi-git me-1"></i>Commits ({{ i.commits.length }})</h6>
+            <table class="link-table">
+              <tbody>
+                @for (commit of i.commits; track commit.id) {
+                  <tr>
+                    <td style="width: 100px">
+                      @if (commit.url) {
+                        <a [href]="commit.url" target="_blank" rel="noopener" class="link-key text-decoration-none font-monospace" style="font-size: 0.75rem">{{ commit.id }}</a>
+                      } @else {
+                        <span class="link-key font-monospace" style="font-size: 0.75rem">{{ commit.id }}</span>
+                      }
+                    </td>
+                    <td>{{ commit.message }}</td>
+                    <td class="text-muted" style="width: 120px">{{ commit.author }}</td>
+                    <td class="text-muted" style="width: 100px">{{ commit.repository }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Pull Requests -->
+        @if (i.pull_requests.length) {
+          <div class="issue-section" id="section-prs">
+            <h6 class="section-label"><i class="bi bi-arrow-left-right me-1"></i>Pull Requests ({{ i.pull_requests.length }})</h6>
+            <table class="link-table">
+              <tbody>
+                @for (pr of i.pull_requests; track pr.id) {
+                  <tr>
+                    <td>
+                      @if (pr.url) {
+                        <a [href]="pr.url" target="_blank" rel="noopener" class="link-key text-decoration-none">{{ pr.name }}</a>
+                      } @else {
+                        <span class="link-key">{{ pr.name }}</span>
+                      }
+                    </td>
+                    <td><span class="badge" [class]="pr.status === 'MERGED' ? 'bg-success' : pr.status === 'OPEN' ? 'bg-primary' : 'bg-secondary'">{{ pr.status }}</span></td>
+                    <td class="text-muted" style="font-size: 0.75rem">{{ pr.source_branch }} → {{ pr.destination_branch }}</td>
+                    <td class="text-muted">{{ pr.author }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

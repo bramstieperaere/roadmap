@@ -1,0 +1,119 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.jira-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.jira-sidebar {
+  width: 210px;
+  min-width: 210px;
+  background: var(--rm-surface);
+  border-right: 1px solid var(--rm-border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+
+.sidebar-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rm-text-muted);
+  padding: 0.5rem 1rem 0.25rem;
+}
+
+.sidebar-project {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-project-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--rm-text-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  width: 100%;
+
+  i {
+    font-size: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  .project-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    background: #f1f3f5;
+    color: var(--rm-text);
+  }
+
+  &.active {
+    color: var(--rm-primary);
+    font-weight: 600;
+  }
+}
+
+.sidebar-sub-nav {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0.5rem;
+}
+
+.sidebar-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 1rem 0.3rem 2.25rem;
+  font-size: 0.75rem;
+  color: var(--rm-text-muted);
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+
+  i {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+  }
+
+  &:hover {
+    background: #f1f3f5;
+    color: var(--rm-text);
+  }
+
+  &.active {
+    color: var(--rm-primary);
+    background: rgba(26, 58, 92, 0.06);
+    font-weight: 600;
+    border-left: 2px solid var(--rm-primary);
+    padding-left: calc(2.25rem - 2px);
+  }
+}
+
+.jira-shell-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

@@ -17,6 +17,9 @@
       <button class="nav-tab" [class.active]="activeTab() === 'neo4j'" (click)="switchTab('neo4j')">
         <i class="bi bi-database"></i> Database
       </button>
+      <button class="nav-tab" [class.active]="activeTab() === 'atlassian'" (click)="switchTab('atlassian')">
+        <i class="bi bi-cloud"></i> Atlassian
+      </button>
       <button class="nav-tab" [class.active]="activeTab() === 'repos'" (click)="switchTab('repos')">
         <i class="bi bi-folder2-open"></i> Repositories
       </button>
@@ -106,6 +109,301 @@
               </button>
             </div>
           }
+        </div>
+      }
+
+      <!-- ═══════════════════ Atlassian ═══════════════════ -->
+      @if (activeTab() === 'atlassian') {
+        <div data-testid="atlassian-card">
+          @if (editingSection() === 'atlassian') {
+            <!-- EDIT MODE -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-cloud me-2"></i>Atlassian Connection</h6>
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" (click)="saveSection()" data-testid="save-atlassian">
+                  <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+              </div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Deployment Type</label>
+                <select class="form-select" [value]="config().atlassian.deployment_type"
+                        (change)="updateAtlassianField('deployment_type', $any($event.target).value)"
+                        data-testid="atlassian-deployment-type">
+                  <option value="cloud">Cloud</option>
+                  <option value="datacenter">Data Center</option>
+                </select>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">Base URL</label>
+                <input type="text" class="form-control" placeholder="https://mycompany.atlassian.net"
+                       [value]="config().atlassian.base_url"
+                       (input)="updateAtlassianField('base_url', $any($event.target).value)"
+                       data-testid="atlassian-base-url">
+              </div>
+              @if (config().atlassian.deployment_type === 'cloud') {
+                <div class="col-md-6">
+                  <label class="form-label">Email</label>
+                  <input type="text" class="form-control" placeholder="user@company.com"
+                         [value]="config().atlassian.email"
+                         (input)="updateAtlassianField('email', $any($event.target).value)"
+                         data-testid="atlassian-email">
+                </div>
+              }
+              <div [class]="config().atlassian.deployment_type === 'cloud' ? 'col-md-6' : 'col-md-12'">
+                <label class="form-label">{{ config().atlassian.deployment_type === 'cloud' ? 'API Token' : 'Personal Access Token' }}</label>
+                <input type="password" class="form-control"
+                       [value]="config().atlassian.api_token"
+                       (input)="updateAtlassianField('api_token', $any($event.target).value)"
+                       data-testid="atlassian-api-token">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Cache Refresh (seconds)</label>
+                <input type="number" class="form-control" min="60"
+                       [value]="config().atlassian.refresh_duration"
+                       (input)="updateAtlassianField('refresh_duration', $any($event.target).value)"
+                       data-testid="atlassian-refresh-duration">
+              </div>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
+                <i class="bi bi-plug me-1"></i>
+                {{ testingAtlassian() ? 'Testing...' : 'Test Connection' }}
+              </button>
+            </div>
+          } @else {
+            <!-- READONLY MODE -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-cloud me-2"></i>Atlassian Connection</h6>
+              <button class="btn btn-outline-primary btn-sm" (click)="startEditing('atlassian')" [disabled]="editingSection() !== null" data-testid="edit-atlassian">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </button>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Deployment Type</label>
+                <div class="field-value" data-testid="atlassian-deployment-type-value">{{ config().atlassian.deployment_type === 'cloud' ? 'Cloud' : 'Data Center' }}</div>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">Base URL</label>
+                <div class="field-value" data-testid="atlassian-base-url-value">{{ config().atlassian.base_url || '—' }}</div>
+              </div>
+              @if (config().atlassian.deployment_type === 'cloud') {
+                <div class="col-md-6">
+                  <label class="form-label">Email</label>
+                  <div class="field-value" data-testid="atlassian-email-value">{{ config().atlassian.email || '—' }}</div>
+                </div>
+              }
+              <div [class]="config().atlassian.deployment_type === 'cloud' ? 'col-md-6' : 'col-md-12'">
+                <label class="form-label">{{ config().atlassian.deployment_type === 'cloud' ? 'API Token' : 'Personal Access Token' }}</label>
+                <div class="field-value" data-testid="atlassian-api-token-value">{{ config().atlassian.api_token ? '••••••••' : '—' }}</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Cache Refresh</label>
+                <div class="field-value" data-testid="atlassian-refresh-duration-value">{{ config().atlassian.refresh_duration }}s</div>
+              </div>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
+                <i class="bi bi-plug me-1"></i>
+                {{ testingAtlassian() ? 'Testing...' : 'Test Connection' }}
+              </button>
+            </div>
+          }
+
+          <!-- Jira Projects -->
+          <div class="mt-4" data-testid="jira-projects-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-kanban me-2"></i>Jira Projects</h6>
+              <button class="btn btn-outline-primary btn-sm" (click)="addJiraProject()" [disabled]="editingSection() !== null" data-testid="add-jira-project">
+                <i class="bi bi-plus-lg me-1"></i>Add Project
+              </button>
+            </div>
+
+            @for (project of config().atlassian.jira_projects; track $index) {
+              @let projIndex = $index;
+
+              @if (editingSection() === 'jira-project-' + projIndex) {
+                <!-- EDIT MODE -->
+                <div class="section-card editing" [attr.data-testid]="'jira-project-' + projIndex">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">{{ project.name || project.key || 'New project' }}</span>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-primary btn-sm" (click)="saveSection()">
+                        <i class="bi bi-check-lg me-1"></i>Save
+                      </button>
+                      <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                    </div>
+                  </div>
+                  <div class="row g-3 mb-2">
+                    <div class="col-md-3">
+                      <label class="form-label">Project Key</label>
+                      <div class="input-group">
+                        <input type="text" class="form-control" placeholder="e.g. TEAM1"
+                               [value]="project.key" (input)="updateJiraProject(projIndex, 'key', $any($event.target).value)"
+                               [attr.data-testid]="'jira-project-key-' + projIndex">
+                        <button class="btn btn-outline-secondary" (click)="lookupProject(projIndex)" [disabled]="lookingUpProject()"
+                                title="Verify project key and load boards"
+                                [attr.data-testid]="'jira-project-verify-' + projIndex">
+                          @if (lookingUpProject()) {
+                            <span class="spinner-border spinner-border-sm"></span>
+                          } @else {
+                            <i class="bi bi-check2-circle"></i>
+                          }
+                        </button>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Display Name</label>
+                      <input type="text" class="form-control" placeholder="Auto-filled on verify"
+                             [value]="project.name" (input)="updateJiraProject(projIndex, 'name', $any($event.target).value)"
+                             [attr.data-testid]="'jira-project-name-' + projIndex">
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label">Board</label>
+                      @if (boardOptions().length > 0) {
+                        <select class="form-select"
+                                (change)="updateJiraProject(projIndex, 'board_id', +$any($event.target).value || null)"
+                                [attr.data-testid]="'jira-project-board-' + projIndex">
+                          <option value="" [selected]="!project.board_id">-- Select Board --</option>
+                          @for (board of boardOptions(); track board.id) {
+                            <option [value]="board.id" [selected]="board.id === project.board_id">{{ board.name }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input type="number" class="form-control" placeholder="Board ID"
+                               [value]="project.board_id" (input)="updateJiraProject(projIndex, 'board_id', +$any($event.target).value || null)"
+                               [attr.data-testid]="'jira-project-board-' + projIndex">
+                      }
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                      <button class="btn btn-outline-danger btn-sm w-100" (click)="removeJiraProject(projIndex)" title="Remove project"
+                              [attr.data-testid]="'remove-jira-project-' + projIndex">
+                        <i class="bi bi-trash me-1"></i>Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <!-- READONLY MODE -->
+                <div class="section-card" [attr.data-testid]="'jira-project-' + projIndex">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-3 align-items-center">
+                      <span class="fw-semibold">{{ project.key }}</span>
+                      @if (project.name) {
+                        <span class="text-muted">{{ project.name }}</span>
+                      }
+                      @if (project.board_id) {
+                        <span class="badge bg-light text-dark border">Board #{{ project.board_id }}</span>
+                      }
+                    </div>
+                    <div class="d-flex gap-2">
+                      @if (project.board_id) {
+                        <a class="btn btn-outline-info btn-sm" routerLink="/jira"
+                           [attr.data-testid]="'view-board-' + projIndex">
+                          <i class="bi bi-kanban me-1"></i>View Board
+                        </a>
+                      }
+                      <button class="btn btn-outline-primary btn-sm" (click)="startEditing('jira-project-' + projIndex)" [disabled]="editingSection() !== null"
+                              [attr.data-testid]="'edit-jira-project-' + projIndex">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+            }
+            @empty {
+              <p class="text-muted" data-testid="no-jira-projects-message">No Jira projects configured. Click "Add Project" to track a Jira project.</p>
+            }
+          </div>
+
+          <!-- Confluence Spaces -->
+          <div class="mt-4" data-testid="confluence-spaces-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-journal-text me-2"></i>Confluence Spaces</h6>
+              <button class="btn btn-outline-primary btn-sm" (click)="addConfluenceSpace()" [disabled]="editingSection() !== null" data-testid="add-confluence-space">
+                <i class="bi bi-plus-lg me-1"></i>Add Space
+              </button>
+            </div>
+
+            @for (space of config().atlassian.confluence_spaces; track $index) {
+              @let spaceIndex = $index;
+
+              @if (editingSection() === 'confluence-space-' + spaceIndex) {
+                <!-- EDIT MODE -->
+                <div class="section-card editing" [attr.data-testid]="'confluence-space-' + spaceIndex">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">{{ space.name || space.key || 'New space' }}</span>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-primary btn-sm" (click)="saveSection()">
+                        <i class="bi bi-check-lg me-1"></i>Save
+                      </button>
+                      <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                    </div>
+                  </div>
+                  <div class="row g-3 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label">Space Key</label>
+                      <div class="input-group">
+                        <input type="text" class="form-control" placeholder="e.g. TEAM"
+                               [value]="space.key" (input)="updateConfluenceSpace(spaceIndex, 'key', $any($event.target).value)"
+                               [attr.data-testid]="'confluence-space-key-' + spaceIndex">
+                        <button class="btn btn-outline-secondary" (click)="lookupSpace(spaceIndex)" [disabled]="lookingUpSpace()"
+                                title="Verify space key"
+                                [attr.data-testid]="'confluence-space-verify-' + spaceIndex">
+                          @if (lookingUpSpace()) {
+                            <span class="spinner-border spinner-border-sm"></span>
+                          } @else {
+                            <i class="bi bi-check2-circle"></i>
+                          }
+                        </button>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Display Name</label>
+                      <input type="text" class="form-control" placeholder="Auto-filled on verify"
+                             [value]="space.name" (input)="updateConfluenceSpace(spaceIndex, 'name', $any($event.target).value)"
+                             [attr.data-testid]="'confluence-space-name-' + spaceIndex">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                      <button class="btn btn-outline-danger btn-sm w-100" (click)="removeConfluenceSpace(spaceIndex)" title="Remove space"
+                              [attr.data-testid]="'remove-confluence-space-' + spaceIndex">
+                        <i class="bi bi-trash me-1"></i>Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <!-- READONLY MODE -->
+                <div class="section-card" [attr.data-testid]="'confluence-space-' + spaceIndex">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-3 align-items-center">
+                      <span class="fw-semibold">{{ space.key }}</span>
+                      @if (space.name) {
+                        <span class="text-muted">{{ space.name }}</span>
+                      }
+                    </div>
+                    <div class="d-flex gap-2">
+                      <a class="btn btn-outline-info btn-sm" routerLink="/confluence"
+                         [attr.data-testid]="'view-space-' + spaceIndex">
+                        <i class="bi bi-journal-text me-1"></i>View Space
+                      </a>
+                      <button class="btn btn-outline-primary btn-sm" (click)="startEditing('confluence-space-' + spaceIndex)" [disabled]="editingSection() !== null"
+                              [attr.data-testid]="'edit-confluence-space-' + spaceIndex">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+            }
+            @empty {
+              <p class="text-muted" data-testid="no-confluence-spaces-message">No Confluence spaces configured. Click "Add Space" to track a Confluence space.</p>
+            }
+          </div>
         </div>
       }
 
@@ -436,6 +734,7 @@
                             (change)="updateAITask(taskIndex, 'task_type', $any($event.target).value)"
                             [attr.data-testid]="'ai-task-type-' + taskIndex">
                       <option value="repository_analysis">Repository Analysis</option>
+                      <option value="functional_doc">Functional Doc Processing</option>
                     </select>
                   </div>
                   <div class="col-md-6">

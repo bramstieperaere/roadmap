@@ -1,0 +1,133 @@
+<div class="section-page" data-testid="confluence-spaces-page">
+  <div class="section-topbar">
+    <h5 class="mb-0 fw-semibold">Confluence</h5>
+    <div class="d-flex align-items-center gap-2">
+      @if (refreshMessage()) {
+        <span class="refresh-message">{{ refreshMessage() }}</span>
+      }
+      @if (state.selectedSpaceKey()) {
+        <button class="btn btn-outline-secondary btn-sm" (click)="viewProcessed()" data-testid="view-processed"
+                title="View processed functional docs">
+          <i class="bi bi-file-earmark-text me-1"></i>View Docs
+        </button>
+        <button class="btn btn-outline-primary btn-sm" (click)="processSpace()" [disabled]="processing()" data-testid="process-space"
+                [title]="'Process all pages in ' + state.selectedSpaceKey() + ' with AI'">
+          @if (processing()) {
+            <span class="spinner-border spinner-border-sm me-1"></span>Processing...
+          } @else {
+            <i class="bi bi-cpu me-1"></i>Process with AI
+          }
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" (click)="refreshPageTree()" [disabled]="state.loadingPages()" data-testid="refresh-tree"
+                title="Refresh page tree structure">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh Tree
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" (click)="refreshAllPages()" [disabled]="refreshing()" data-testid="refresh-all-pages"
+                [title]="'Refresh all page contents in ' + state.selectedSpaceKey()">
+          @if (refreshing()) {
+            <span class="spinner-border spinner-border-sm me-1"></span>Refreshing...
+          } @else {
+            <i class="bi bi-arrow-repeat me-1"></i>Refresh All Pages
+          }
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="spaces-body">
+    <!-- Left: space list -->
+    <nav class="spaces-sidebar">
+      @if (state.loadingSpaces()) {
+        <div class="p-3 text-center">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+      } @else {
+        <div class="sidebar-label">Spaces</div>
+        @for (space of state.spaces(); track space.key) {
+          <button
+            class="space-item"
+            [class.active]="state.selectedSpaceKey() === space.key"
+            (click)="selectSpace(space.key)"
+            [attr.data-testid]="'space-' + space.key"
+          >
+            <i class="bi bi-journal-text"></i>
+            <span class="space-name">{{ space.name || space.key }}</span>
+          </button>
+        }
+        @empty {
+          <p class="text-muted small px-3 py-2">
+            No spaces configured.<br>
+            <a routerLink="/settings">Go to Settings</a>
+          </p>
+        }
+      }
+    </nav>
+
+    <!-- Right: page tree -->
+    <div class="page-tree-content">
+      @if (state.selectedSpaceKey() && state.pageTree().length > 0) {
+        <div class="tree-search">
+          <i class="bi bi-search"></i>
+          <input type="text" placeholder="Filter pages..." [value]="searchFilter()"
+                 (input)="searchFilter.set($any($event.target).value)" data-testid="page-search">
+        </div>
+      }
+      @if (state.loadingPages()) {
+        <div class="d-flex justify-content-center py-5">
+          <span class="spinner-border"></span>
+        </div>
+      } @else if (filteredTree().length > 0) {
+        <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: filteredTree(), depth: 0 }"></ng-container>
+      } @else if (searchFilter()) {
+        <div class="empty-state">
+          <i class="bi bi-search"></i>
+          <p>No pages match "{{ searchFilter() }}"</p>
+        </div>
+      } @else if (state.selectedSpaceKey()) {
+        <div class="empty-state">
+          <i class="bi bi-file-text"></i>
+          <p>No pages found in this space.</p>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <i class="bi bi-journal-text"></i>
+          <p>Select a space to browse its pages.</p>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Context menu -->
+@if (contextMenu(); as ctx) {
+  <div class="ctx-menu" [style.left.px]="ctx.x" [style.top.px]="ctx.y">
+    <button class="ctx-item" (click)="refreshSubtree()">
+      <i class="bi bi-arrow-clockwise me-2"></i>Refresh "{{ ctx.page.title }}"
+      @if (ctx.page.children.length > 0) {
+        <span class="text-muted ms-1">(+ subpages)</span>
+      }
+    </button>
+  </div>
+}
+
+<!-- Recursive page tree template -->
+<ng-template #pageTreeTpl let-pages="pages" let-depth="depth">
+  @for (page of pages; track page.id) {
+    <div class="tree-node" [style.padding-left.rem]="0.75 + depth * 1">
+      @if (page.children.length > 0) {
+        <button class="tree-toggle" (click)="toggleNode(page.id)">
+          <i class="bi" [class.bi-chevron-right]="!isExpanded(page.id)" [class.bi-chevron-down]="isExpanded(page.id)"></i>
+        </button>
+      } @else {
+        <span class="tree-spacer"></span>
+      }
+      <a class="tree-link" (click)="openPage(page.id)" (contextmenu)="onTreeContext($event, page)" [attr.data-testid]="'page-' + page.id">
+        <i class="bi bi-file-text"></i>
+        {{ page.title }}
+      </a>
+    </div>
+    @if (page.children.length > 0 && isExpanded(page.id)) {
+      <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: page.children, depth: depth + 1 }"></ng-container>
+    }
+  }
+</ng-template>

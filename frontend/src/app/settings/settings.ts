@@ -1,14 +1,14 @@
 import { Component, inject, OnInit, signal, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, KNOWN_TECHNOLOGIES } from '../services/settings';
+import { Router, RouterLink } from '@angular/router';
+import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, AtlassianConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
 import { EncryptionService } from '../services/encryption';
 import { JobsService } from '../services/jobs';
 
 @Component({
   selector: 'app-settings',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })
@@ -21,14 +21,19 @@ export class SettingsComponent implements OnInit {
 
   config = signal<AppConfig>({
     neo4j: { uri: '', username: '', password: '', database: '' },
+    atlassian: { deployment_type: 'cloud', base_url: '', email: '', api_token: '', jira_projects: [], confluence_spaces: [], cache_dir: '', refresh_duration: 3600 },
     repositories: [],
     ai_providers: [],
     ai_tasks: [],
   });
   testingConnection = signal(false);
+  testingAtlassian = signal(false);
+  lookingUpProject = signal(false);
+  lookingUpSpace = signal(false);
+  boardOptions = signal<JiraBoardOption[]>([]);
   analyzing = signal<number | null>(null);
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
-  activeTab = signal<'neo4j' | 'repos' | 'providers' | 'tasks'>('neo4j');
+  activeTab = signal<'neo4j' | 'atlassian' | 'repos' | 'providers' | 'tasks'>('neo4j');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
   private configBackup: AppConfig | null = null;
@@ -45,6 +50,9 @@ export class SettingsComponent implements OnInit {
       next: (config) => {
         for (const repo of config.repositories) {
           if (!repo.name && repo.path) repo.name = deriveRepoName(repo.path);
+        }
+        if (!config.atlassian.confluence_spaces) {
+          config.atlassian.confluence_spaces = [];
         }
         this.config.set(config);
       },
@@ -81,7 +89,7 @@ export class SettingsComponent implements OnInit {
     this.persistConfig('Settings saved');
   }
 
-  switchTab(tab: 'neo4j' | 'repos' | 'providers' | 'tasks') {
+  switchTab(tab: 'neo4j' | 'atlassian' | 'repos' | 'providers' | 'tasks') {
     if (this.editingSection()) this.cancelEditing();
     this.activeTab.set(tab);
   }
@@ -181,6 +189,140 @@ export class SettingsComponent implements OnInit {
       ...c,
       neo4j: { ...c.neo4j, [field]: value },
     }));
+  }
+
+  updateAtlassianField(field: string, value: string) {
+    this.config.update((c) => ({
+      ...c,
+      atlassian: { ...c.atlassian, [field]: value },
+    }));
+  }
+
+  testAtlassianConnection() {
+    this.testingAtlassian.set(true);
+    this.settingsService.testAtlassianConnection().subscribe({
+      next: (result) => {
+        this.testingAtlassian.set(false);
+        this.showMessage(result.message, 'success');
+      },
+      error: (err) => {
+        this.testingAtlassian.set(false);
+        this.showMessage(err.error?.detail || 'Connection failed', 'danger');
+      },
+    });
+  }
+
+  // Jira Projects
+  addJiraProject() {
+    this.configBackup = structuredClone(this.config());
+    this.config.update((c) => ({
+      ...c,
+      atlassian: {
+        ...c.atlassian,
+        jira_projects: [...c.atlassian.jira_projects, { key: '', name: '', board_id: null }],
+      },
+    }));
+    const newIndex = this.config().atlassian.jira_projects.length - 1;
+    this.boardOptions.set([]);
+    this.editingSection.set('jira-project-' + newIndex);
+  }
+
+  removeJiraProject(index: number) {
+    this.config.update((c) => ({
+      ...c,
+      atlassian: {
+        ...c.atlassian,
+        jira_projects: c.atlassian.jira_projects.filter((_, i) => i !== index),
+      },
+    }));
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Project removed');
+  }
+
+  updateJiraProject(index: number, field: string, value: string | number | null) {
+    this.config.update((c) => {
+      const projects = [...c.atlassian.jira_projects];
+      projects[index] = { ...projects[index], [field]: value };
+      return { ...c, atlassian: { ...c.atlassian, jira_projects: projects } };
+    });
+  }
+
+  lookupProject(index: number) {
+    const key = this.config().atlassian.jira_projects[index]?.key;
+    if (!key) {
+      this.showMessage('Enter a project key first', 'danger');
+      return;
+    }
+    this.lookingUpProject.set(true);
+    this.boardOptions.set([]);
+    this.settingsService.lookupJiraProject(key).subscribe({
+      next: (result) => {
+        this.lookingUpProject.set(false);
+        this.updateJiraProject(index, 'name', result.name);
+        this.boardOptions.set(result.boards);
+        this.showMessage(`Project "${result.name}" verified (${result.boards.length} board(s))`, 'success');
+      },
+      error: (err) => {
+        this.lookingUpProject.set(false);
+        this.showMessage(err.error?.detail || 'Project not found', 'danger');
+      },
+    });
+  }
+
+  // Confluence Spaces
+  addConfluenceSpace() {
+    this.configBackup = structuredClone(this.config());
+    this.config.update((c) => ({
+      ...c,
+      atlassian: {
+        ...c.atlassian,
+        confluence_spaces: [...c.atlassian.confluence_spaces, { key: '', name: '' }],
+      },
+    }));
+    const newIndex = this.config().atlassian.confluence_spaces.length - 1;
+    this.editingSection.set('confluence-space-' + newIndex);
+  }
+
+  removeConfluenceSpace(index: number) {
+    this.config.update((c) => ({
+      ...c,
+      atlassian: {
+        ...c.atlassian,
+        confluence_spaces: c.atlassian.confluence_spaces.filter((_, i) => i !== index),
+      },
+    }));
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Space removed');
+  }
+
+  updateConfluenceSpace(index: number, field: string, value: string) {
+    this.config.update((c) => {
+      const spaces = [...c.atlassian.confluence_spaces];
+      spaces[index] = { ...spaces[index], [field]: value };
+      return { ...c, atlassian: { ...c.atlassian, confluence_spaces: spaces } };
+    });
+  }
+
+  lookupSpace(index: number) {
+    const key = this.config().atlassian.confluence_spaces[index]?.key;
+    if (!key) {
+      this.showMessage('Enter a space key first', 'danger');
+      return;
+    }
+    this.lookingUpSpace.set(true);
+    this.settingsService.lookupConfluenceSpace(key).subscribe({
+      next: (result) => {
+        this.lookingUpSpace.set(false);
+        this.updateConfluenceSpace(index, 'name', result.name);
+        this.showMessage(`Space "${result.name}" verified`, 'success');
+      },
+      error: (err) => {
+        this.lookingUpSpace.set(false);
+        this.showMessage(err.error?.detail || 'Space not found', 'danger');
+      },
+    });
   }
 
   updateRepoName(index: number, name: string) {

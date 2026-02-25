@@ -1,0 +1,73 @@
+<div class="section-page" data-testid="confluence-page-view">
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-secondary btn-sm" (click)="goBack()" data-testid="back-to-spaces">
+        <i class="bi bi-arrow-left me-1"></i>Spaces
+      </button>
+      @if (page(); as p) {
+        @if (p.ancestors.length > 0) {
+          <nav class="breadcrumb-nav">
+            @for (ancestor of p.ancestors; track ancestor.id) {
+              <a class="breadcrumb-link" (click)="navigateTo(ancestor.id)">{{ ancestor.title }}</a>
+              <i class="bi bi-chevron-right breadcrumb-sep"></i>
+            }
+            <span class="breadcrumb-current">{{ p.title }}</span>
+          </nav>
+        }
+      }
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      @if (page(); as p) {
+        <span class="cache-info">
+          @if (p.from_cache) {
+            <i class="bi bi-database me-1"></i>Cached
+          } @else {
+            <i class="bi bi-cloud-download me-1"></i>Fresh
+          }
+          <span class="text-muted ms-1">{{ p._cached_at | date:'short' }}</span>
+        </span>
+      }
+      <button class="btn btn-outline-primary btn-sm" (click)="processPage()" [disabled]="processing()" data-testid="process-page">
+        @if (processing()) {
+          <span class="spinner-border spinner-border-sm me-1"></span>
+        } @else {
+          <i class="bi bi-cpu me-1"></i>
+        }
+        Process
+      </button>
+      <button class="btn btn-outline-secondary btn-sm" (click)="refresh()" [disabled]="loading()" data-testid="refresh-page">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="section-content">
+    @if (loading()) {
+      <div class="d-flex justify-content-center py-5">
+        <span class="spinner-border"></span>
+      </div>
+    } @else if (error()) {
+      <div class="p-4">
+        <div class="alert alert-danger" data-testid="page-error">
+          <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
+        </div>
+      </div>
+    } @else if (page(); as p) {
+      <div class="page-body">
+        <div class="page-header" data-testid="page-title">
+          <h3>{{ p.title }}</h3>
+          <div class="page-meta text-muted">
+            <span>Version {{ p.version }}</span>
+            @if (p.version_by) {
+              <span> by {{ p.version_by }}</span>
+            }
+            @if (p.version_when) {
+              <span> on {{ p.version_when | date:'medium' }}</span>
+            }
+          </div>
+        </div>
+        <div class="confluence-content-body" [innerHTML]="bodyHtml()" data-testid="page-body"></div>
+      </div>
+    }
+  </div>
+</div>

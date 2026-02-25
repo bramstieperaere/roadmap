@@ -23,6 +23,28 @@ class RepositoryConfig(BaseModel):
     modules: list[ModuleConfig] = []
 
 
+class JiraProjectConfig(BaseModel):
+    key: str = ""
+    name: str = ""
+    board_id: int | None = None
+
+
+class ConfluenceSpaceConfig(BaseModel):
+    key: str = ""
+    name: str = ""
+
+
+class AtlassianConfig(BaseModel):
+    deployment_type: Literal["cloud", "datacenter"] = "cloud"
+    base_url: str = ""
+    email: str = ""
+    api_token: str = ""
+    jira_projects: list[JiraProjectConfig] = []
+    confluence_spaces: list[ConfluenceSpaceConfig] = []
+    cache_dir: str = ""
+    refresh_duration: int = 3600
+
+
 class AIProviderConfig(BaseModel):
     name: str
     base_url: str = "https://api.openai.com/v1"
@@ -37,6 +59,7 @@ class AITaskConfig(BaseModel):
 
 class AppConfig(BaseModel):
     neo4j: Neo4jConfig = Neo4jConfig()
+    atlassian: AtlassianConfig = AtlassianConfig()
     repositories: list[RepositoryConfig] = []
     ai_providers: list[AIProviderConfig] = []
     ai_tasks: list[AITaskConfig] = []

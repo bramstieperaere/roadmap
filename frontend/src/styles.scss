@@ -38,3 +38,103 @@ body {
   border: 1px solid var(--rm-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
+
+// ── Jira section pages (sprint, sprints, backlog, metadata) ──────────────────
+
+.section-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.section-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.25rem;
+  background: var(--rm-surface);
+  border-bottom: 1px solid var(--rm-border);
+  flex-shrink: 0;
+}
+
+.section-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sprint-header {
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--rm-border);
+  background: #f8f9fa;
+  font-size: 0.875rem;
+}
+
+.issue-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--rm-text-muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--rm-border);
+    background: #fafbfc;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rm-border);
+    color: var(--rm-text);
+    vertical-align: middle;
+  }
+}
+
+.issue-row {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: #f1f3f5;
+  }
+}
+
+.issue-key {
+  font-weight: 600;
+  color: var(--rm-primary);
+}
+
+.cache-info {
+  font-size: 0.75rem;
+  color: var(--rm-text-muted);
+}
+
+.refresh-message {
+  font-size: 0.75rem;
+  color: var(--rm-text-muted);
+}
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+
+  &.badge-done {
+    background: #d3f9d8;
+    color: #2b8a3e;
+  }
+
+  &.badge-progress {
+    background: #d0ebff;
+    color: #1864ab;
+  }
+
+  &.badge-todo {
+    background: #e9ecef;
+    color: #495057;
+  }
+}

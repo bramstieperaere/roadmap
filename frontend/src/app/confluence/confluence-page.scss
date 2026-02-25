@@ -1,0 +1,119 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.cache-info {
+  font-size: 0.75rem;
+  color: var(--rm-text-muted);
+}
+
+.breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-link {
+  color: var(--rm-primary);
+  cursor: pointer;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+.breadcrumb-sep {
+  font-size: 0.625rem;
+  color: var(--rm-text-muted);
+}
+
+.breadcrumb-current {
+  color: var(--rm-text-muted);
+}
+
+.page-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+  max-width: 900px;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-meta {
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+// Confluence storage format HTML styling
+.confluence-content-body {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  word-break: break-word;
+
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.8125rem;
+
+    th, td {
+      border: 1px solid var(--rm-border);
+      padding: 0.5rem 0.75rem;
+    }
+
+    th {
+      background: #f8f9fa;
+      font-weight: 600;
+    }
+  }
+
+  pre, code {
+    background: #f4f5f7;
+    border-radius: 3px;
+    font-size: 0.8125rem;
+  }
+
+  pre {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  code {
+    padding: 0.15rem 0.35rem;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  a {
+    color: var(--rm-primary);
+  }
+
+  ul, ol {
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  li {
+    margin-bottom: 0.25rem;
+  }
+
+  blockquote {
+    border-left: 3px solid var(--rm-border);
+    padding-left: 1rem;
+    margin-left: 0;
+    color: var(--rm-text-muted);
+  }
+}

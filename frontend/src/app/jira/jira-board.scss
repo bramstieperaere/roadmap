@@ -1,0 +1,152 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.jira-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.jira-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.25rem;
+  background: var(--rm-surface);
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.cache-info {
+  font-size: 0.75rem;
+  color: var(--rm-text-muted);
+}
+
+.jira-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.jira-nav {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  min-width: 200px;
+  padding: 0.75rem 0;
+  background: var(--rm-surface);
+  border-right: 1px solid var(--rm-border);
+  overflow-y: auto;
+}
+
+.project-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--rm-text-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+
+  i {
+    font-size: 0.875rem;
+    width: 1rem;
+    text-align: center;
+  }
+
+  &-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    background: #f1f3f5;
+    color: var(--rm-text);
+  }
+
+  &.active {
+    background: #e7f5ff;
+    color: var(--rm-primary);
+    font-weight: 600;
+    border-right: 2px solid var(--rm-accent);
+  }
+}
+
+.jira-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.sprint-header {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--rm-border);
+  background: #f8f9fa;
+}
+
+.sprint-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--rm-text-muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--rm-border);
+    background: #fafbfc;
+  }
+
+  td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rm-border);
+    color: var(--rm-text);
+    vertical-align: middle;
+  }
+}
+
+.issue-row {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: #f1f3f5;
+  }
+}
+
+.issue-key {
+  font-weight: 600;
+  color: var(--rm-primary);
+}
+
+.status-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+}
+
+.badge-done {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.badge-progress {
+  background: #d0ebff;
+  color: #1864ab;
+}
+
+.badge-todo {
+  background: #e9ecef;
+  color: #495057;
+}

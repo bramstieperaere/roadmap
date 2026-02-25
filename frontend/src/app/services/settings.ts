@@ -27,6 +27,44 @@ export interface RepositoryConfig {
   modules: ModuleConfig[];
 }
 
+export interface JiraProjectConfig {
+  key: string;
+  name: string;
+  board_id: number | null;
+}
+
+export interface ConfluenceSpaceConfig {
+  key: string;
+  name: string;
+}
+
+export interface AtlassianConfig {
+  deployment_type: 'cloud' | 'datacenter';
+  base_url: string;
+  email: string;
+  api_token: string;
+  jira_projects: JiraProjectConfig[];
+  confluence_spaces: ConfluenceSpaceConfig[];
+  cache_dir: string;
+  refresh_duration: number;
+}
+
+export interface JiraBoardOption {
+  id: number;
+  name: string;
+}
+
+export interface JiraProjectLookup {
+  key: string;
+  name: string;
+  boards: JiraBoardOption[];
+}
+
+export interface ConfluenceSpaceLookup {
+  key: string;
+  name: string;
+}
+
 export interface AIProviderConfig {
   name: string;
   base_url: string;
@@ -41,6 +79,7 @@ export interface AITaskConfig {
 
 export interface AppConfig {
   neo4j: Neo4jConfig;
+  atlassian: AtlassianConfig;
   repositories: RepositoryConfig[];
   ai_providers: AIProviderConfig[];
   ai_tasks: AITaskConfig[];
@@ -72,6 +111,18 @@ export class SettingsService {
 
   testConnection(): Observable<TestConnectionResult> {
     return this.http.post<TestConnectionResult>('/api/settings/test-connection', {});
+  }
+
+  testAtlassianConnection(): Observable<TestConnectionResult> {
+    return this.http.post<TestConnectionResult>('/api/settings/test-atlassian', {});
+  }
+
+  lookupJiraProject(key: string): Observable<JiraProjectLookup> {
+    return this.http.get<JiraProjectLookup>('/api/settings/atlassian/project', { params: { key } });
+  }
+
+  lookupConfluenceSpace(key: string): Observable<ConfluenceSpaceLookup> {
+    return this.http.get<ConfluenceSpaceLookup>('/api/settings/atlassian/confluence-space', { params: { key } });
   }
 
   analyzeRepository(repoIndex: number): Observable<AnalyzeResponse> {

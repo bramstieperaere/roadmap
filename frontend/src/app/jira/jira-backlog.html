@@ -1,0 +1,73 @@
+<div class="section-page" data-testid="jira-backlog-page">
+  <div class="section-topbar">
+    <h5 class="mb-0 fw-semibold">Backlog</h5>
+    <div class="d-flex align-items-center gap-2">
+      @if (refreshMessage()) {
+        <span class="refresh-message">{{ refreshMessage() }}</span>
+      }
+      @if (data(); as d) {
+        <span class="cache-info">
+          @if (d.from_cache) {
+            <i class="bi bi-database me-1"></i>Cached
+          } @else {
+            <i class="bi bi-cloud-download me-1"></i>Fresh
+          }
+          <span class="text-muted ms-1">{{ d._cached_at | date:'short' }}</span>
+        </span>
+        <span class="text-muted small">{{ d.issues.length }} issue(s)</span>
+      }
+      @if (data()?.issues?.length) {
+        <button class="btn btn-outline-secondary btn-sm" (click)="downloadAllIssues()" [disabled]="refreshingIssues()" data-testid="download-all-issues">
+          @if (refreshingIssues()) {
+            <span class="spinner-border spinner-border-sm me-1"></span>Downloading...
+          } @else {
+            <i class="bi bi-arrow-repeat me-1"></i>Download All Issues
+          }
+        </button>
+      }
+      <button class="btn btn-outline-secondary btn-sm" (click)="refresh()" [disabled]="loading()" data-testid="refresh-backlog">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="section-content">
+    @if (loading()) {
+      <div class="d-flex justify-content-center py-5">
+        <span class="spinner-border"></span>
+      </div>
+    } @else if (error()) {
+      <div class="alert alert-danger m-3">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
+      </div>
+    } @else if (data(); as d) {
+      <table class="issue-table" data-testid="backlog-table">
+        <thead>
+          <tr>
+            <th style="width: 40px"></th>
+            <th style="width: 120px">Key</th>
+            <th>Summary</th>
+            <th style="width: 130px">Status</th>
+            <th style="width: 100px">Priority</th>
+            <th style="width: 150px">Assignee</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (issue of d.issues; track issue.key) {
+            <tr class="issue-row" (click)="openIssue(issue.key)">
+              <td><i class="bi" [class]="getTypeIcon(issue.issuetype)" [title]="issue.issuetype"></i></td>
+              <td class="issue-key">{{ issue.key }}</td>
+              <td>{{ issue.summary }}</td>
+              <td><span class="status-badge" [class]="getStatusClass(issue.status)">{{ issue.status }}</span></td>
+              <td>{{ issue.priority }}</td>
+              <td>{{ issue.assignee || '—' }}</td>
+            </tr>
+          }
+          @empty {
+            <tr><td colspan="6" class="text-muted text-center py-3">No issues in the backlog.</td></tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</div>
