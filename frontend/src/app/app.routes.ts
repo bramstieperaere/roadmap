@@ -37,6 +37,9 @@ export const routes: Routes = [
     path: 'confluence/:spaceKey/page/:id',
     loadComponent: () => import('./confluence/confluence-page').then(m => m.ConfluencePageComponent),
   },
+  { path: 'contexts', loadComponent: () => import('./contexts/contexts').then(m => m.ContextsComponent) },
+  { path: 'contexts/:name', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },
+  { path: 'contexts/:name/:child', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },
   {
     path: 'functional',
     loadComponent: () => import('./functional/functional-viewer').then(m => m.FunctionalViewerComponent),

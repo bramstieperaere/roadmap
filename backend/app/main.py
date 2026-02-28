@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional
+from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts
 
 app = FastAPI(title="Roadmap", description="Software project documentation tool")
 
@@ -79,6 +79,12 @@ app.include_router(browse.router)
 app.include_router(jira.router)
 app.include_router(confluence.router)
 app.include_router(functional.router)
+app.include_router(contexts.router)
+
+# --- MCP server (SSE transport) ---
+from app.mcp_server import create_mcp_sse_app
+
+app.mount("/mcp", create_mcp_sse_app())
 
 # --- Embedded frontend (production builds only) ---
 _STATIC_DIR = Path(__file__).resolve().parent / "static"

@@ -1,0 +1,359 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+
+  .section-content {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+  }
+}
+
+.breadcrumb-link {
+  color: var(--rm-text-muted, #6c757d);
+  text-decoration: none;
+  font-size: 0.875rem;
+
+  &:hover {
+    color: var(--rm-primary, #1a3a5c);
+  }
+}
+
+// ── Two-column layout ──
+
+.detail-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.detail-body {
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+  max-width: 800px;
+  min-width: 380px;
+  flex-shrink: 0;
+}
+
+// ── Preview panel ──
+
+.preview-panel {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rm-border);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rm-border);
+  background: #fafbfc;
+  flex-shrink: 0;
+}
+
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.preview-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.preview-card {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color 0.15s;
+
+  &.highlighted {
+    border-color: var(--rm-primary, #1a3a5c);
+    box-shadow: 0 0 0 1px var(--rm-primary, #1a3a5c);
+  }
+
+  &.delimiter-card {
+    border-style: dashed;
+    background: #f8f9fa;
+  }
+}
+
+.preview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--rm-border);
+  border-radius: 6px 6px 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.preview-card-content {
+  margin: 0;
+  padding: 0.75rem;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: transparent;
+  border: none;
+  color: var(--rm-text);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+// ── Context cards ──
+
+.context-card {
+  border: 1px solid var(--rm-border);
+  border-radius: 5px;
+  background: #fafbfc;
+  margin-bottom: 0.375rem;
+
+  &.primary {
+    border-color: var(--rm-primary, #1a3a5c);
+    box-shadow: 0 0 0 1px var(--rm-primary, #1a3a5c);
+  }
+}
+
+.context-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.context-card-body {
+  padding: 0.65rem;
+  border-top: 1px solid var(--rm-border);
+}
+
+// ── Items list ──
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  min-height: 2rem;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  background: #fff;
+
+  &:hover {
+    background: #e9ecef;
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--rm-primary, #1a3a5c) 8%, transparent);
+  }
+
+  &.primary-selected {
+    background: color-mix(in srgb, var(--rm-primary, #1a3a5c) 18%, transparent);
+    box-shadow: inset 2px 0 0 var(--rm-primary, #1a3a5c);
+  }
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--rm-text-muted, #6c757d);
+  flex-shrink: 0;
+  padding: 0 0.15rem;
+
+  &:hover {
+    color: var(--rm-text, #212529);
+  }
+}
+
+// CDK drag-drop
+.cdk-drag-preview {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--rm-border);
+}
+
+.cdk-drag-placeholder {
+  background: #e9ecef;
+  border: 1px dashed var(--rm-border);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+.cdk-drag-animating {
+  transition: transform 200ms ease;
+}
+
+.items-list.cdk-drop-list-receiving {
+  background: color-mix(in srgb, var(--rm-primary, #1a3a5c) 5%, transparent);
+  border-radius: 4px;
+  outline: 1px dashed color-mix(in srgb, var(--rm-primary, #1a3a5c) 30%, transparent);
+}
+
+.item-type-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--rm-text-muted);
+  background: #e9ecef;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+// ── Add / edit item panels ──
+
+.add-item-panel {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: #f8f9fa;
+}
+
+.edit-item-panel {
+  border: 1px solid var(--rm-primary, #1a3a5c);
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: #f8f9fa;
+}
+
+// ── Page / file tree ──
+
+.page-tree-box {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 28px;
+}
+
+.tree-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--rm-text-muted);
+  font-size: 0.75rem;
+  width: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { color: var(--rm-text); }
+}
+
+.tree-spacer {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.tree-link {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--rm-text);
+  text-decoration: none;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  cursor: pointer;
+
+  i {
+    font-size: 0.8125rem;
+    color: var(--rm-text-muted);
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    background: #e9ecef;
+    color: var(--rm-primary);
+  }
+
+  &.disabled {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  &.selected {
+    background: var(--rm-primary, #1a3a5c);
+    color: #fff;
+
+    i { color: #fff; }
+  }
+}
+
+// ── Inline name editing ──
+
+.context-name-input {
+  max-width: 300px;
+  font-weight: 500;
+  padding: 0.15rem 0.4rem;
+  height: auto;
+  font-size: inherit;
+}
+
+.editable-name {
+  cursor: text;
+  border-bottom: 1px dashed var(--rm-text-muted, #6c757d);
+  padding-bottom: 1px;
+
+  &:hover {
+    border-bottom-color: var(--rm-primary, #1a3a5c);
+  }
+}
+
+// ── Section labels ──
+
+.section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rm-text-muted, #6c757d);
+  margin: 0.75rem 0 0.375rem;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+
+// ── Shared ──
+
+.btn-icon {
+  padding: 0.15rem 0.35rem;
+  line-height: 1;
+}

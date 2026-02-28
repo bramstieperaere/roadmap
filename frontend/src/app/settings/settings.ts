@@ -344,6 +344,13 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  browseFolder(index: number) {
+    const currentPath = this.config().repositories[index]?.path || '';
+    this.settingsService.browseFolder(currentPath).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (res) => this.updateRepoPath(index, res.path),
+    });
+  }
+
   updateModule(repoIndex: number, moduleIndex: number, field: keyof ModuleConfig, value: string) {
     this.config.update((c) => {
       const repos = [...c.repositories];

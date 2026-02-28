@@ -1,0 +1,81 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+
+  .section-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem 2rem;
+    max-width: 800px;
+  }
+}
+
+.context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.context-card {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.context-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  color: var(--rm-text);
+
+  &:hover {
+    background: #f8f9fa;
+  }
+}
+
+.child-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.75rem 0.35rem 1.75rem;
+  border-top: 1px solid var(--rm-border);
+  text-decoration: none;
+  color: var(--rm-text);
+  font-size: 0.875rem;
+
+  &:hover {
+    background: #f8f9fa;
+  }
+}
+
+.tree-arrow {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.add-child-btn {
+  padding: 0.1rem 0.25rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .context-link:hover & {
+    opacity: 1;
+  }
+}
+
+.btn-icon {
+  padding: 0.15rem 0.35rem;
+  line-height: 1;
+}
+
+.child-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.35rem 0.75rem 0.35rem 1.75rem;
+  border-top: 1px solid var(--rm-border);
+}

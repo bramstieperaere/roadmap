@@ -463,9 +463,15 @@
                     </div>
                     <div class="col">
                       <label class="form-label">Path</label>
-                      <input type="text" class="form-control" placeholder="/path/to/git/repo"
-                             [value]="repo.path" (input)="updateRepoPath(repoIndex, $any($event.target).value)"
-                             [attr.data-testid]="'repo-path-' + repoIndex">
+                      <div class="input-group">
+                        <input type="text" class="form-control" placeholder="/path/to/git/repo"
+                               [value]="repo.path" (input)="updateRepoPath(repoIndex, $any($event.target).value)"
+                               [attr.data-testid]="'repo-path-' + repoIndex">
+                        <button class="btn btn-outline-secondary" type="button" (click)="browseFolder(repoIndex)"
+                                title="Browse for folder" [attr.data-testid]="'browse-repo-' + repoIndex">
+                          <i class="bi bi-folder2-open"></i>
+                        </button>
+                      </div>
                     </div>
                     <div class="col-auto">
                       <button class="btn btn-outline-danger btn-sm" (click)="removeRepository(repoIndex)" title="Remove repository"

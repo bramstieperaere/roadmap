@@ -1,0 +1,780 @@
+<div class="section-page" data-testid="context-detail-page">
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/contexts" class="breadcrumb-link" data-testid="context-detail-back">
+        <i class="bi bi-arrow-left me-1"></i>Contexts
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <span class="fw-semibold" data-testid="context-name-display">
+        {{ context()?.name || name() }}
+      </span>
+      @if (child()) {
+        <i class="bi bi-chevron-right text-muted small"></i>
+        <span class="fw-semibold">{{ child() }}</span>
+      }
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-danger d-flex align-items-center gap-2 mx-3 mt-2 mb-0" data-testid="context-detail-error">
+      <i class="bi bi-exclamation-triangle"></i>
+      <span class="flex-grow-1">{{ error() }}</span>
+      <button class="btn-close btn-close-sm" (click)="dismissError()"></button>
+    </div>
+  }
+
+  <div class="section-content">
+    @if (loading()) {
+      <div class="d-flex justify-content-center py-5">
+        <span class="spinner-border spinner-border-sm"></span>
+      </div>
+    } @else if (context()) {
+      @let ctx = context()!;
+      <div class="detail-layout">
+        <!-- Left panel: context management -->
+        <div class="detail-body" cdkDropListGroup>
+          <!-- Edit toolbar -->
+          <div class="d-flex justify-content-end mb-2">
+            <div class="d-flex gap-1">
+              @if (child() || contributingMixins().length > 0) {
+                <button class="btn btn-outline-secondary btn-sm btn-icon"
+                        (click)="showContributing.set(!showContributing())"
+                        [title]="showContributing() ? 'Hide contributing contexts' : 'Show contributing contexts'">
+                  <i class="bi" [class.bi-layers]="showContributing()" [class.bi-layers-half]="!showContributing()"></i>
+                </button>
+              }
+              <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="toggleEdit()"
+                      [title]="editing() ? 'Done editing' : 'Edit'"
+                      data-testid="context-edit-toggle">
+                <i class="bi" [class.bi-pencil]="!editing()" [class.bi-check-lg]="editing()"></i>
+              </button>
+              @if (editing()) {
+                <button class="btn btn-outline-danger btn-sm btn-icon" (click)="deleteContext()" title="Delete context"
+                        data-testid="context-delete-btn">
+                  <i class="bi bi-trash"></i>
+                </button>
+              }
+            </div>
+          </div>
+
+          <!-- Contributing contexts -->
+          @if (showContributing() && (child() || contributingMixins().length > 0)) {
+            <div class="section-label">Contributing</div>
+
+            <!-- Parent context card (contributing when on child route) -->
+            @if (child()) {
+              <div class="context-card">
+                <div class="context-card-header">
+                  <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                    <span class="fw-medium">{{ ctx.name }}</span>
+                    <span class="text-muted small">(parent)</span>
+                  </div>
+                </div>
+                <div class="context-card-body">
+                  <div class="items-list">
+                    @for (item of ctx.items; track item.type + item.id) {
+                      <div class="item-row"
+                           [class.primary-selected]="primaryClickedKey() === itemKey(item)"
+                           [class.selected]="primaryClickedKey() !== itemKey(item) && selectedItemKeys().has(itemKey(item))"
+                           (click)="scrollToPreview(item)">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                          <i class="bi" [class]="getItemIcon(item.type)"></i>
+                          <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
+                          <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
+                          @if (item.type !== 'instructions') {
+                            <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                          }
+                        </div>
+                      </div>
+                    }
+                    @if (ctx.items.length === 0) {
+                      <p class="text-muted small mb-0">No items.</p>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            <!-- Mixin contributing context cards (read-only) -->
+            @for (mixin of contributingMixins(); track mixin.path) {
+              <div class="context-card">
+                <div class="context-card-header">
+                  <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                    <span class="fw-medium">{{ mixin.name }}</span>
+                    <span class="text-muted small">({{ mixin.source === 'mixin-parent' ? 'mixin parent' : 'mixin' }})</span>
+                  </div>
+                </div>
+                <div class="context-card-body">
+                  <div class="items-list">
+                    @for (item of mixin.items; track item.type + item.id) {
+                      <div class="item-row"
+                           [class.primary-selected]="primaryClickedKey() === itemKey(item)"
+                           [class.selected]="primaryClickedKey() !== itemKey(item) && (item.type === 'parent' ? isContributingParentSelected(mixin.path) : item.type === 'mixin' ? isMixinSelected(item.id) : selectedItemKeys().has(itemKey(item)))"
+                           (click)="scrollToContributingItem(item, mixin.path)">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                          <i class="bi" [class]="getItemIcon(item.type)"></i>
+                          <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
+                          @if (item.type === 'parent') {
+                            <span class="text-truncate fw-medium text-muted">{{ mixin.path.split('/')[0] }}</span>
+                          } @else {
+                            <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
+                            @if (item.type !== 'instructions') {
+                              <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                            }
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            <div class="section-label">Current Context</div>
+          }
+
+          <!-- Current context card (with primary border) -->
+          @if (child()) {
+            <!-- Child is the current context -->
+            @let activeChild = child();
+            @for (child of contributingChildren(); track child.name) {
+              <div class="context-card primary">
+                <div class="context-card-header">
+                  <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                    @if (editingChildName() && expandedChild() === child.name) {
+                      <input #childNameInput type="text" class="form-control form-control-sm context-name-input"
+                             [ngModel]="editChildNameValue()" (ngModelChange)="editChildNameValue.set($event)"
+                             (keydown)="onChildNameKeydown($event)" (blur)="saveChildName()"
+                             (click)="$event.stopPropagation()">
+                    } @else {
+                      <span class="fw-medium" [class.editable-name]="editing()"
+                            (click)="editing() && startEditChildName(child.name)">
+                        {{ child.name }}
+                      </span>
+                    }
+                  </div>
+                  @if (editing()) {
+                    <div class="d-flex gap-1">
+                      <button class="btn btn-outline-danger btn-sm btn-icon" (click)="removeChild(child.name)" title="Delete sub-context">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  }
+                </div>
+                <div class="context-card-body">
+                  <div class="items-list" cdkDropList [cdkDropListData]="'child:' + child.name" (cdkDropListDropped)="onDrop($event)">
+                    @for (item of child.items; track item.type + item.id) {
+                      @if (editingItemKey() === itemKey(item)) {
+                        <div class="edit-item-panel">
+                          <div class="mb-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Label"
+                                   [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
+                          </div>
+                          @if (item.type === 'instructions') {
+                            <div class="mb-2">
+                              <textarea class="form-control form-control-sm" rows="4"
+                                        [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
+                                        (keydown)="onEditItemKeydown($event, item, child.name)"></textarea>
+                            </div>
+                          }
+                          <div class="d-flex gap-1">
+                            <button class="btn btn-primary btn-sm" (click)="saveItem(item, child.name)" [disabled]="!editItemLabel().trim()">
+                              <i class="bi bi-check-lg"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditItem()">
+                              <i class="bi bi-x-lg"></i>
+                            </button>
+                          </div>
+                        </div>
+                      } @else {
+                        <div class="item-row" cdkDrag [cdkDragDisabled]="!editing()"
+                             [class.primary-selected]="primaryClickedKey() === itemKey(item)"
+                             [class.selected]="primaryClickedKey() !== itemKey(item) && (item.type === 'parent' ? isParentSelected() : item.type === 'mixin' ? isMixinSelected(item.id) : selectedItemKeys().has(itemKey(item)))"
+                             (click)="scrollToPreview(item)">
+                          @if (editing()) {
+                            <i class="bi bi-grip-vertical drag-handle" cdkDragHandle></i>
+                          }
+                          <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                            <i class="bi" [class]="getItemIcon(item.type)"></i>
+                            <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
+                            @if (item.type === 'parent') {
+                              <span class="text-truncate fw-medium text-muted">{{ ctx.name }}</span>
+                            } @else {
+                              <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
+                              @if (item.type !== 'instructions') {
+                                <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                              }
+                            }
+                          </div>
+                          @if (editing() && item.type !== 'parent') {
+                            @if (item.type === 'instructions') {
+                              <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
+                                      (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                              </button>
+                            }
+                            <button class="btn btn-outline-danger btn-sm btn-icon flex-shrink-0"
+                                    (click)="$event.stopPropagation(); removeChildItem(child.name, item)" title="Remove">
+                              <i class="bi bi-x-lg"></i>
+                            </button>
+                          }
+                        </div>
+                      }
+                    }
+                    @if (child.items.length === 0) {
+                      <p class="text-muted small mb-0">No items yet.</p>
+                    }
+                  </div>
+
+                  <!-- Child add item -->
+                  @if (editing() && !(expandedChild() === child.name && childAddItemMode())) {
+                    <button class="btn btn-outline-primary btn-sm mt-2" (click)="showChildAddItemFor(child.name, 'picking')">
+                      <i class="bi bi-plus me-1"></i>Add Item
+                    </button>
+                  }
+
+                  @if (editing() && expandedChild() === child.name && childAddItemMode()) {
+                    <div class="add-item-panel mt-2">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="fw-semibold">Add Item</small>
+                        <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="cancelChildAddItem()"><i class="bi bi-x-lg"></i></button>
+                      </div>
+                      <div class="mb-2">
+                        <select class="form-select form-select-sm" [ngModel]="childAddItemMode()" (ngModelChange)="switchChildItemType(child.name, $event)">
+                          <option value="picking" disabled>-- Select type --</option>
+                          <option value="confluence_page">Confluence Page</option>
+                          <option value="jira_issue">Jira Issue</option>
+                          <option value="git_repo">Git Repository</option>
+                          <option value="repo_file">Repository File</option>
+                          <option value="instructions">Instructions</option>
+                          <option value="mixin">Mixin</option>
+                        </select>
+                      </div>
+
+                      @if (childAddItemMode() === 'confluence_page') {
+                        <div class="mb-2">
+                          <select class="form-select form-select-sm" [ngModel]="selectedSpaceKey()" (ngModelChange)="selectSpace($event)">
+                            <option value="">-- Select Space --</option>
+                            @for (space of spaces(); track space.key) {
+                              <option [value]="space.key">{{ space.name || space.key }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (loadingPages()) {
+                          <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+                        } @else if (pageTree().length > 0) {
+                          <div class="page-tree-box">
+                            <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: pageTree(), depth: 0 }"></ng-container>
+                          </div>
+                        }
+                        @if (selectedPage()) {
+                          <div class="mt-2">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                              <i class="bi bi-check-circle text-success"></i>
+                              <small>{{ selectedPage()!.title }}</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                              <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                     [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)">
+                              <button class="btn btn-primary btn-sm" (click)="addChildConfluencePage()" [disabled]="addingItem()">
+                                @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                              </button>
+                            </div>
+                          </div>
+                        }
+                      }
+
+                      @if (childAddItemMode() === 'jira_issue') {
+                        <div class="mb-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Issue key (e.g. PROJ-123)"
+                                 [ngModel]="issueKey()" (ngModelChange)="issueKey.set($event)" [disabled]="addingItem()">
+                        </div>
+                        <div class="d-flex gap-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Label (optional)"
+                                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                          <button class="btn btn-primary btn-sm" (click)="addChildJiraIssue()" [disabled]="!issueKey().trim() || addingItem()">
+                            @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                          </button>
+                        </div>
+                      }
+
+                      @if (childAddItemMode() === 'git_repo') {
+                        <div class="mb-2">
+                          <select class="form-select form-select-sm" [ngModel]="selectedRepoName()" (ngModelChange)="selectRepo($event)">
+                            <option value="">-- Select Repository --</option>
+                            @for (repo of repos(); track repo.name) {
+                              <option [value]="repo.name">{{ repo.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (selectedRepoName()) {
+                          <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                   [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                            <button class="btn btn-primary btn-sm" (click)="addChildGitRepo()" [disabled]="addingItem()">
+                              @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                            </button>
+                          </div>
+                        }
+                      }
+
+                      @if (childAddItemMode() === 'repo_file') {
+                        <div class="mb-2">
+                          <select class="form-select form-select-sm" [ngModel]="repoFileRepoName()" (ngModelChange)="selectRepoFileRepo($event)">
+                            <option value="">-- Select Repository --</option>
+                            @for (repo of repos(); track repo.name) {
+                              <option [value]="repo.name">{{ repo.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (repoFileRepoName()) {
+                          @if (repoTreeLoading()) {
+                            <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+                          } @else if (repoTree().length > 0) {
+                            <div class="page-tree-box mb-2">
+                              <ng-container *ngTemplateOutlet="repoFileTreeTpl; context: { nodes: repoTree(), depth: 0 }"></ng-container>
+                            </div>
+                          }
+                          @if (repoFilePath()) {
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                              <i class="bi bi-check-circle text-success"></i>
+                              <small class="text-truncate">{{ repoFilePath() }}</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                              <input type="text" class="form-control form-control-sm" placeholder="Label (defaults to file path)"
+                                     [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                              <button class="btn btn-primary btn-sm" (click)="addChildRepoFile()" [disabled]="!repoFilePath().trim() || addingItem()">
+                                @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                              </button>
+                            </div>
+                          }
+                        }
+                      }
+
+                      @if (childAddItemMode() === 'instructions') {
+                        <div class="mb-2">
+                          <textarea class="form-control form-control-sm" rows="4" placeholder="Enter your instructions..."
+                                    [ngModel]="instructionsText()" (ngModelChange)="instructionsText.set($event)" [disabled]="addingItem()"></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Label (required)"
+                                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                          <button class="btn btn-primary btn-sm" (click)="addChildInstructions()" [disabled]="!itemLabel().trim() || addingItem()">
+                            @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                          </button>
+                        </div>
+                      }
+
+                      @if (childAddItemMode() === 'mixin') {
+                        <div class="mb-2">
+                          <select class="form-select form-select-sm" [ngModel]="selectedMixinPath()" (ngModelChange)="selectMixinPath($event)">
+                            <option value="">-- Select Context --</option>
+                            @for (path of filteredMixinPaths(); track path) {
+                              <option [value]="path">{{ path }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (selectedMixinPath()) {
+                          <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-check-circle text-success"></i>
+                            <small>{{ selectedMixinPath() }}</small>
+                          </div>
+                          <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                   [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                            <button class="btn btn-primary btn-sm" (click)="addChildMixin()" [disabled]="addingItem()">
+                              @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                            </button>
+                          </div>
+                        }
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          } @else {
+            <!-- Parent is the current context -->
+            <div class="context-card primary">
+              <div class="context-card-header">
+                <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                  @if (editingName()) {
+                    <input #nameInput type="text" class="form-control form-control-sm context-name-input"
+                           [ngModel]="editNameValue()" (ngModelChange)="editNameValue.set($event)"
+                           (keydown)="onNameKeydown($event)" (blur)="saveName()"
+                           data-testid="context-name-input">
+                  } @else {
+                    <span class="fw-medium" [class.editable-name]="editing()"
+                          (click)="editing() && startEditName()">
+                      {{ ctx.name }}
+                    </span>
+                  }
+                </div>
+              </div>
+              <div class="context-card-body">
+                <div class="items-list" cdkDropList [cdkDropListData]="'parent'" (cdkDropListDropped)="onDrop($event)">
+                  @for (item of ctx.items; track item.type + item.id) {
+                    @if (editingItemKey() === itemKey(item)) {
+                      <div class="edit-item-panel">
+                        <div class="mb-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Label"
+                                 [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
+                        </div>
+                        @if (item.type === 'instructions') {
+                          <div class="mb-2">
+                            <textarea class="form-control form-control-sm" rows="4"
+                                      [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
+                                      (keydown)="onEditItemKeydown($event, item)"></textarea>
+                          </div>
+                        }
+                        <div class="d-flex gap-1">
+                          <button class="btn btn-primary btn-sm" (click)="saveItem(item)" [disabled]="!editItemLabel().trim()">
+                            <i class="bi bi-check-lg"></i>
+                          </button>
+                          <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditItem()">
+                            <i class="bi bi-x-lg"></i>
+                          </button>
+                        </div>
+                      </div>
+                    } @else {
+                      <div class="item-row" cdkDrag [cdkDragDisabled]="!editing()"
+                           [class.primary-selected]="primaryClickedKey() === itemKey(item)"
+                           [class.selected]="primaryClickedKey() !== itemKey(item) && (item.type === 'mixin' ? isMixinSelected(item.id) : selectedItemKeys().has(itemKey(item)))"
+                           (click)="scrollToPreview(item)">
+                        @if (editing()) {
+                          <i class="bi bi-grip-vertical drag-handle" cdkDragHandle></i>
+                        }
+                        <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                          <i class="bi" [class]="getItemIcon(item.type)"></i>
+                          <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
+                          <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
+                          @if (item.type !== 'instructions') {
+                            <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                          }
+                        </div>
+                        @if (editing()) {
+                          @if (item.type === 'instructions') {
+                            <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
+                                    (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
+                              <i class="bi bi-pencil"></i>
+                            </button>
+                          }
+                          <button class="btn btn-outline-danger btn-sm btn-icon flex-shrink-0"
+                                  (click)="$event.stopPropagation(); removeItem(item)" title="Remove">
+                            <i class="bi bi-x-lg"></i>
+                          </button>
+                        }
+                      </div>
+                    }
+                  }
+                  @if (ctx.items.length === 0) {
+                    <p class="text-muted small mb-0">No items yet.</p>
+                  }
+                </div>
+
+                <!-- Add item -->
+                @if (editing() && !addItemMode()) {
+                  <button class="btn btn-outline-primary btn-sm mt-2" (click)="showAddItem('picking')">
+                    <i class="bi bi-plus me-1"></i>Add Item
+                  </button>
+                }
+
+                @if (editing() && addItemMode()) {
+                  <div class="add-item-panel mt-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <small class="fw-semibold">Add Item</small>
+                      <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="cancelAddItem()"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="mb-2">
+                      <select class="form-select form-select-sm" [ngModel]="addItemMode()" (ngModelChange)="switchItemType($event)">
+                        <option value="picking" disabled>-- Select type --</option>
+                        <option value="confluence_page">Confluence Page</option>
+                        <option value="jira_issue">Jira Issue</option>
+                        <option value="git_repo">Git Repository</option>
+                        <option value="repo_file">Repository File</option>
+                        <option value="instructions">Instructions</option>
+                        <option value="mixin">Mixin</option>
+                      </select>
+                    </div>
+
+                    @if (addItemMode() === 'confluence_page') {
+                      <div class="mb-2">
+                        <select class="form-select form-select-sm" [ngModel]="selectedSpaceKey()" (ngModelChange)="selectSpace($event)">
+                          <option value="">-- Select Space --</option>
+                          @for (space of spaces(); track space.key) {
+                            <option [value]="space.key">{{ space.name || space.key }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (loadingPages()) {
+                        <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+                      } @else if (pageTree().length > 0) {
+                        <div class="page-tree-box">
+                          <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: pageTree(), depth: 0 }"></ng-container>
+                        </div>
+                      }
+                      @if (selectedPage()) {
+                        <div class="mt-2">
+                          <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-check-circle text-success"></i>
+                            <small>{{ selectedPage()!.title }}</small>
+                          </div>
+                          <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                   [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)">
+                            <button class="btn btn-primary btn-sm" (click)="addConfluencePage()" [disabled]="addingItem()">
+                              @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    }
+
+                    @if (addItemMode() === 'jira_issue') {
+                      <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Issue key (e.g. PROJ-123)"
+                               [ngModel]="issueKey()" (ngModelChange)="issueKey.set($event)"
+                               (keydown)="onIssueKeydown($event)" [disabled]="addingItem()">
+                      </div>
+                      <div class="d-flex gap-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Label (optional, defaults to issue summary)"
+                               [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                        <button class="btn btn-primary btn-sm" (click)="addJiraIssue()" [disabled]="!issueKey().trim() || addingItem()">
+                          @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                        </button>
+                      </div>
+                    }
+
+                    @if (addItemMode() === 'git_repo') {
+                      <div class="mb-2">
+                        <select class="form-select form-select-sm" [ngModel]="selectedRepoName()" (ngModelChange)="selectRepo($event)">
+                          <option value="">-- Select Repository --</option>
+                          @for (repo of repos(); track repo.name) {
+                            <option [value]="repo.name">{{ repo.name }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (selectedRepoName()) {
+                        <div class="d-flex gap-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                          <button class="btn btn-primary btn-sm" (click)="addGitRepo()" [disabled]="addingItem()">
+                            @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                          </button>
+                        </div>
+                      }
+                    }
+
+                    @if (addItemMode() === 'repo_file') {
+                      <div class="mb-2">
+                        <select class="form-select form-select-sm" [ngModel]="repoFileRepoName()" (ngModelChange)="selectRepoFileRepo($event)">
+                          <option value="">-- Select Repository --</option>
+                          @for (repo of repos(); track repo.name) {
+                            <option [value]="repo.name">{{ repo.name }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (repoFileRepoName()) {
+                        @if (repoTreeLoading()) {
+                          <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+                        } @else if (repoTree().length > 0) {
+                          <div class="page-tree-box mb-2">
+                            <ng-container *ngTemplateOutlet="repoFileTreeTpl; context: { nodes: repoTree(), depth: 0 }"></ng-container>
+                          </div>
+                        }
+                        @if (repoFilePath()) {
+                          <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-check-circle text-success"></i>
+                            <small class="text-truncate">{{ repoFilePath() }}</small>
+                          </div>
+                          <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="Label (defaults to file path)"
+                                   [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                            <button class="btn btn-primary btn-sm" (click)="addRepoFile()" [disabled]="!repoFilePath().trim() || addingItem()">
+                              @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                            </button>
+                          </div>
+                        }
+                      }
+                    }
+
+                    @if (addItemMode() === 'instructions') {
+                      <div class="mb-2">
+                        <textarea class="form-control form-control-sm" rows="4" placeholder="Enter your instructions..."
+                                  [ngModel]="instructionsText()" (ngModelChange)="instructionsText.set($event)"
+                                  [disabled]="addingItem()"></textarea>
+                      </div>
+                      <div class="d-flex gap-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Label (required)"
+                               [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                        <button class="btn btn-primary btn-sm" (click)="addInstructions()" [disabled]="!itemLabel().trim() || addingItem()">
+                          @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                        </button>
+                      </div>
+                    }
+
+                    @if (addItemMode() === 'mixin') {
+                      <div class="mb-2">
+                        <select class="form-select form-select-sm" [ngModel]="selectedMixinPath()" (ngModelChange)="selectMixinPath($event)">
+                          <option value="">-- Select Context --</option>
+                          @for (path of filteredMixinPaths(); track path) {
+                            <option [value]="path">{{ path }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (selectedMixinPath()) {
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                          <i class="bi bi-check-circle text-success"></i>
+                          <small>{{ selectedMixinPath() }}</small>
+                        </div>
+                        <div class="d-flex gap-2">
+                          <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="addingItem()">
+                          <button class="btn btn-primary btn-sm" (click)="addMixin()" [disabled]="addingItem()">
+                            @if (addingItem()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+                          </button>
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Add sub-context (only on parent detail page) -->
+          @if (editing() && !child()) {
+            @if (!addingChild()) {
+              <button class="btn btn-outline-secondary btn-sm mt-2" (click)="addingChild.set(true)">
+                <i class="bi bi-plus me-1"></i>Add Sub-Context
+              </button>
+            } @else {
+              <div class="d-flex gap-2 mt-2">
+                <input type="text" class="form-control form-control-sm" placeholder="Sub-context name..."
+                       [ngModel]="newChildName()" (ngModelChange)="newChildName.set($event)"
+                       (keydown)="onChildKeydown($event)">
+                <button class="btn btn-primary btn-sm" (click)="addChild()" [disabled]="!newChildName().trim()">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="addingChild.set(false); newChildName.set('')">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            }
+          }
+        </div>
+
+        <!-- Preview panel -->
+        <div class="preview-panel">
+          <div class="preview-header">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-eye"></i>
+              <span class="fw-semibold small">Preview</span>
+            </div>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-icon"
+                      [class.btn-outline-secondary]="!showDelimiters()"
+                      [class.btn-secondary]="showDelimiters()"
+                      (click)="showDelimiters.set(!showDelimiters())"
+                      [title]="showDelimiters() ? 'Hide delimiters' : 'Show delimiters'">
+                <i class="bi bi-braces"></i>
+              </button>
+              <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="refreshPreview()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+          </div>
+          <div class="preview-body">
+            @if (previewLoading()) {
+              <div class="d-flex justify-content-center py-4">
+                <span class="spinner-border spinner-border-sm"></span>
+              </div>
+            } @else if (previewSections().length > 0) {
+              <div class="preview-cards">
+                @if (showDelimiters()) {
+                  <div class="preview-card delimiter-card">
+                    <div class="preview-card-header">
+                      <i class="bi bi-list-ol"></i>
+                      <span>Table of Contents</span>
+                    </div>
+                    <pre class="preview-card-content">{{ tocContent() }}</pre>
+                  </div>
+                }
+                @for (section of previewSections(); track section.type + section.id) {
+                  <div class="preview-card" [id]="'preview-' + itemKey(section)"
+                       [class.highlighted]="selectedItemKeys().has(itemKey(section))">
+                    <div class="preview-card-header">
+                      <i class="bi" [class]="getItemIcon(section.type)"></i>
+                      <span>{{ section.label }}</span>
+                      <span class="item-type-badge">{{ getItemTypeLabel(section.type) }}</span>
+                    </div>
+                    <pre class="preview-card-content">{{ getSectionContent(section) }}</pre>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="text-muted small p-3">No items in this context.</p>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+<!-- Recursive page tree template for Confluence picker -->
+<ng-template #pageTreeTpl let-pages="pages" let-depth="depth">
+  @for (page of pages; track page.id) {
+    <div class="tree-node" [style.padding-left.rem]="0.5 + depth * 1">
+      @if (page.children.length > 0) {
+        <button class="tree-toggle" (click)="toggleNode(page.id)">
+          <i class="bi" [class.bi-chevron-right]="!isExpanded(page.id)" [class.bi-chevron-down]="isExpanded(page.id)"></i>
+        </button>
+      } @else {
+        <span class="tree-spacer"></span>
+      }
+      <a class="tree-link" (click)="selectConfluencePage(page.id, page.title)"
+         [class.disabled]="addingItem()"
+         [class.selected]="selectedPage()?.id === page.id"
+         title="Click to select">
+        <i class="bi bi-file-text"></i>
+        {{ page.title }}
+      </a>
+    </div>
+    @if (page.children.length > 0 && isExpanded(page.id)) {
+      <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: page.children, depth: depth + 1 }"></ng-container>
+    }
+  }
+</ng-template>
+
+<!-- Recursive file tree template for Repo File picker -->
+<ng-template #repoFileTreeTpl let-nodes="nodes" let-depth="depth">
+  @for (node of nodes; track node.path) {
+    <div class="tree-node" [style.padding-left.rem]="0.5 + depth * 1">
+      @if (node.type === 'dir') {
+        <button class="tree-toggle" (click)="toggleRepoTreeNode(node)">
+          <i class="bi" [class.bi-chevron-right]="!isRepoTreeExpanded(node.path)"
+             [class.bi-chevron-down]="isRepoTreeExpanded(node.path)"></i>
+        </button>
+      } @else {
+        <span class="tree-spacer"></span>
+      }
+      @if (node.type === 'dir') {
+        <a class="tree-link" (click)="toggleRepoTreeNode(node)">
+          <i class="bi bi-folder{{ isRepoTreeExpanded(node.path) ? '2-open' : '' }}"></i>
+          {{ node.name }}
+        </a>
+      } @else {
+        <a class="tree-link" (click)="selectRepoFile(node)"
+           [class.selected]="repoFilePath() === node.path"
+           [class.disabled]="addingItem()">
+          <i class="bi bi-file-code"></i>
+          {{ node.name }}
+        </a>
+      }
+    </div>
+    @if (node.type === 'dir' && isRepoTreeExpanded(node.path) && node.children.length > 0) {
+      <ng-container *ngTemplateOutlet="repoFileTreeTpl; context: { nodes: node.children, depth: depth + 1 }"></ng-container>
+    }
+  }
+</ng-template>

@@ -128,4 +128,8 @@ export class SettingsService {
   analyzeRepository(repoIndex: number): Observable<AnalyzeResponse> {
     return this.http.post<AnalyzeResponse>('/api/analysis/analyze', { repo_index: repoIndex });
   }
+
+  browseFolder(initialDir: string = ''): Observable<{ path: string }> {
+    return this.http.post<{ path: string }>('/api/settings/browse-folder', { initial_dir: initialDir });
+  }
 }

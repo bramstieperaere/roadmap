@@ -1,5 +1,9 @@
+import asyncio
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from neo4j import GraphDatabase
+from pydantic import BaseModel
 
 from app.config import load_config_decrypted, save_config, has_encrypted_fields
 from app.models import AppConfig
@@ -73,3 +77,39 @@ def lookup_confluence_space(key: str):
     prefix = "/wiki" if atl.deployment_type == "cloud" else ""
     data = atlassian_request(atl, f"{prefix}/rest/api/space/{key}")
     return {"key": data["key"], "name": data["name"]}
+
+
+class BrowseFolderRequest(BaseModel):
+    initial_dir: str = ""
+
+
+_FOLDER_PICKER_SCRIPT = '''
+import sys, tkinter as tk
+from tkinter import filedialog
+root = tk.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+kwargs = {"title": "Select repository folder"}
+if len(sys.argv) > 1 and sys.argv[1]:
+    from pathlib import Path
+    p = Path(sys.argv[1])
+    if p.is_dir():
+        kwargs["initialdir"] = str(p)
+folder = filedialog.askdirectory(**kwargs)
+root.destroy()
+print(folder or "")
+'''
+
+
+@router.post("/browse-folder")
+async def browse_folder(req: BrowseFolderRequest):
+    import subprocess, sys
+    proc = await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-c", _FOLDER_PICKER_SCRIPT, req.initial_dir],
+        capture_output=True, text=True, timeout=120,
+    )
+    path = proc.stdout.strip()
+    if not path:
+        raise HTTPException(status_code=204, detail="No folder selected")
+    return {"path": path}
