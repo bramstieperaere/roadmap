@@ -13,6 +13,7 @@ export interface JobSummary {
   repo_path: string;
   module_name: string;
   module_type: string;
+  params?: Record<string, any>;
   status: 'pending' | 'running' | 'completed' | 'failed';
   created_at: string;
   completed_at: string | null;
@@ -26,6 +27,7 @@ export interface JobDetail {
   repo_index: number;
   module_name: string;
   module_type: string;
+  params?: Record<string, any>;
   status: 'pending' | 'running' | 'completed' | 'failed';
   created_at: string;
   started_at: string | null;

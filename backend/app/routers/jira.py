@@ -4,10 +4,11 @@ import urllib.parse
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.config import load_config_decrypted, has_encrypted_fields
+from app.config import load_config_decrypted, save_config, has_encrypted_fields
 from app.session import session
 from app.atlassian_client import atlassian_request, require_atlassian_configured
 from app.jira_cache import JiraCache
+from app.jira_issue_service import JiraIssueService
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
 
@@ -22,12 +23,12 @@ def _require_unlocked():
 
 
 def _get_cache() -> tuple:
-    """Return (atlassian_config, JiraCache)."""
+    """Return (atlassian_config, JiraCache, JiraIssueService)."""
     config = load_config_decrypted()
     atl = config.atlassian
     require_atlassian_configured(atl)
     cache = JiraCache(atl.cache_dir, atl.refresh_duration)
-    return atl, cache
+    return atl, cache, JiraIssueService(atl, cache)
 
 
 def _find_project(atl, project_key: str):
@@ -35,9 +36,6 @@ def _find_project(atl, project_key: str):
         if p.key.upper() == project_key.upper():
             return p
     raise HTTPException(status_code=404, detail=f"Project '{project_key}' not configured")
-
-
-_APP_TYPES = ("stash", "bitbucket", "github", "gitlab")
 
 
 def _jql_search(atl, jql: str, fields: str, start_at: int = 0, max_results: int = 100) -> dict:
@@ -56,62 +54,6 @@ def _jql_search(atl, jql: str, fields: str, start_at: int = 0, max_results: int 
     )
 
 
-def _fetch_dev_status(atl, issue_id: str, result: dict) -> None:
-    """Fetch branches, commits and PRs from Jira dev-status API."""
-    base = "/rest/dev-status/latest/issue/detail"
-    for app_type in _APP_TYPES:
-        # Fetch branches
-        try:
-            data = atlassian_request(
-                atl, f"{base}?issueId={issue_id}&applicationType={app_type}&dataType=branch",
-            )
-            for detail in data.get("detail", []):
-                for branch in detail.get("branches", []):
-                    result["branches"].append({
-                        "name": branch.get("name", ""),
-                        "url": branch.get("url", ""),
-                        "repository": branch.get("repository", {}).get("name", ""),
-                    })
-        except Exception:
-            pass
-        # Fetch commits
-        try:
-            data = atlassian_request(
-                atl, f"{base}?issueId={issue_id}&applicationType={app_type}&dataType=repository",
-            )
-            for detail in data.get("detail", []):
-                for repo in detail.get("repositories", []):
-                    rn = repo.get("name", "")
-                    for commit in repo.get("commits", []):
-                        result["commits"].append({
-                            "id": commit.get("id", "")[:12],
-                            "message": commit.get("message", ""),
-                            "author": commit.get("author", {}).get("name", ""),
-                            "url": commit.get("url", ""),
-                            "repository": rn,
-                            "timestamp": commit.get("authorTimestamp", ""),
-                        })
-        except Exception:
-            pass
-        try:
-            data = atlassian_request(
-                atl, f"{base}?issueId={issue_id}&applicationType={app_type}&dataType=pullrequest",
-            )
-            for detail in data.get("detail", []):
-                for pr in detail.get("pullRequests", []):
-                    result["pull_requests"].append({
-                        "id": pr.get("id", ""),
-                        "name": pr.get("name", ""),
-                        "status": pr.get("status", ""),
-                        "url": pr.get("url", ""),
-                        "source_branch": pr.get("source", {}).get("branch", ""),
-                        "destination_branch": pr.get("destination", {}).get("branch", ""),
-                        "author": pr.get("author", {}).get("name", ""),
-                    })
-        except Exception:
-            pass
-
-
 def _build_issue_list(issue_data: dict) -> list:
     issues = []
     for raw in issue_data.get("issues", []):
@@ -120,9 +62,13 @@ def _build_issue_list(issue_data: dict) -> list:
             "key": raw["key"],
             "summary": fields.get("summary", ""),
             "status": fields.get("status", {}).get("name", ""),
+            "status_category": fields.get("status", {}).get("statusCategory", {}).get("key", ""),
+            "resolution": fields.get("resolution", {}).get("name", "") if fields.get("resolution") else "",
             "issuetype": fields.get("issuetype", {}).get("name", ""),
             "priority": fields.get("priority", {}).get("name", "") if fields.get("priority") else "",
             "assignee": fields.get("assignee", {}).get("displayName", "") if fields.get("assignee") else "",
+            "created": fields.get("created", ""),
+            "updated": fields.get("updated", ""),
         })
     return issues
 
@@ -137,18 +83,47 @@ def list_projects():
     ]
 
 
-@router.get("/projects/{project_key}/sprint")
-def get_sprint(project_key: str, refresh: bool = False):
+@router.get("/projects/{project_key}/boards")
+def list_boards(project_key: str):
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, _, _ = _get_cache()
+    _find_project(atl, project_key)
+    try:
+        data = atlassian_request(atl, f"/rest/agile/1.0/board?projectKeyOrId={project_key}")
+        return [{"id": b["id"], "name": b["name"]} for b in data.get("values", [])]
+    except Exception:
+        return []
+
+
+class SetBoardRequest(BaseModel):
+    board_id: int
+
+
+@router.post("/projects/{project_key}/set-board")
+def set_board(project_key: str, req: SetBoardRequest):
+    _require_unlocked()
+    config = load_config_decrypted()
+    for p in config.atlassian.jira_projects:
+        if p.key.upper() == project_key.upper():
+            p.board_id = req.board_id
+            save_config(config)
+            return {"status": "ok", "key": p.key, "board_id": req.board_id}
+    raise HTTPException(status_code=404, detail=f"Project '{project_key}' not configured")
+
+
+@router.get("/projects/{project_key}/sprint")
+def get_sprint(project_key: str, refresh: bool = False, board_id: int | None = None):
+    _require_unlocked()
+    atl, cache, _ = _get_cache()
     project = _find_project(atl, project_key)
 
-    if not project.board_id:
+    bid = board_id or project.board_id
+    if not bid:
         raise HTTPException(status_code=400, detail=f"No board configured for project '{project_key}'")
 
     # Always fetch active sprint to resolve current sprint ID (lightweight call)
     sprint_data = atlassian_request(
-        atl, f"/rest/agile/1.0/board/{project.board_id}/sprint?state=active"
+        atl, f"/rest/agile/1.0/board/{bid}/sprint?state=active"
     )
     sprints = sprint_data.get("values", [])
     if not sprints:
@@ -173,7 +148,7 @@ def get_sprint(project_key: str, refresh: bool = False):
             atl,
             f"/rest/agile/1.0/sprint/{sprint_id}/issue"
             f"?startAt={start_at}&maxResults=100"
-            f"&fields=summary,status,issuetype,priority,assignee",
+            f"&fields=summary,status,issuetype,priority,assignee,created,updated,resolution",
         )
         issues.extend(_build_issue_list(issue_data))
         total = issue_data.get("total", 0)
@@ -191,15 +166,16 @@ def get_sprint(project_key: str, refresh: bool = False):
 
 
 @router.get("/projects/{project_key}/sprints")
-def list_sprints(project_key: str, refresh: bool = False):
+def list_sprints(project_key: str, refresh: bool = False, board_id: int | None = None):
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, cache, _ = _get_cache()
     project = _find_project(atl, project_key)
 
-    if not project.board_id:
+    bid = board_id or project.board_id
+    if not bid:
         raise HTTPException(status_code=400, detail=f"No board configured for project '{project_key}'")
 
-    path = cache.sprints_list_path(project.key, project.board_id)
+    path = cache.sprints_list_path(project.key, bid)
     if not refresh:
         cached = cache.read(path)
         if cached:
@@ -212,7 +188,7 @@ def list_sprints(project_key: str, refresh: bool = False):
     while True:
         data = atlassian_request(
             atl,
-            f"/rest/agile/1.0/board/{project.board_id}/sprint"
+            f"/rest/agile/1.0/board/{bid}/sprint"
             f"?startAt={start_at}&maxResults=50",
         )
         for s in data.get("values", []):
@@ -230,7 +206,7 @@ def list_sprints(project_key: str, refresh: bool = False):
 
     sprints.sort(key=lambda s: s["id"], reverse=True)
 
-    result = {"sprints": sprints, "board_id": project.board_id}
+    result = {"sprints": sprints, "board_id": bid}
     cache.write(path, result)
     result["from_cache"] = False
     return result
@@ -239,7 +215,7 @@ def list_sprints(project_key: str, refresh: bool = False):
 @router.get("/projects/{project_key}/sprints/{sprint_id}")
 def get_sprint_by_id(project_key: str, sprint_id: int, refresh: bool = False):
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, cache, _ = _get_cache()
     _find_project(atl, project_key)
 
     path = cache.sprint_path(project_key, sprint_id)
@@ -258,7 +234,7 @@ def get_sprint_by_id(project_key: str, sprint_id: int, refresh: bool = False):
             atl,
             f"/rest/agile/1.0/sprint/{sprint_id}/issue"
             f"?startAt={start_at}&maxResults=100"
-            f"&fields=summary,status,issuetype,priority,assignee",
+            f"&fields=summary,status,issuetype,priority,assignee,created,updated,resolution",
         )
         issues.extend(_build_issue_list(issue_data))
         total = issue_data.get("total", 0)
@@ -283,15 +259,16 @@ def get_sprint_by_id(project_key: str, sprint_id: int, refresh: bool = False):
 
 
 @router.get("/projects/{project_key}/backlog")
-def get_backlog(project_key: str, refresh: bool = False):
+def get_backlog(project_key: str, refresh: bool = False, board_id: int | None = None):
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, cache, _ = _get_cache()
     project = _find_project(atl, project_key)
 
-    if not project.board_id:
+    bid = board_id or project.board_id
+    if not bid:
         raise HTTPException(status_code=400, detail=f"No board configured for project '{project_key}'")
 
-    path = cache.backlog_path(project.key, project.board_id)
+    path = cache.backlog_path(project.key, bid)
     if not refresh:
         cached = cache.read(path)
         if cached:
@@ -303,9 +280,9 @@ def get_backlog(project_key: str, refresh: bool = False):
     while True:
         data = atlassian_request(
             atl,
-            f"/rest/agile/1.0/board/{project.board_id}/backlog"
+            f"/rest/agile/1.0/board/{bid}/backlog"
             f"?startAt={start_at}&maxResults=100"
-            f"&fields=summary,status,issuetype,priority,assignee",
+            f"&fields=summary,status,issuetype,priority,assignee,created,updated,resolution",
         )
         issues.extend(_build_issue_list(data))
         total = data.get("total", 0)
@@ -322,7 +299,7 @@ def get_backlog(project_key: str, refresh: bool = False):
 @router.get("/projects/{project_key}/metadata")
 def get_project_metadata(project_key: str, refresh: bool = False):
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, cache, _ = _get_cache()
     project = _find_project(atl, project_key)
 
     path = cache.metadata_path(project.key)
@@ -439,135 +416,20 @@ def get_project_metadata(project_key: str, refresh: bool = False):
 @router.get("/issues/{issue_key}")
 def get_issue(issue_key: str, refresh: bool = False):
     _require_unlocked()
-    atl, cache = _get_cache()
+    _, _, svc = _get_cache()
 
-    # Derive project key from issue key (e.g., "TEAM1-123" -> "TEAM1")
     parts = issue_key.split("-")
     if len(parts) < 2:
         raise HTTPException(status_code=400, detail="Invalid issue key format")
-    project_key = parts[0]
 
-    path = cache.issue_path(project_key, issue_key)
-    if not refresh:
-        cached = cache.read(path)
-        if cached:
-            cached["from_cache"] = True
-            return cached
+    if refresh:
+        result = svc.force_refresh(issue_key)
+        result["from_cache"] = False
+        return result
 
-    # Fetch full issue
-    raw = atlassian_request(atl, f"/rest/api/2/issue/{issue_key}")
-    fields = raw.get("fields", {})
-
-    result = {
-        "key": raw["key"],
-        "summary": fields.get("summary", ""),
-        "status": fields.get("status", {}).get("name", ""),
-        "issuetype": fields.get("issuetype", {}).get("name", ""),
-        "priority": fields.get("priority", {}).get("name", "") if fields.get("priority") else "",
-        "assignee": fields.get("assignee", {}).get("displayName", "") if fields.get("assignee") else "",
-        "reporter": fields.get("reporter", {}).get("displayName", "") if fields.get("reporter") else "",
-        "created": fields.get("created", ""),
-        "updated": fields.get("updated", ""),
-        "description": fields.get("description", ""),
-        "labels": fields.get("labels", []),
-        "components": [c.get("name", "") for c in fields.get("components", [])],
-        "fix_versions": [v.get("name", "") for v in fields.get("fixVersions", [])],
-        "subtasks": [
-            {"key": s["key"], "summary": s.get("fields", {}).get("summary", ""),
-             "status": s.get("fields", {}).get("status", {}).get("name", "")}
-            for s in fields.get("subtasks", [])
-        ],
-        "issuelinks": [
-            {
-                "type": link.get("type", {}).get("name", ""),
-                "direction": "outward" if "outwardIssue" in link else "inward",
-                "key": (link.get("outwardIssue") or link.get("inwardIssue", {})).get("key", ""),
-                "summary": (link.get("outwardIssue") or link.get("inwardIssue", {})).get("fields", {}).get("summary", ""),
-            }
-            for link in fields.get("issuelinks", [])
-        ],
-        "comment_count": fields.get("comment", {}).get("total", 0),
-        "comments": [
-            {
-                "author": c.get("author", {}).get("displayName", ""),
-                "created": c.get("created", ""),
-                "body": c.get("body", ""),
-            }
-            for c in fields.get("comment", {}).get("comments", [])
-        ],
-        "branches": [],
-        "commits": [],
-        "pull_requests": [],
-    }
-
-    # Fetch dev-status info (branches, commits, PRs) using numeric issue ID
-    issue_id = raw.get("id", "")
-    if issue_id:
-        _fetch_dev_status(atl, issue_id, result)
-
-    cache.write(path, result)
-    result["from_cache"] = False
-    return result
-
-
-def _fetch_and_cache_issue(atl, cache: JiraCache, issue_key: str) -> dict:
-    """Fetch a single issue with dev-status and cache it. Returns the result dict."""
-    parts = issue_key.split("-")
-    if len(parts) < 2:
-        raise ValueError(f"Invalid issue key: {issue_key}")
-    project_key = parts[0]
-
-    raw = atlassian_request(atl, f"/rest/api/2/issue/{issue_key}")
-    fields = raw.get("fields", {})
-
-    result = {
-        "key": raw["key"],
-        "summary": fields.get("summary", ""),
-        "status": fields.get("status", {}).get("name", ""),
-        "issuetype": fields.get("issuetype", {}).get("name", ""),
-        "priority": fields.get("priority", {}).get("name", "") if fields.get("priority") else "",
-        "assignee": fields.get("assignee", {}).get("displayName", "") if fields.get("assignee") else "",
-        "reporter": fields.get("reporter", {}).get("displayName", "") if fields.get("reporter") else "",
-        "created": fields.get("created", ""),
-        "updated": fields.get("updated", ""),
-        "description": fields.get("description", ""),
-        "labels": fields.get("labels", []),
-        "components": [c.get("name", "") for c in fields.get("components", [])],
-        "fix_versions": [v.get("name", "") for v in fields.get("fixVersions", [])],
-        "subtasks": [
-            {"key": s["key"], "summary": s.get("fields", {}).get("summary", ""),
-             "status": s.get("fields", {}).get("status", {}).get("name", "")}
-            for s in fields.get("subtasks", [])
-        ],
-        "issuelinks": [
-            {
-                "type": link.get("type", {}).get("name", ""),
-                "direction": "outward" if "outwardIssue" in link else "inward",
-                "key": (link.get("outwardIssue") or link.get("inwardIssue", {})).get("key", ""),
-                "summary": (link.get("outwardIssue") or link.get("inwardIssue", {})).get("fields", {}).get("summary", ""),
-            }
-            for link in fields.get("issuelinks", [])
-        ],
-        "comment_count": fields.get("comment", {}).get("total", 0),
-        "comments": [
-            {
-                "author": c.get("author", {}).get("displayName", ""),
-                "created": c.get("created", ""),
-                "body": c.get("body", ""),
-            }
-            for c in fields.get("comment", {}).get("comments", [])
-        ],
-        "branches": [],
-        "commits": [],
-        "pull_requests": [],
-    }
-
-    issue_id = raw.get("id", "")
-    if issue_id:
-        _fetch_dev_status(atl, issue_id, result)
-
-    path = cache.issue_path(project_key, issue_key)
-    cache.write(path, result)
+    result = svc.get_issue(issue_key)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Issue {issue_key} not found")
     return result
 
 
@@ -575,7 +437,7 @@ def _fetch_and_cache_issue(atl, cache: JiraCache, issue_key: str) -> dict:
 def refresh_issues(project_key: str, request: RefreshIssuesRequest):
     """Batch-refresh full issue details (description, comments, dev-status) for a list of issue keys."""
     _require_unlocked()
-    atl, cache = _get_cache()
+    atl, _, svc = _get_cache()
     _find_project(atl, project_key)
 
     total = len(request.issue_keys)
@@ -584,11 +446,10 @@ def refresh_issues(project_key: str, request: RefreshIssuesRequest):
 
     for i, key in enumerate(request.issue_keys):
         try:
-            _fetch_and_cache_issue(atl, cache, key)
+            svc.get_issue(key)
             refreshed += 1
         except Exception as exc:
             errors.append({"key": key, "error": str(exc)})
-        # Throttle: ~3 req/s (each issue may do multiple dev-status calls, so be conservative)
         if i < total - 1:
             time.sleep(0.3)
 

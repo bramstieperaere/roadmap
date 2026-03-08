@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, effect, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { JiraService } from '../services/jira';
 import { JiraStateService } from './jira-state';
@@ -12,6 +12,15 @@ import { JiraStateService } from './jira-state';
 export class JiraShellComponent implements OnInit {
   private jiraService = inject(JiraService);
   state = inject(JiraStateService);
+
+  constructor() {
+    effect(() => {
+      const key = this.state.selectedProjectKey();
+      if (key) {
+        this.state.loadBoards(key);
+      }
+    });
+  }
 
   ngOnInit() {
     if (this.state.projects().length === 0) {

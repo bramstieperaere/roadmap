@@ -37,82 +37,6 @@
   flex-shrink: 0;
 }
 
-// ── Preview panel ──
-
-.preview-panel {
-  flex: 1;
-  min-width: 300px;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--rm-border);
-}
-
-.preview-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--rm-border);
-  background: #fafbfc;
-  flex-shrink: 0;
-}
-
-.preview-body {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.preview-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.preview-card {
-  border: 1px solid var(--rm-border);
-  border-radius: 6px;
-  background: #fff;
-  transition: border-color 0.15s;
-
-  &.highlighted {
-    border-color: var(--rm-primary, #1a3a5c);
-    box-shadow: 0 0 0 1px var(--rm-primary, #1a3a5c);
-  }
-
-  &.delimiter-card {
-    border-style: dashed;
-    background: #f8f9fa;
-  }
-}
-
-.preview-card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid var(--rm-border);
-  border-radius: 6px 6px 0 0;
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-
-.preview-card-content {
-  margin: 0;
-  padding: 0.75rem;
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 0.7rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  background: transparent;
-  border: none;
-  color: var(--rm-text);
-  max-height: 400px;
-  overflow-y: auto;
-}
-
 // ── Context cards ──
 
 .context-card {
@@ -226,93 +150,13 @@
   flex-shrink: 0;
 }
 
-// ── Add / edit item panels ──
-
-.add-item-panel {
-  border: 1px solid var(--rm-border);
-  border-radius: 6px;
-  padding: 0.75rem;
-  background: #f8f9fa;
-}
+// ── Edit item panel ──
 
 .edit-item-panel {
   border: 1px solid var(--rm-primary, #1a3a5c);
   border-radius: 4px;
   padding: 0.5rem;
   background: #f8f9fa;
-}
-
-// ── Page / file tree ──
-
-.page-tree-box {
-  border: 1px solid var(--rm-border);
-  border-radius: 6px;
-  max-height: 280px;
-  overflow-y: auto;
-  background: #fff;
-}
-
-.tree-node {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 28px;
-}
-
-.tree-toggle {
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--rm-text-muted);
-  font-size: 0.75rem;
-  width: 18px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover { color: var(--rm-text); }
-}
-
-.tree-spacer {
-  width: 18px;
-  flex-shrink: 0;
-}
-
-.tree-link {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8125rem;
-  color: var(--rm-text);
-  text-decoration: none;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  cursor: pointer;
-
-  i {
-    font-size: 0.8125rem;
-    color: var(--rm-text-muted);
-    flex-shrink: 0;
-  }
-
-  &:hover {
-    background: #e9ecef;
-    color: var(--rm-primary);
-  }
-
-  &.disabled {
-    pointer-events: none;
-    opacity: 0.5;
-  }
-
-  &.selected {
-    background: var(--rm-primary, #1a3a5c);
-    color: #fff;
-
-    i { color: #fff; }
-  }
 }
 
 // ── Inline name editing ──
@@ -349,7 +193,6 @@
     margin-top: 0;
   }
 }
-
 
 // ── Shared ──
 

@@ -34,7 +34,9 @@
                 <td><code>{{ job.id }}</code></td>
                 <td>
                   <i class="bi me-1" [class.bi-filetype-java]="job.module_type === 'java'"
-                     [class.bi-code-slash]="job.module_type !== 'java'"></i>
+                     [class.bi-git]="job.module_type === 'git_mining'"
+                     [class.bi-file-earmark-text]="job.module_type === 'functional_doc'"
+                     [class.bi-code-slash]="job.module_type !== 'java' && job.module_type !== 'git_mining' && job.module_type !== 'functional_doc'"></i>
                   {{ job.module_name }}
                 </td>
                 <td>

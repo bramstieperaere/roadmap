@@ -15,7 +15,7 @@
             [attr.data-testid]="'project-' + project.key"
           >
             <i class="bi bi-kanban"></i>
-            <span class="project-name">{{ project.name || project.key }}</span>
+            <span class="project-name">{{ project.name ? project.name + ' (' + project.key + ')' : project.key }}</span>
           </button>
           @if (state.selectedProjectKey() === project.key) {
             <div class="sidebar-sub-nav">

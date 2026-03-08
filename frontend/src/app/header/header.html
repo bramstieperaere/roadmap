@@ -1,8 +1,11 @@
 <nav class="navbar navbar-expand navbar-dark" data-testid="header">
   <div class="container-fluid">
-    <a class="navbar-brand" routerLink="/" data-testid="header-brand">
+    <a class="navbar-brand" routerLink="/contexts" data-testid="header-brand">
       <i class="bi bi-diagram-3 me-2"></i>Roadmap
     </a>
+    @if (backendStarted(); as ts) {
+      <small class="text-light opacity-50 me-auto" data-testid="backend-started">{{ ts }}</small>
+    }
     <ul class="navbar-nav ms-auto">
       @if (isLocked()) {
         <li class="nav-item d-flex align-items-center me-2">
@@ -32,6 +35,11 @@
       <li class="nav-item">
         <a class="nav-link" routerLink="/functional" routerLinkActive="active" title="Functional Docs" data-testid="header-functional-link">
           <i class="bi bi-file-earmark-text"></i>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" routerLink="/git-mining" routerLinkActive="active" title="Git Mining" data-testid="header-git-mining-link">
+          <i class="bi bi-git"></i>
         </a>
       </li>
       <li class="nav-item">

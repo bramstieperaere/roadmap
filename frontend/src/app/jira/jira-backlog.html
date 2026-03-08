@@ -1,6 +1,28 @@
 <div class="section-page" data-testid="jira-backlog-page">
   <div class="section-topbar">
-    <h5 class="mb-0 fw-semibold">Backlog</h5>
+    <div class="d-flex align-items-center gap-2">
+      <h5 class="mb-0 fw-semibold me-2">Backlog</h5>
+      @if (state.boards().length > 1) {
+        <select class="form-select form-select-sm board-select"
+                [value]="state.selectedBoardId()"
+                (change)="state.selectedBoardId.set(+$any($event.target).value)"
+                data-testid="board-select">
+          @for (board of state.boards(); track board.id) {
+            <option [value]="board.id">{{ board.name }}</option>
+          }
+        </select>
+        @if (!state.isDefaultBoard()) {
+          <button class="btn btn-outline-secondary btn-sm text-nowrap"
+                  (click)="state.setDefaultBoard(state.selectedBoardId()!)"
+                  title="Save this board as the default for this project"
+                  data-testid="set-default-board">
+            <i class="bi bi-pin-angle me-1"></i>Set as default
+          </button>
+        } @else {
+          <span class="badge text-bg-secondary" title="This is the default board">default</span>
+        }
+      }
+    </div>
     <div class="d-flex align-items-center gap-2">
       @if (refreshMessage()) {
         <span class="refresh-message">{{ refreshMessage() }}</span>
@@ -36,6 +58,8 @@
       <div class="d-flex justify-content-center py-5">
         <span class="spinner-border"></span>
       </div>
+    } @else if (noBoard()) {
+      <app-board-picker [projectKey]="state.selectedProjectKey()" (boardSelected)="onBoardSelected()" />
     } @else if (error()) {
       <div class="alert alert-danger m-3">
         <i class="bi bi-exclamation-triangle me-2"></i>{{ error() }}
@@ -50,6 +74,8 @@
             <th style="width: 130px">Status</th>
             <th style="width: 100px">Priority</th>
             <th style="width: 150px">Assignee</th>
+            <th style="width: 110px">Created</th>
+            <th style="width: 110px">Updated</th>
           </tr>
         </thead>
         <tbody>
@@ -61,10 +87,12 @@
               <td><span class="status-badge" [class]="getStatusClass(issue.status)">{{ issue.status }}</span></td>
               <td>{{ issue.priority }}</td>
               <td>{{ issue.assignee || '—' }}</td>
+              <td class="text-muted">{{ issue.created | date:'mediumDate' }}</td>
+              <td class="text-muted">{{ issue.updated | date:'mediumDate' }}</td>
             </tr>
           }
           @empty {
-            <tr><td colspan="6" class="text-muted text-center py-3">No issues in the backlog.</td></tr>
+            <tr><td colspan="8" class="text-muted text-center py-3">No issues in the backlog.</td></tr>
           }
         </tbody>
       </table>

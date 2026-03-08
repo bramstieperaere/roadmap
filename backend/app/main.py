@@ -1,5 +1,6 @@
 import base64
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -7,9 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts
+from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts, git_mining
 
 app = FastAPI(title="Roadmap", description="Software project documentation tool")
+
+_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
+@app.get("/api/info")
+def get_info():
+    return {"started_at": _STARTED_AT}
 
 
 @app.on_event("startup")
@@ -80,6 +88,7 @@ app.include_router(jira.router)
 app.include_router(confluence.router)
 app.include_router(functional.router)
 app.include_router(contexts.router)
+app.include_router(git_mining.router)
 
 # --- MCP server (SSE transport) ---
 from app.mcp_server import create_mcp_sse_app

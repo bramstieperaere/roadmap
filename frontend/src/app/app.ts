@@ -2,11 +2,12 @@ import { Component, inject, OnInit, signal, ViewChild } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { Header } from './header/header';
 import { UnlockPopup } from './unlock-popup/unlock-popup';
+import { ConfirmDialog } from './components/confirm-dialog/confirm-dialog';
 import { EncryptionService } from './services/encryption';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, Header, UnlockPopup],
+  imports: [RouterOutlet, Header, UnlockPopup, ConfirmDialog],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

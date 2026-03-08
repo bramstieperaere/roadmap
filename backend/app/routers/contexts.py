@@ -7,6 +7,7 @@ instructions, git repos). Child contexts include a 'parent' placeholder item.
 """
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -31,10 +32,13 @@ def _context_path(name: str) -> Path:
 
 def _read_context(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("description", "")
+    data.setdefault("done", False)
     data.setdefault("items", [])
     data.setdefault("children", [])
     for child in data["children"]:
         child.setdefault("items", [])
+        child.setdefault("done", False)
         # Ensure every child has a "parent" placeholder item
         if not any(i.get("type") == "parent" for i in child["items"]):
             child["items"].insert(0, {"type": "parent", "id": "parent", "title": "Parent", "label": "Parent"})
@@ -212,7 +216,7 @@ class AddContextRequest(BaseModel):
 
 
 class AddItemRequest(BaseModel):
-    type: str  # "confluence_page" | "jira_issue" | "instructions" | "git_repo" | "repo_file" | "mixin"
+    type: str  # "confluence_page" | "jira_issue" | "instructions" | "git_repo" | "repo_file" | "bitbucket_pr" | "mixin"
     id: str
     label: Optional[str] = None
     text: Optional[str] = None  # for instructions
@@ -244,6 +248,33 @@ def get_repositories():
     """Return list of configured repositories for the git_repo picker."""
     config = load_config_decrypted()
     return [{"name": r.name, "path": r.path} for r in config.repositories]
+
+
+@router.get("/meta/repo-branches/{repo_name}")
+def get_repo_branches(repo_name: str):
+    """Return list of branch names for a repository."""
+    config = load_config_decrypted()
+    repo = next((r for r in config.repositories if r.name == repo_name), None)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    proc = subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname:short)",
+         "refs/heads/", "refs/remotes/origin/"],
+        cwd=repo.path,
+        capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=30,
+    )
+    if proc.returncode != 0:
+        return []
+
+    names: set[str] = set()
+    for line in (proc.stdout or "").strip().splitlines():
+        branch = line.strip()
+        if branch.startswith("origin/") and branch != "origin/HEAD":
+            branch = branch[len("origin/"):]
+        names.add(branch)
+    return sorted(names)
 
 
 _HIDDEN_DIRS = {".git", "node_modules", "__pycache__", ".idea", ".vscode", ".gradle", "target", "build", "dist", ".angular"}
@@ -411,6 +442,49 @@ def get_contributing_contexts(name: str):
     return result
 
 
+## ── Bitbucket PR browser-paste import ──
+
+
+class ImportBitbucketPrRequest(BaseModel):
+    url: str
+    pr_json: str
+    comments_json: str
+
+
+@router.post("/bitbucket-pr/import")
+def import_bitbucket_pr(request: ImportBitbucketPrRequest):
+    """Import Bitbucket PR data from browser-pasted JSON."""
+    from app.bitbucket_client import parse_pr_url
+    from app.bitbucket_service import BitbucketService
+
+    workspace, repo_slug, pr_id = parse_pr_url(request.url)
+
+    try:
+        pr_raw = json.loads(request.pr_json)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid PR JSON: {e}")
+
+    try:
+        comments_raw = json.loads(request.comments_json)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid Comments JSON: {e}")
+
+    # Comments endpoint returns paginated {values: [...]}
+    if isinstance(comments_raw, dict):
+        comments_raw = comments_raw.get("values", [])
+
+    cache = _get_cache()
+    config = load_config_decrypted()
+    svc = BitbucketService(config.atlassian, cache)
+    result = svc.import_pr(workspace, repo_slug, pr_id, pr_raw, comments_raw)
+
+    return {
+        "status": "ok",
+        "title": f"{workspace}/{repo_slug}#{pr_id}",
+        "label": result.get("title", f"PR #{pr_id}"),
+    }
+
+
 @router.get("")
 def get_contexts():
     d = _contexts_dir()
@@ -441,7 +515,7 @@ def add_context(request: AddContextRequest):
     if path.exists():
         raise HTTPException(status_code=409, detail=f"Context '{name}' already exists")
 
-    data = {"name": name, "items": [], "children": []}
+    data = {"name": name, "description": "", "items": [], "children": []}
     _write_context(path, data)
     return data
 
@@ -479,6 +553,28 @@ def delete_context(name: str, force: bool = False):
     return {"status": "ok"}
 
 
+@router.post("/{name}/clone", status_code=201)
+def clone_context(name: str, request: AddContextRequest):
+    """Clone a parent context with a new name (deep copy of items + children)."""
+    src_path = _context_path(name)
+    if not src_path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+
+    clone_name = request.name.strip()
+    if not clone_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    dst_path = _context_path(clone_name)
+    if dst_path.exists():
+        raise HTTPException(status_code=409, detail=f"Context '{clone_name}' already exists")
+
+    import copy
+    ctx = copy.deepcopy(_read_context(src_path))
+    ctx["name"] = clone_name
+    _write_context(dst_path, ctx)
+    return ctx
+
+
 @router.put("/{name}/rename")
 def rename_context(name: str, request: RenameContextRequest):
     new_name = request.new_name.strip()
@@ -506,6 +602,48 @@ def rename_context(name: str, request: RenameContextRequest):
     for child_ctx in ctx["children"]:
         _update_mixin_references(contexts_dir, f"{name}/{child_ctx['name']}", f"{new_name}/{child_ctx['name']}")
 
+    return ctx
+
+
+class UpdateDescriptionRequest(BaseModel):
+    description: str
+
+
+@router.put("/{name}/description")
+def update_description(name: str, request: UpdateDescriptionRequest):
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+    ctx = _read_context(path)
+    ctx["description"] = request.description.strip()
+    _write_context(path, ctx)
+    return ctx
+
+
+class UpdateDoneRequest(BaseModel):
+    done: bool
+
+
+@router.put("/{name}/done")
+def update_done(name: str, request: UpdateDoneRequest):
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+    ctx = _read_context(path)
+    ctx["done"] = request.done
+    _write_context(path, ctx)
+    return ctx
+
+
+@router.put("/{name}/children/{child}/done")
+def update_child_done(name: str, child: str, request: UpdateDoneRequest):
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+    ctx = _read_context(path)
+    child_ctx = _get_child(ctx, child)
+    child_ctx["done"] = request.done
+    _write_context(path, ctx)
     return ctx
 
 
@@ -699,6 +837,31 @@ def delete_child(name: str, child: str, force: bool = False):
     return {"status": "ok"}
 
 
+@router.post("/{name}/children/{child}/clone", status_code=201)
+def clone_child(name: str, child: str, request: AddContextRequest):
+    """Clone a child context under the same parent with a new name."""
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+
+    clone_name = request.name.strip()
+    if not clone_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    ctx = _read_context(path)
+    child_ctx = _get_child(ctx, child)
+
+    if any(c["name"] == clone_name for c in ctx["children"]):
+        raise HTTPException(status_code=409, detail=f"Sub-context '{clone_name}' already exists")
+
+    import copy
+    cloned = copy.deepcopy(child_ctx)
+    cloned["name"] = clone_name
+    ctx["children"].append(cloned)
+    _write_context(path, ctx)
+    return cloned
+
+
 @router.put("/{name}/children/{child}/rename")
 def rename_child(name: str, child: str, request: RenameContextRequest):
     new_name = request.new_name.strip()
@@ -844,6 +1007,10 @@ def _resolve_item(item_type: str, item_id: str, text: str | None = None) -> dict
         return _resolve_git_repo(item_id)
     elif item_type == "repo_file":
         return _resolve_repo_file(item_id)
+    elif item_type == "bitbucket_pr":
+        return _resolve_bitbucket_pr(item_id)
+    elif item_type == "commits":
+        return _resolve_commits(item_id)
     elif item_type == "mixin":
         return _resolve_mixin(item_id)
     else:
@@ -873,28 +1040,30 @@ def _resolve_confluence_page(page_id: str) -> dict:
 
 
 def _resolve_jira_issue(issue_key: str) -> dict:
-    cache = _get_cache()
-    # Extract project key from issue key (e.g. "PROJ-123" -> "PROJ")
+    from app.jira_issue_service import JiraIssueService
+
     parts = issue_key.split("-", 1)
     if len(parts) != 2:
         raise HTTPException(status_code=400,
                             detail=f"Invalid issue key format: {issue_key}")
     project_key = parts[0]
 
-    p = cache.issue_path(project_key, issue_key)
-    if p.exists():
-        data = json.loads(p.read_text(encoding="utf-8"))
-        title = data.get("summary", "Untitled")
-        return {
-            "type": "jira_issue",
-            "id": issue_key,
-            "title": title,
-            "label": title,
-            "project_key": project_key,
-        }
+    config = load_config_decrypted()
+    cache = JiraCache(config.atlassian.cache_dir, config.atlassian.refresh_duration)
+    svc = JiraIssueService(config.atlassian, cache)
+    data = svc.get_issue(issue_key)
+    if data is None:
+        raise HTTPException(status_code=404,
+                            detail=f"Jira issue {issue_key} not found")
 
-    raise HTTPException(status_code=404,
-                        detail=f"Jira issue {issue_key} not found in cache")
+    title = data.get("summary", "Untitled")
+    return {
+        "type": "jira_issue",
+        "id": issue_key,
+        "title": title,
+        "label": title,
+        "project_key": project_key,
+    }
 
 
 def _resolve_instructions(item_id: str, text: str | None) -> dict:
@@ -921,6 +1090,44 @@ def _resolve_git_repo(repo_name: str) -> dict:
 
     raise HTTPException(status_code=404,
                         detail=f"Repository '{repo_name}' not found in config")
+
+
+def _resolve_commits(item_id: str) -> dict:
+    """Resolve commits. item_id format: 'repo_name:hash1,hash2,...'."""
+    if ":" not in item_id:
+        raise HTTPException(status_code=400,
+                            detail="Invalid commits id. Expected 'repo:hash1,hash2,...'")
+    repo_name, hashes_str = item_id.split(":", 1)
+    hashes = [h.strip() for h in hashes_str.split(",") if h.strip()]
+    if not hashes:
+        raise HTTPException(status_code=400, detail="No commit hashes provided")
+
+    config = load_config_decrypted()
+    repo = next((r for r in config.repositories if r.name == repo_name), None)
+    if not repo:
+        raise HTTPException(status_code=404,
+                            detail=f"Repository '{repo_name}' not found in config")
+
+    # Validate all hashes exist
+    for h in hashes:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", h],
+            cwd=repo.path,
+            capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode != 0:
+            raise HTTPException(status_code=400,
+                                detail=f"Commit '{h}' not found in {repo_name}")
+
+    title = f"{len(hashes)} commit{'s' if len(hashes) != 1 else ''}"
+    return {
+        "type": "commits",
+        "id": item_id,
+        "title": title,
+        "label": title,
+        "repo_name": repo_name,
+        "hashes": hashes,
+    }
 
 
 def _resolve_repo_file(item_id: str) -> dict:
@@ -955,4 +1162,26 @@ def _resolve_repo_file(item_id: str) -> dict:
         "label": rel_path,
         "repo_name": repo_name,
         "file_path": rel_path,
+    }
+
+
+def _resolve_bitbucket_pr(pr_url: str) -> dict:
+    from app.bitbucket_client import parse_pr_url
+    from app.bitbucket_service import BitbucketService
+
+    workspace, repo_slug, pr_id = parse_pr_url(pr_url)
+    cache = _get_cache()
+    config = load_config_decrypted()
+    svc = BitbucketService(config.atlassian, cache)
+    cached = cache.read(svc.pr_path(workspace, repo_slug, pr_id))
+    if not cached:
+        raise HTTPException(
+            status_code=404,
+            detail="PR not in cache. Import it first via the browser-paste flow.",
+        )
+    return {
+        "type": "bitbucket_pr",
+        "id": pr_url,
+        "title": f"{workspace}/{repo_slug}#{pr_id}",
+        "label": cached.get("title", f"PR #{pr_id}"),
     }

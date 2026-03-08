@@ -1,0 +1,290 @@
+<div class="add-item-panel">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <small class="fw-semibold">Add Item</small>
+    <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="cancel.emit()"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="mb-2">
+    <select class="form-select form-select-sm" [ngModel]="mode()" (ngModelChange)="switchType($event)">
+      <option value="picking" disabled>-- Select type --</option>
+      <option value="confluence_page">Confluence Page</option>
+      <option value="jira_issue">Jira Issue</option>
+      <option value="git_repo">Git Repository</option>
+      <option value="repo_file">Repository File</option>
+      <option value="bitbucket_pr">Bitbucket PR</option>
+      <option value="commits">Commits</option>
+      <option value="instructions">Instructions</option>
+      <option value="mixin">Mixin</option>
+    </select>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-danger alert-sm py-1 px-2 small mb-2">{{ error() }}</div>
+  }
+
+  @if (mode() === 'confluence_page') {
+    <div class="mb-2">
+      <select class="form-select form-select-sm" [ngModel]="selectedSpaceKey()" (ngModelChange)="selectSpace($event)">
+        <option value="">-- Select Space --</option>
+        @for (space of spaces(); track space.key) {
+          <option [value]="space.key">{{ space.name || space.key }}</option>
+        }
+      </select>
+    </div>
+    @if (loadingPages()) {
+      <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+    } @else if (pageTree().length > 0) {
+      <div class="page-tree-box">
+        <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: pageTree(), depth: 0 }"></ng-container>
+      </div>
+    }
+    @if (selectedPage()) {
+      <div class="mt-2">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="bi bi-check-circle text-success"></i>
+          <small>{{ selectedPage()!.title }}</small>
+        </div>
+        <div class="d-flex gap-2">
+          <input type="text" class="form-control form-control-sm" placeholder="Label..."
+                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)">
+          <button class="btn btn-primary btn-sm" (click)="addConfluencePage()" [disabled]="adding()">
+            @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+          </button>
+        </div>
+      </div>
+    }
+  }
+
+  @if (mode() === 'jira_issue') {
+    <div class="mb-2">
+      <input type="text" class="form-control form-control-sm" placeholder="Issue key (e.g. PROJ-123)"
+             [ngModel]="issueKey()" (ngModelChange)="issueKey.set($event)"
+             (keydown)="onIssueKeydown($event)" [disabled]="adding()">
+    </div>
+    <div class="d-flex gap-2">
+      <input type="text" class="form-control form-control-sm" placeholder="Label (optional, defaults to issue summary)"
+             [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+      <button class="btn btn-primary btn-sm" (click)="addJiraIssue()" [disabled]="!issueKey().trim() || adding()">
+        @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+      </button>
+    </div>
+  }
+
+  @if (mode() === 'git_repo') {
+    <div class="mb-2">
+      <select class="form-select form-select-sm" [ngModel]="selectedRepoName()" (ngModelChange)="selectRepo($event)">
+        <option value="">-- Select Repository --</option>
+        @for (repo of repos(); track repo.name) {
+          <option [value]="repo.name">{{ repo.name }}</option>
+        }
+      </select>
+    </div>
+    @if (selectedRepoName()) {
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" placeholder="Label..."
+               [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+        <button class="btn btn-primary btn-sm" (click)="addGitRepo()" [disabled]="adding()">
+          @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+        </button>
+      </div>
+    }
+  }
+
+  @if (mode() === 'repo_file') {
+    <div class="mb-2">
+      <select class="form-select form-select-sm" [ngModel]="repoFileRepoName()" (ngModelChange)="selectRepoFileRepo($event)">
+        <option value="">-- Select Repository --</option>
+        @for (repo of repos(); track repo.name) {
+          <option [value]="repo.name">{{ repo.name }}</option>
+        }
+      </select>
+    </div>
+    @if (repoFileRepoName()) {
+      @if (repoTreeLoading()) {
+        <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
+      } @else if (repoTree().length > 0) {
+        <div class="page-tree-box mb-2">
+          <ng-container *ngTemplateOutlet="repoFileTreeTpl; context: { nodes: repoTree(), depth: 0 }"></ng-container>
+        </div>
+      }
+      @if (repoFilePath()) {
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="bi bi-check-circle text-success"></i>
+          <small class="text-truncate">{{ repoFilePath() }}</small>
+        </div>
+        <div class="d-flex gap-2">
+          <input type="text" class="form-control form-control-sm" placeholder="Label (defaults to file path)"
+                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+          <button class="btn btn-primary btn-sm" (click)="addRepoFile()" [disabled]="!repoFilePath().trim() || adding()">
+            @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+          </button>
+        </div>
+      }
+    }
+  }
+
+  @if (mode() === 'bitbucket_pr') {
+    <div class="mb-2">
+      <input type="text" class="form-control form-control-sm"
+             placeholder="Bitbucket PR URL (e.g. https://bitbucket.org/workspace/repo/pull-requests/123)"
+             [ngModel]="bitbucketPrUrl()" (ngModelChange)="bitbucketPrUrl.set($event)" [disabled]="adding()">
+    </div>
+    @if (bitbucketApiUrls(); as urls) {
+      <div class="mb-2">
+        <small class="text-muted d-block mb-1">Open each link in your browser (SSO), copy the JSON, and paste below:</small>
+        <div class="d-flex flex-column gap-1">
+          <a [href]="urls.pr" target="_blank" class="small text-break">
+            <i class="bi bi-box-arrow-up-right me-1"></i>PR metadata JSON
+          </a>
+          <a [href]="urls.comments" target="_blank" class="small text-break">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Comments JSON
+          </a>
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">PR metadata JSON</label>
+        <textarea class="form-control form-control-sm font-monospace" rows="3"
+                  placeholder="Paste PR JSON here..."
+                  [ngModel]="bitbucketPrJson()" (ngModelChange)="bitbucketPrJson.set($event)" [disabled]="adding()"></textarea>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">Comments JSON</label>
+        <textarea class="form-control form-control-sm font-monospace" rows="3"
+                  placeholder="Paste Comments JSON here..."
+                  [ngModel]="bitbucketCommentsJson()" (ngModelChange)="bitbucketCommentsJson.set($event)" [disabled]="adding()"></textarea>
+      </div>
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" placeholder="Label (optional)"
+               [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+        <button class="btn btn-primary btn-sm"
+                (click)="importBitbucketPr()"
+                [disabled]="!bitbucketPrJson().trim() || !bitbucketCommentsJson().trim() || adding()">
+          @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> Add }
+        </button>
+      </div>
+    }
+  }
+
+  @if (mode() === 'commits') {
+    <div class="mb-2">
+      <select class="form-select form-select-sm" [ngModel]="commitsRepoName()" (ngModelChange)="selectCommitsRepo($event)">
+        <option value="">-- Select Repository --</option>
+        @for (repo of repos(); track repo.name) {
+          <option [value]="repo.name">{{ repo.name }}</option>
+        }
+      </select>
+    </div>
+    @if (commitsRepoName()) {
+      <div class="mb-2">
+        <label class="form-label small mb-1">Commit hashes (one per line or comma-separated)</label>
+        <textarea class="form-control form-control-sm font-monospace" rows="4"
+                  placeholder="abc1234&#10;def5678&#10;..."
+                  [ngModel]="commitsHashes()" (ngModelChange)="commitsHashes.set($event)" [disabled]="adding()"></textarea>
+      </div>
+      @if (commitsHashes().trim()) {
+        <div class="d-flex gap-2">
+          <input type="text" class="form-control form-control-sm" placeholder="Label (optional)"
+                 [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+          <button class="btn btn-primary btn-sm" (click)="addCommits()" [disabled]="adding()">
+            @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+          </button>
+        </div>
+      }
+    }
+  }
+
+  @if (mode() === 'instructions') {
+    <div class="mb-2">
+      <textarea class="form-control form-control-sm" rows="4" placeholder="Enter your instructions..."
+                [ngModel]="instructionsText()" (ngModelChange)="instructionsText.set($event)"
+                [disabled]="adding()"></textarea>
+    </div>
+    <div class="d-flex gap-2">
+      <input type="text" class="form-control form-control-sm" placeholder="Label (optional)"
+             [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+      <button class="btn btn-primary btn-sm" (click)="addInstructions()" [disabled]="!instructionsText().trim() || adding()">
+        @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+      </button>
+    </div>
+  }
+
+  @if (mode() === 'mixin') {
+    <div class="mb-2">
+      <select class="form-select form-select-sm" [ngModel]="selectedMixinPath()" (ngModelChange)="selectMixinPath($event)">
+        <option value="">-- Select Context --</option>
+        @for (path of mixinPaths(); track path) {
+          <option [value]="path">{{ path }}</option>
+        }
+      </select>
+    </div>
+    @if (selectedMixinPath()) {
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-check-circle text-success"></i>
+        <small>{{ selectedMixinPath() }}</small>
+      </div>
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" placeholder="Label..."
+               [ngModel]="itemLabel()" (ngModelChange)="itemLabel.set($event)" [disabled]="adding()">
+        <button class="btn btn-primary btn-sm" (click)="addMixin()" [disabled]="adding()">
+          @if (adding()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-plus-lg"></i> }
+        </button>
+      </div>
+    }
+  }
+</div>
+
+<!-- Recursive page tree template for Confluence picker -->
+<ng-template #pageTreeTpl let-pages="pages" let-depth="depth">
+  @for (page of pages; track page.id) {
+    <div class="tree-node" [style.padding-left.rem]="0.5 + depth * 1">
+      @if (page.children.length > 0) {
+        <button class="tree-toggle" (click)="toggleNode(page.id)">
+          <i class="bi" [class.bi-chevron-right]="!isExpanded(page.id)" [class.bi-chevron-down]="isExpanded(page.id)"></i>
+        </button>
+      } @else {
+        <span class="tree-spacer"></span>
+      }
+      <a class="tree-link" (click)="selectConfluencePage(page.id, page.title)"
+         [class.disabled]="adding()"
+         [class.selected]="selectedPage()?.id === page.id"
+         title="Click to select">
+        <i class="bi bi-file-text"></i>
+        {{ page.title }}
+      </a>
+    </div>
+    @if (page.children.length > 0 && isExpanded(page.id)) {
+      <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: page.children, depth: depth + 1 }"></ng-container>
+    }
+  }
+</ng-template>
+
+<!-- Recursive file tree template for Repo File picker -->
+<ng-template #repoFileTreeTpl let-nodes="nodes" let-depth="depth">
+  @for (node of nodes; track node.path) {
+    <div class="tree-node" [style.padding-left.rem]="0.5 + depth * 1">
+      @if (node.type === 'dir') {
+        <button class="tree-toggle" (click)="toggleRepoTreeNode(node)">
+          <i class="bi" [class.bi-chevron-right]="!isRepoTreeExpanded(node.path)"
+             [class.bi-chevron-down]="isRepoTreeExpanded(node.path)"></i>
+        </button>
+      } @else {
+        <span class="tree-spacer"></span>
+      }
+      @if (node.type === 'dir') {
+        <a class="tree-link" (click)="toggleRepoTreeNode(node)">
+          <i class="bi bi-folder{{ isRepoTreeExpanded(node.path) ? '2-open' : '' }}"></i>
+          {{ node.name }}
+        </a>
+      } @else {
+        <a class="tree-link" (click)="selectRepoFile(node)"
+           [class.selected]="repoFilePath() === node.path"
+           [class.disabled]="adding()">
+          <i class="bi bi-file-code"></i>
+          {{ node.name }}
+        </a>
+      }
+    </div>
+    @if (node.type === 'dir' && isRepoTreeExpanded(node.path) && node.children.length > 0) {
+      <ng-container *ngTemplateOutlet="repoFileTreeTpl; context: { nodes: node.children, depth: depth + 1 }"></ng-container>
+    }
+  }
+</ng-template>

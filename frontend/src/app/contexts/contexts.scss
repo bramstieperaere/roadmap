@@ -2,13 +2,22 @@
   display: flex;
   flex-direction: column;
   height: calc(100vh - 46px);
+  overflow: hidden;
 
   .section-content {
     flex: 1;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     padding: 1.5rem 2rem;
     max-width: 800px;
   }
+}
+
+.context-list-wrapper {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .context-list {
@@ -56,14 +65,33 @@
   opacity: 0.6;
 }
 
-.add-child-btn {
+.context-done {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.action-btn {
   padding: 0.1rem 0.25rem;
   line-height: 1;
   opacity: 0;
   transition: opacity 0.15s;
 
-  .context-link:hover & {
+  .context-link:hover &,
+  .child-link:hover & {
     opacity: 1;
+  }
+}
+
+.dropdown-menu {
+  position: fixed;
+  transform: translateX(-100%);
+  font-size: 0.8125rem;
+  min-width: 10rem;
+  z-index: 1050;
+
+  .dropdown-item:hover,
+  .dropdown-item:focus {
+    background-color: #f8f9fa;
   }
 }
 

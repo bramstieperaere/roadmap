@@ -1,10 +1,14 @@
 """MCP server for exposing contexts to AI assistants.
 
-Provides a `get_context` tool that assembles the full content
-of a named context from cached Confluence pages and Jira issues.
+Provides tools for granular context access:
+- ``get_context_toc``: lightweight table of contents with byte sizes
+- ``get_context_item``: fetch a single item by index
+- ``get_context``: fetch everything at once
+- ``list_contexts``: discover available context names
 """
 
 import json
+import subprocess
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -15,6 +19,8 @@ from starlette.types import Receive, Scope, Send
 
 from app.config import CONFIG_PATH, load_config_decrypted
 from app.jira_cache import JiraCache
+from app.jira_issue_service import JiraIssueService
+from app.bitbucket_service import BitbucketService
 from app.analyzers.functional_doc import _clean_confluence_html
 
 mcp = FastMCP("roadmap")
@@ -31,13 +37,19 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
         if item_type == "confluence_page":
             content = _render_confluence_page(cache, config, item_id, label)
         elif item_type == "jira_issue":
-            content = _render_jira_issue(cache, item_id, label)
+            content = _render_jira_issue(
+                JiraIssueService(config.atlassian, cache), item_id, label)
         elif item_type == "instructions":
             content = _render_instructions(label, item.get("text", ""))
         elif item_type == "git_repo":
             content = _render_git_repo(item_id, label, item.get("path", ""))
         elif item_type == "repo_file":
             content = _render_repo_file(item, config)
+        elif item_type == "bitbucket_pr":
+            content = _render_bitbucket_pr(
+                BitbucketService(config.atlassian, cache), item_id, label)
+        elif item_type == "commits":
+            content = _render_commits(item, config)
         else:
             content = f"Unknown item: {item_type} / {item_id}"
 
@@ -119,7 +131,75 @@ _TYPE_LABELS = {
     "instructions": "Instructions",
     "git_repo": "Git Repo",
     "repo_file": "File",
+    "bitbucket_pr": "Bitbucket",
+    "commits": "Commits",
 }
+
+
+def _build_toc(name: str, sections: list[dict], include_hint: bool = True) -> str:
+    """Build a table of contents string with byte sizes per item."""
+    n = len(sections)
+    sizes = [len(s["content"].encode("utf-8")) for s in sections]
+    total = sum(sizes)
+    lines = [
+        f"# Context: {name}",
+        "",
+        f"Items ({n} total, ~{total:,} bytes):",
+    ]
+    for i, s in enumerate(sections):
+        type_label = _TYPE_LABELS.get(s["type"], s["type"])
+        lines.append(f"  {i}. [{type_label}] {s['label']} ({sizes[i]:,} bytes)")
+    if include_hint:
+        lines.append("")
+        lines.append(
+            "Use get_context_item(name, item_index) to fetch individual items, "
+            "or get_context(name) to fetch everything at once."
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_context_toc(name: str) -> str:
+    """Get a lightweight table of contents for a named context.
+
+    Returns item names, types, and byte sizes without content.
+    Use this to decide which items to fetch individually.
+    """
+    sections = render_context_sections(name)
+    if not sections:
+        ctx_path = CONFIG_PATH.parent / "contexts" / f"{name}.json"
+        if not ctx_path.exists():
+            return f"Context '{name}' not found."
+        return f"Context '{name}' exists but has no items."
+
+    return _build_toc(name, sections, include_hint=True)
+
+
+@mcp.tool()
+def get_context_item(name: str, item_index: int) -> str:
+    """Fetch a single item from a context by its 0-based index.
+
+    Use get_context_toc(name) first to see available indices.
+    """
+    sections = render_context_sections(name)
+    if not sections:
+        ctx_path = CONFIG_PATH.parent / "contexts" / f"{name}.json"
+        if not ctx_path.exists():
+            return f"Context '{name}' not found."
+        return f"Context '{name}' exists but has no items."
+
+    if item_index < 0 or item_index >= len(sections):
+        return (
+            f"Invalid item_index {item_index}. Context '{name}' has "
+            f"{len(sections)} items (indices 0-{len(sections) - 1})."
+        )
+
+    s = sections[item_index]
+    return (
+        f"######### {s['label']} BEGIN #########\n\n"
+        f"{s['content']}\n\n"
+        f"######### {s['label']} END #########"
+    )
 
 
 @mcp.tool()
@@ -136,20 +216,11 @@ def get_context(name: str) -> str:
             return f"Context '{name}' not found."
         return f"Context '{name}' exists but has no items."
 
-    # Table of contents
-    n = len(sections)
+    toc = _build_toc(name, sections, include_hint=False)
+
     first_label = sections[0]["label"]
-    toc_lines = [
-        f"# Context: {name}",
-        "",
-        f"This context contains {n} item{'s' if n != 1 else ''}:",
-    ]
-    for i, s in enumerate(sections, 1):
-        type_label = _TYPE_LABELS.get(s["type"], s["type"])
-        toc_lines.append(f"{i}. [{type_label}] {s['label']}")
-    toc_lines.append("")
-    toc_lines.append(
-        f"Each item is delimited by ######### <item name> BEGIN ######### "
+    delimiter_hint = (
+        f"\nEach item is delimited by ######### <item name> BEGIN ######### "
         f"and ######### <item name> END #########. "
         f"For example: ######### {first_label} BEGIN #########"
     )
@@ -163,7 +234,7 @@ def get_context(name: str) -> str:
             f"######### {s['label']} END #########"
         )
 
-    return "\n".join(toc_lines) + "\n\n" + "\n\n".join(parts)
+    return toc + delimiter_hint + "\n\n" + "\n\n".join(parts)
 
 
 @mcp.tool()
@@ -207,18 +278,11 @@ def _render_confluence_page(cache: JiraCache, config, page_id: str,
     return f"## {label} (Confluence Page)\n**Page ID:** {page_id}\n\n(Page not found in cache)"
 
 
-def _render_jira_issue(cache: JiraCache, issue_key: str, label: str) -> str:
+def _render_jira_issue(svc: JiraIssueService, issue_key: str, label: str) -> str:
     """Render a Jira issue's content as text."""
-    parts = issue_key.split("-", 1)
-    if len(parts) != 2:
-        return f"## {label} ({issue_key})\n\n(Invalid issue key format)"
-
-    project_key = parts[0]
-    p = cache.issue_path(project_key, issue_key)
-    if not p.exists():
-        return f"## {label} ({issue_key})\n\n(Issue not found in cache)"
-
-    data = json.loads(p.read_text(encoding="utf-8"))
+    data = svc.get_issue(issue_key)
+    if not data:
+        return f"## {label} ({issue_key})\n\n(Issue not found)"
     lines = [
         f"## {label} ({issue_key})",
         f"**Status:** {data.get('status', 'Unknown')} | "
@@ -256,6 +320,57 @@ def _render_git_repo(repo_name: str, label: str, path: str) -> str:
         f"**Repository:** {repo_name}\n"
         f"**Checkout path:** {path}"
     )
+
+
+def _render_commits(item: dict, config) -> str:
+    """Render a list of commits by their hashes via live git show."""
+    repo_name = item.get("repo_name", "")
+    hashes = item.get("hashes", [])
+    label = item.get("label", item.get("title", "Commits"))
+
+    repo = next((r for r in config.repositories if r.name == repo_name), None)
+    if not repo:
+        return f"## {label} (Commits)\n\nRepository '{repo_name}' not found in config."
+
+    if not hashes:
+        return f"## {label} (Commits)\n\nNo commits specified."
+
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--no-walk", "--format=%h %aI %an\t%s"] + hashes,
+            cwd=repo.path,
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30,
+        )
+    except Exception as e:
+        return f"## {label} (Commits)\n\nFailed to run git log: {e}"
+
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()
+        return f"## {label} (Commits)\n\nGit error: {err}"
+
+    lines = [l for l in (proc.stdout or "").strip().splitlines() if l.strip()]
+    header = (
+        f"## {label} (Commits)\n"
+        f"**Repository:** {repo_name}\n"
+        f"**Commits:** {len(lines)}\n"
+    )
+
+    commits = []
+    for line in lines:
+        tab_idx = line.find("\t")
+        if tab_idx == -1:
+            commits.append(f"- {line}")
+            continue
+        meta, message = line[:tab_idx], line[tab_idx + 1:]
+        parts = meta.split(" ", 2)
+        if len(parts) >= 3:
+            short_hash, date, author = parts[0], parts[1][:10], parts[2]
+            commits.append(f"- `{short_hash}` {date} {author} — {message}")
+        else:
+            commits.append(f"- {line}")
+
+    return header + "\n" + "\n".join(commits)
 
 
 _MAX_FILE_SIZE = 512 * 1024  # 512 KB
@@ -301,6 +416,46 @@ def _render_repo_file(item: dict, config) -> str:
         f"**Repository:** {repo_name} | **Path:** {rel_path}\n\n"
         f"```{lang}\n{content}\n```"
     )
+
+
+def _render_bitbucket_pr(svc: BitbucketService, pr_url: str, label: str) -> str:
+    """Render a Bitbucket PR with comments as text."""
+    from app.bitbucket_client import parse_pr_url
+    workspace, repo_slug, pr_id = parse_pr_url(pr_url)
+    data = svc.get_pr(workspace, repo_slug, pr_id)
+    if not data:
+        return f"## {label} (Bitbucket PR)\n\n(PR not found)"
+
+    lines = [
+        f"## {label} ({workspace}/{repo_slug}#{pr_id})",
+        f"**State:** {data.get('state', 'Unknown')} | "
+        f"**Author:** {data.get('author', 'Unknown')}",
+        f"**Branch:** {data.get('source_branch', '?')} -> {data.get('destination_branch', '?')}",
+    ]
+
+    desc = data.get("description", "")
+    if desc:
+        lines.append(f"\n### Description\n{desc}")
+
+    comments = data.get("comments", [])
+    if comments:
+        shown = comments[:20]
+        lines.append(f"\n### Comments ({len(comments)})")
+        for c in shown:
+            location = ""
+            if c.get("file"):
+                location = f" `{c['file']}"
+                if c.get("line"):
+                    location += f":{c['line']}"
+                location += "`"
+            lines.append(
+                f"\n**{c.get('author', 'Unknown')}** "
+                f"({c.get('created', '')[:10]}){location}:\n{c.get('body', '')}"
+            )
+        if len(comments) > 20:
+            lines.append(f"\n... and {len(comments) - 20} more comments")
+
+    return "\n".join(lines)
 
 
 def create_mcp_sse_app() -> Starlette:

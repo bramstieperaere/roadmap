@@ -9,8 +9,9 @@ class JobStore:
     def __init__(self):
         self._jobs: dict[str, Job] = {}
 
-    def create_job(self, repo_path: str, repo_index: int,
-                   module_name: str, module_type: str) -> Job:
+    def create_job(self, repo_path: str = "", repo_index: int = -1,
+                   module_name: str = "", module_type: str = "",
+                   params: dict | None = None) -> Job:
         job_id = str(uuid.uuid4())[:8]
         job = Job(
             id=job_id,
@@ -18,6 +19,7 @@ class JobStore:
             repo_index=repo_index,
             module_name=module_name,
             module_type=module_type,
+            params=params or {},
             status=JobStatus.PENDING,
             created_at=datetime.now(timezone.utc),
         )

@@ -166,11 +166,30 @@
                        (input)="updateAtlassianField('refresh_duration', $any($event.target).value)"
                        data-testid="atlassian-refresh-duration">
               </div>
+              <div class="col-12"><hr class="my-1"><small class="text-muted">Bitbucket Cloud (app password)</small></div>
+              <div class="col-md-6">
+                <label class="form-label">Bitbucket Username</label>
+                <input type="text" class="form-control" placeholder="bitbucket username"
+                       [value]="config().atlassian.bitbucket_username"
+                       (input)="updateAtlassianField('bitbucket_username', $any($event.target).value)"
+                       data-testid="bitbucket-username">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Bitbucket App Password</label>
+                <input type="password" class="form-control"
+                       [value]="config().atlassian.bitbucket_app_password"
+                       (input)="updateAtlassianField('bitbucket_app_password', $any($event.target).value)"
+                       data-testid="bitbucket-app-password">
+              </div>
             </div>
-            <div class="mt-3">
+            <div class="mt-3 d-flex gap-2">
               <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
                 <i class="bi bi-plug me-1"></i>
-                {{ testingAtlassian() ? 'Testing...' : 'Test Connection' }}
+                {{ testingAtlassian() ? 'Testing...' : 'Test Jira / Confluence' }}
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
+                <i class="bi bi-git me-1"></i>
+                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
               </button>
             </div>
           } @else {
@@ -204,11 +223,26 @@
                 <label class="form-label">Cache Refresh</label>
                 <div class="field-value" data-testid="atlassian-refresh-duration-value">{{ config().atlassian.refresh_duration }}s</div>
               </div>
+              @if (config().atlassian.bitbucket_username) {
+                <div class="col-12"><hr class="my-1"><small class="text-muted">Bitbucket Cloud</small></div>
+                <div class="col-md-6">
+                  <label class="form-label">Bitbucket Username</label>
+                  <div class="field-value" data-testid="bitbucket-username-value">{{ config().atlassian.bitbucket_username }}</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Bitbucket App Password</label>
+                  <div class="field-value" data-testid="bitbucket-app-password-value">{{ config().atlassian.bitbucket_app_password ? '••••••••' : '—' }}</div>
+                </div>
+              }
             </div>
-            <div class="mt-3">
+            <div class="mt-3 d-flex gap-2">
               <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
                 <i class="bi bi-plug me-1"></i>
-                {{ testingAtlassian() ? 'Testing...' : 'Test Connection' }}
+                {{ testingAtlassian() ? 'Testing...' : 'Test Jira / Confluence' }}
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
+                <i class="bi bi-git me-1"></i>
+                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
               </button>
             </div>
           }
@@ -412,34 +446,104 @@
         <div data-testid="repositories-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="section-title mb-0"><i class="bi bi-folder2-open me-2"></i>Repositories</h6>
-            <button class="btn btn-outline-primary btn-sm" (click)="addRepository()" [disabled]="editingSection() !== null" data-testid="add-repository">
-              <i class="bi bi-plus-lg me-1"></i>Add Repository
-            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" (click)="startImport()" [disabled]="editingSection() !== null || importing()" data-testid="import-from-folder">
+                <i class="bi bi-folder-plus me-1"></i>Import from Folder
+              </button>
+              <button class="btn btn-outline-primary btn-sm" (click)="addRepository()" [disabled]="editingSection() !== null || importing()" data-testid="add-repository">
+                <i class="bi bi-plus-lg me-1"></i>Add Repository
+              </button>
+            </div>
           </div>
+
+          @if (allTags().length > 0) {
+            <div class="tag-filter-bar mb-2" data-testid="tag-filter-bar">
+              <small class="text-muted me-2">Filter by tag:</small>
+              @for (tag of allTags(); track tag) {
+                <button class="tag-chip"
+                        [class.active]="tagFilter().includes(tag)"
+                        (click)="toggleTagFilter(tag)"
+                        [attr.data-testid]="'tag-filter-' + tag">
+                  {{ tag }}
+                </button>
+              }
+              @if (tagFilter().length > 0) {
+                <button class="btn btn-link btn-sm text-muted p-0 ms-2" (click)="clearTagFilter()">
+                  <i class="bi bi-x-circle me-1"></i>Clear
+                </button>
+              }
+            </div>
+          }
 
           <div class="repo-layout">
             <!-- Repo list -->
             <div class="repo-list">
-              @for (repo of config().repositories; track $index) {
+              @for (item of filteredRepositories(); track item.index) {
                 <button
                   class="repo-item"
-                  [class.active]="selectedRepoIndex() === $index"
-                  (click)="selectRepo($index)"
-                  [attr.data-testid]="'repo-' + $index"
+                  [class.active]="selectedRepoIndex() === item.index"
+                  (click)="selectRepo(item.index)"
+                  [attr.data-testid]="'repo-' + item.index"
                 >
                   <i class="bi bi-folder2"></i>
-                  <span class="repo-item-name">{{ repo.name || 'New repository' }}</span>
-                  <span class="repo-item-count">{{ repo.modules.length }}</span>
+                  <span class="repo-item-name">{{ item.repo.name || 'New repository' }}</span>
+                  <span class="repo-item-count">{{ item.repo.modules.length }}</span>
                 </button>
               }
               @empty {
-                <p class="text-muted small px-3 py-2 mb-0" data-testid="no-repos-message">No repositories configured.</p>
+                <p class="text-muted small px-3 py-2 mb-0" data-testid="no-repos-message">
+                  @if (tagFilter().length > 0) {
+                    No repositories match the selected tags.
+                  } @else {
+                    No repositories configured.
+                  }
+                </p>
               }
             </div>
 
             <!-- Repo detail -->
             <div class="repo-detail">
-              @if (selectedRepoIndex() !== null && config().repositories[selectedRepoIndex()!]; as repo) {
+              @if (importing()) {
+                <!-- ─── IMPORT PANEL ─── -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <span class="fw-semibold">Import from Folder</span>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" (click)="confirmImport()" data-testid="confirm-import">
+                      <i class="bi bi-check-lg me-1"></i>Add Selected
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelImport()" data-testid="cancel-import">Cancel</button>
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Parent folder</label>
+                  <div class="field-value" data-testid="import-parent-path">{{ importParentPath() }}</div>
+                </div>
+                <div class="d-flex gap-2 mb-2">
+                  <button class="btn btn-outline-secondary btn-sm" (click)="importSelectAll()" data-testid="import-select-all">Select All</button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="importSelectNone()" data-testid="import-select-none">None</button>
+                </div>
+                <div class="list-group" data-testid="import-folder-list">
+                  @for (folder of importFolders(); track folder.name) {
+                    @let i = $index;
+                    <label class="list-group-item d-flex align-items-center gap-2"
+                           [class.disabled]="folder.alreadyAdded"
+                           [attr.data-testid]="'import-folder-' + i">
+                      <input type="checkbox" class="form-check-input mt-0"
+                             [checked]="folder.selected"
+                             [disabled]="folder.alreadyAdded"
+                             (change)="toggleImportFolder(i)">
+                      <i class="bi" [class.bi-folder-fill]="folder.alreadyAdded" [class.bi-folder]="!folder.alreadyAdded"></i>
+                      <span>{{ folder.name }}</span>
+                      @if (folder.alreadyAdded) {
+                        <span class="badge bg-secondary ms-auto">already added</span>
+                      }
+                    </label>
+                  }
+                  @empty {
+                    <p class="text-muted small mb-0">No subfolders found.</p>
+                  }
+                </div>
+              } @else if (selectedRepoIndex() !== null && config().repositories[selectedRepoIndex()!]; as repo) {
                 @let repoIndex = selectedRepoIndex()!;
 
                 @if (editingSection() === 'repo-' + repoIndex) {
@@ -477,6 +581,37 @@
                       <button class="btn btn-outline-danger btn-sm" (click)="removeRepository(repoIndex)" title="Remove repository"
                               [attr.data-testid]="'remove-repo-' + repoIndex">
                         <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Tags -->
+                  <div class="mb-3">
+                    <label class="form-label">Tags</label>
+                    <div class="d-flex flex-wrap gap-1 mb-1">
+                      @for (tag of repo.tags || []; track tag) {
+                        <span class="tag-badge" [attr.data-testid]="'repo-tag-' + tag">
+                          {{ tag }}
+                          <button type="button" class="btn-close btn-close-sm ms-1"
+                                  (click)="removeTagFromRepo(repoIndex, tag)"></button>
+                        </span>
+                      }
+                    </div>
+                    <div class="input-group input-group-sm" style="max-width: 280px">
+                      <input type="text" class="form-control" placeholder="Add tag..."
+                             [value]="tagInput()"
+                             (input)="tagInput.set($any($event.target).value)"
+                             (keydown.enter)="addTagToRepo(repoIndex, tagInput()); tagInput.set(''); $event.preventDefault()"
+                             list="existing-tags"
+                             [attr.data-testid]="'repo-tag-input'">
+                      <datalist id="existing-tags">
+                        @for (t of allTags(); track t) {
+                          <option [value]="t"></option>
+                        }
+                      </datalist>
+                      <button class="btn btn-outline-secondary" type="button"
+                              (click)="addTagToRepo(repoIndex, tagInput()); tagInput.set('')">
+                        <i class="bi bi-plus"></i>
                       </button>
                     </div>
                   </div>
@@ -574,6 +709,17 @@
                       <div class="field-value">{{ repo.path }}</div>
                     </div>
                   </div>
+
+                  @if (repo.tags?.length) {
+                    <div class="mb-3">
+                      <label class="form-label">Tags</label>
+                      <div class="d-flex flex-wrap gap-1">
+                        @for (tag of repo.tags; track tag) {
+                          <span class="tag-badge-readonly">{{ tag }}</span>
+                        }
+                      </div>
+                    </div>
+                  }
 
                   @if (repo.modules.length > 0) {
                     <small class="text-muted fw-semibold text-uppercase d-block mb-2">Modules</small>

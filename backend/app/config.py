@@ -30,13 +30,27 @@ def load_config_decrypted() -> AppConfig:
         config.neo4j.password = decrypt_value(config.neo4j.password, key)
     if is_encrypted(config.atlassian.api_token):
         config.atlassian.api_token = decrypt_value(config.atlassian.api_token, key)
+    if is_encrypted(config.atlassian.bitbucket_app_password):
+        config.atlassian.bitbucket_app_password = decrypt_value(config.atlassian.bitbucket_app_password, key)
     for provider in config.ai_providers:
         if is_encrypted(provider.api_key):
             provider.api_key = decrypt_value(provider.api_key, key)
     return config
 
 
+def _normalize_path(p: str) -> str:
+    """Normalize a filesystem path to the OS-native separator."""
+    if not p:
+        return p
+    return str(Path(p))
+
+
 def save_config(config: AppConfig) -> None:
+    for repo in config.repositories:
+        repo.path = _normalize_path(repo.path)
+        for mod in repo.modules:
+            mod.relative_path = _normalize_path(mod.relative_path)
+    config.atlassian.cache_dir = _normalize_path(config.atlassian.cache_dir)
     key = session.get_key()
     if key:
         if not config.encryption_salt:
@@ -46,6 +60,8 @@ def save_config(config: AppConfig) -> None:
             config.neo4j.password = encrypt_value(config.neo4j.password, key)
         if config.atlassian.api_token and not is_encrypted(config.atlassian.api_token):
             config.atlassian.api_token = encrypt_value(config.atlassian.api_token, key)
+        if config.atlassian.bitbucket_app_password and not is_encrypted(config.atlassian.bitbucket_app_password):
+            config.atlassian.bitbucket_app_password = encrypt_value(config.atlassian.bitbucket_app_password, key)
         for provider in config.ai_providers:
             if not is_encrypted(provider.api_key):
                 provider.api_key = encrypt_value(provider.api_key, key)

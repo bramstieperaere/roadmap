@@ -20,6 +20,7 @@ class ModuleConfig(BaseModel):
 class RepositoryConfig(BaseModel):
     name: str = ""
     path: str
+    tags: list[str] = []
     modules: list[ModuleConfig] = []
 
 
@@ -39,6 +40,8 @@ class AtlassianConfig(BaseModel):
     base_url: str = ""
     email: str = ""
     api_token: str = ""
+    bitbucket_username: str = ""
+    bitbucket_app_password: str = ""
     jira_projects: list[JiraProjectConfig] = []
     confluence_spaces: list[ConfluenceSpaceConfig] = []
     cache_dir: str = ""

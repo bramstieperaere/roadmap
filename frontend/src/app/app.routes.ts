@@ -5,7 +5,7 @@ import { JobsListComponent } from './jobs/jobs-list';
 import { JobDetailComponent } from './jobs/job-detail';
 
 export const routes: Routes = [
-  { path: '', redirectTo: 'query', pathMatch: 'full' },
+  { path: '', redirectTo: 'contexts', pathMatch: 'full' },
   { path: 'home', component: Home },
   { path: 'settings', component: SettingsComponent },
   { path: 'jobs', component: JobsListComponent },
@@ -37,6 +37,7 @@ export const routes: Routes = [
     path: 'confluence/:spaceKey/page/:id',
     loadComponent: () => import('./confluence/confluence-page').then(m => m.ConfluencePageComponent),
   },
+  { path: 'git-mining', loadComponent: () => import('./git-mining/git-mining').then(m => m.GitMiningComponent) },
   { path: 'contexts', loadComponent: () => import('./contexts/contexts').then(m => m.ContextsComponent) },
   { path: 'contexts/:name', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },
   { path: 'contexts/:name/:child', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },

@@ -1,9 +1,10 @@
-import { Component, inject, OnInit, signal, DestroyRef } from '@angular/core';
+import { Component, computed, inject, OnInit, signal, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, AtlassianConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
 import { EncryptionService } from '../services/encryption';
+import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 import { JobsService } from '../services/jobs';
 
 @Component({
@@ -18,16 +19,18 @@ export class SettingsComponent implements OnInit {
   private jobsService = inject(JobsService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
+  private confirmDialog = inject(ConfirmDialogService);
 
   config = signal<AppConfig>({
     neo4j: { uri: '', username: '', password: '', database: '' },
-    atlassian: { deployment_type: 'cloud', base_url: '', email: '', api_token: '', jira_projects: [], confluence_spaces: [], cache_dir: '', refresh_duration: 3600 },
+    atlassian: { deployment_type: 'cloud', base_url: '', email: '', api_token: '', bitbucket_username: '', bitbucket_app_password: '', jira_projects: [], confluence_spaces: [], cache_dir: '', refresh_duration: 3600 },
     repositories: [],
     ai_providers: [],
     ai_tasks: [],
   });
   testingConnection = signal(false);
   testingAtlassian = signal(false);
+  testingBitbucket = signal(false);
   lookingUpProject = signal(false);
   lookingUpSpace = signal(false);
   boardOptions = signal<JiraBoardOption[]>([]);
@@ -36,7 +39,30 @@ export class SettingsComponent implements OnInit {
   activeTab = signal<'neo4j' | 'atlassian' | 'repos' | 'providers' | 'tasks'>('neo4j');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
+  importing = signal(false);
+  importParentPath = signal('');
+  importFolders = signal<{ name: string; selected: boolean; alreadyAdded: boolean }[]>([]);
+  tagFilter = signal<string[]>([]);
+  tagInput = signal('');
   private configBackup: AppConfig | null = null;
+
+  allTags = computed(() => {
+    const tags = new Set<string>();
+    for (const repo of this.config().repositories) {
+      for (const t of repo.tags || []) tags.add(t);
+    }
+    return [...tags].sort();
+  });
+
+  filteredRepositories = computed(() => {
+    const active = this.tagFilter();
+    const repos = this.config().repositories;
+    const indexed = repos.map((repo, index) => ({ repo, index }));
+    if (active.length === 0) return indexed;
+    return indexed.filter(({ repo }) =>
+      active.every(tag => (repo.tags || []).includes(tag)),
+    );
+  });
 
   ngOnInit() {
     this.loadSettings();
@@ -51,6 +77,7 @@ export class SettingsComponent implements OnInit {
         for (const repo of config.repositories) {
           if (!repo.name && repo.path) repo.name = deriveRepoName(repo.path);
         }
+        config.repositories.sort((a, b) => a.name.localeCompare(b.name));
         if (!config.atlassian.confluence_spaces) {
           config.atlassian.confluence_spaces = [];
         }
@@ -120,14 +147,17 @@ export class SettingsComponent implements OnInit {
     this.configBackup = structuredClone(this.config());
     this.config.update((c) => ({
       ...c,
-      repositories: [...c.repositories, { name: '', path: '', modules: [] }],
+      repositories: [...c.repositories, { name: '', path: '', tags: [], modules: [] }],
     }));
     const newIndex = this.config().repositories.length - 1;
     this.selectedRepoIndex.set(newIndex);
     this.editingSection.set('repo-' + newIndex);
   }
 
-  removeRepository(index: number) {
+  async removeRepository(index: number) {
+    const name = this.config().repositories[index]?.name || 'this repository';
+    const ok = await this.confirmDialog.open({ title: 'Remove repository', message: `Remove "${name}"?` });
+    if (!ok) return;
     this.config.update((c) => ({
       ...c,
       repositories: c.repositories.filter((_, i) => i !== index),
@@ -173,7 +203,10 @@ export class SettingsComponent implements OnInit {
       .map(([key, v]) => ({ key, label: v.label }));
   }
 
-  removeModule(repoIndex: number, moduleIndex: number) {
+  async removeModule(repoIndex: number, moduleIndex: number) {
+    const name = this.config().repositories[repoIndex]?.modules[moduleIndex]?.name || 'this module';
+    const ok = await this.confirmDialog.open({ title: 'Remove module', message: `Remove "${name}"?` });
+    if (!ok) return;
     this.config.update((c) => {
       const repos = [...c.repositories];
       repos[repoIndex] = {
@@ -212,6 +245,20 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  testBitbucketConnection() {
+    this.testingBitbucket.set(true);
+    this.settingsService.testBitbucketConnection().subscribe({
+      next: (result) => {
+        this.testingBitbucket.set(false);
+        this.showMessage(result.message, 'success');
+      },
+      error: (err) => {
+        this.testingBitbucket.set(false);
+        this.showMessage(err.error?.detail || 'Bitbucket connection failed', 'danger');
+      },
+    });
+  }
+
   // Jira Projects
   addJiraProject() {
     this.configBackup = structuredClone(this.config());
@@ -227,7 +274,10 @@ export class SettingsComponent implements OnInit {
     this.editingSection.set('jira-project-' + newIndex);
   }
 
-  removeJiraProject(index: number) {
+  async removeJiraProject(index: number) {
+    const key = this.config().atlassian.jira_projects[index]?.key || 'this project';
+    const ok = await this.confirmDialog.open({ title: 'Remove Jira project', message: `Remove "${key}"?` });
+    if (!ok) return;
     this.config.update((c) => ({
       ...c,
       atlassian: {
@@ -284,7 +334,10 @@ export class SettingsComponent implements OnInit {
     this.editingSection.set('confluence-space-' + newIndex);
   }
 
-  removeConfluenceSpace(index: number) {
+  async removeConfluenceSpace(index: number) {
+    const key = this.config().atlassian.confluence_spaces[index]?.key || 'this space';
+    const ok = await this.confirmDialog.open({ title: 'Remove Confluence space', message: `Remove "${key}"?` });
+    if (!ok) return;
     this.config.update((c) => ({
       ...c,
       atlassian: {
@@ -351,6 +404,39 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  toggleTagFilter(tag: string) {
+    this.tagFilter.update(tags =>
+      tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag],
+    );
+  }
+
+  clearTagFilter() {
+    this.tagFilter.set([]);
+  }
+
+  addTagToRepo(repoIndex: number, tag: string) {
+    const normalized = tag.trim().toLowerCase();
+    if (!normalized) return;
+    this.config.update(c => {
+      const repos = [...c.repositories];
+      const current = repos[repoIndex].tags || [];
+      if (current.includes(normalized)) return c;
+      repos[repoIndex] = { ...repos[repoIndex], tags: [...current, normalized] };
+      return { ...c, repositories: repos };
+    });
+  }
+
+  removeTagFromRepo(repoIndex: number, tag: string) {
+    this.config.update(c => {
+      const repos = [...c.repositories];
+      repos[repoIndex] = {
+        ...repos[repoIndex],
+        tags: (repos[repoIndex].tags || []).filter(t => t !== tag),
+      };
+      return { ...c, repositories: repos };
+    });
+  }
+
   updateModule(repoIndex: number, moduleIndex: number, field: keyof ModuleConfig, value: string) {
     this.config.update((c) => {
       const repos = [...c.repositories];
@@ -374,7 +460,10 @@ export class SettingsComponent implements OnInit {
     this.editingSection.set('provider-' + (this.config().ai_providers.length - 1));
   }
 
-  removeAIProvider(index: number) {
+  async removeAIProvider(index: number) {
+    const name = this.config().ai_providers[index]?.name || 'this provider';
+    const ok = await this.confirmDialog.open({ title: 'Remove AI provider', message: `Remove "${name}"?` });
+    if (!ok) return;
     this.config.update((c) => ({
       ...c,
       ai_providers: c.ai_providers.filter((_, i) => i !== index),
@@ -402,7 +491,10 @@ export class SettingsComponent implements OnInit {
     this.editingSection.set('task-' + (this.config().ai_tasks.length - 1));
   }
 
-  removeAITask(index: number) {
+  async removeAITask(index: number) {
+    const type = this.config().ai_tasks[index]?.task_type || 'this task';
+    const ok = await this.confirmDialog.open({ title: 'Remove AI task', message: `Remove "${type}"?` });
+    if (!ok) return;
     this.config.update((c) => ({
       ...c,
       ai_tasks: c.ai_tasks.filter((_, i) => i !== index),
@@ -455,6 +547,80 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  // Import from folder
+  startImport() {
+    this.settingsService.browseFolder('').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (res) => {
+        this.importParentPath.set(res.path);
+        this.settingsService.listSubfolders(res.path).subscribe({
+          next: (result) => {
+            const existingPaths = new Set(
+              this.config().repositories.map((r) => r.path.replace(/\\/g, '/').replace(/\/+$/, '')),
+            );
+            const parentNorm = res.path.replace(/\\/g, '/').replace(/\/+$/, '');
+            this.importFolders.set(
+              result.folders.map((name) => ({
+                name,
+                selected: false,
+                alreadyAdded: existingPaths.has(parentNorm + '/' + name),
+              })),
+            );
+            this.importing.set(true);
+            this.selectedRepoIndex.set(null);
+          },
+          error: (err) => this.showMessage(err.error?.detail || 'Failed to list subfolders', 'danger'),
+        });
+      },
+    });
+  }
+
+  toggleImportFolder(index: number) {
+    this.importFolders.update((folders) =>
+      folders.map((f, i) => (i === index ? { ...f, selected: !f.selected } : f)),
+    );
+  }
+
+  importSelectAll() {
+    this.importFolders.update((folders) =>
+      folders.map((f) => (f.alreadyAdded ? f : { ...f, selected: true })),
+    );
+  }
+
+  importSelectNone() {
+    this.importFolders.update((folders) =>
+      folders.map((f) => ({ ...f, selected: false })),
+    );
+  }
+
+  confirmImport() {
+    const parent = this.importParentPath().replace(/\\/g, '/').replace(/\/+$/, '');
+    const newRepos = this.importFolders()
+      .filter((f) => f.selected && !f.alreadyAdded)
+      .map((f) => ({
+        name: f.name,
+        path: parent + '/' + f.name,
+        tags: [] as string[],
+        modules: [] as ModuleConfig[],
+      }));
+    if (newRepos.length === 0) {
+      this.showMessage('No folders selected', 'danger');
+      return;
+    }
+    this.config.update((c) => ({
+      ...c,
+      repositories: [...c.repositories, ...newRepos],
+    }));
+    this.importing.set(false);
+    this.importFolders.set([]);
+    this.persistConfig(`${newRepos.length} repositor${newRepos.length === 1 ? 'y' : 'ies'} added`);
+  }
+
+  cancelImport() {
+    this.importing.set(false);
+    this.importFolders.set([]);
+    this.importParentPath.set('');
+  }
+
   dismissMessage() {
     this.message.set(null);
   }
@@ -464,6 +630,14 @@ export class SettingsComponent implements OnInit {
       next: (config) => {
         for (const repo of config.repositories) {
           if (!repo.name && repo.path) repo.name = deriveRepoName(repo.path);
+        }
+        const selectedName = this.selectedRepoIndex() !== null
+          ? this.config().repositories[this.selectedRepoIndex()!]?.name
+          : null;
+        config.repositories.sort((a, b) => a.name.localeCompare(b.name));
+        if (selectedName) {
+          const newIdx = config.repositories.findIndex(r => r.name === selectedName);
+          this.selectedRepoIndex.set(newIdx >= 0 ? newIdx : null);
         }
         this.config.set(config);
         this.showMessage(successMessage, 'success');

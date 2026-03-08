@@ -20,10 +20,11 @@ class JobLogEntry(BaseModel):
 
 class Job(BaseModel):
     id: str
-    repo_path: str
-    repo_index: int
+    repo_path: str = ""
+    repo_index: int = -1
     module_name: str
     module_type: str
+    params: dict = {}
     status: JobStatus = JobStatus.PENDING
     created_at: datetime
     started_at: Optional[datetime] = None
@@ -54,9 +55,10 @@ class StartRepoResponse(BaseModel):
 
 class JobSummary(BaseModel):
     id: str
-    repo_path: str
+    repo_path: str = ""
     module_name: str
     module_type: str
+    params: dict = {}
     status: JobStatus
     created_at: datetime
     completed_at: Optional[datetime] = None

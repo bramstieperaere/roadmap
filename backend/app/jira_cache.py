@@ -24,8 +24,28 @@ class JiraCache:
         except Exception:
             return False
 
+    def is_fresh_issue(self, path: Path) -> bool:
+        """Smart freshness for issues: done issues never expire."""
+        if not path.exists():
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("status_category") == "done":
+                return True
+            cached_at = datetime.fromisoformat(data["_cached_at"])
+            age = (datetime.now(timezone.utc) - cached_at).total_seconds()
+            return age < self._ttl
+        except Exception:
+            return False
+
     def read(self, path: Path) -> dict | None:
         if not self.is_fresh(path):
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def read_issue(self, path: Path) -> dict | None:
+        """Read a cached issue using smart freshness."""
+        if not self.is_fresh_issue(path):
             return None
         return json.loads(path.read_text(encoding="utf-8"))
 

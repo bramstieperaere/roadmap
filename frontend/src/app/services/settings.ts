@@ -24,6 +24,7 @@ export const KNOWN_TECHNOLOGIES: Record<string, { label: string; types: string[]
 export interface RepositoryConfig {
   name: string;
   path: string;
+  tags: string[];
   modules: ModuleConfig[];
 }
 
@@ -43,6 +44,8 @@ export interface AtlassianConfig {
   base_url: string;
   email: string;
   api_token: string;
+  bitbucket_username: string;
+  bitbucket_app_password: string;
   jira_projects: JiraProjectConfig[];
   confluence_spaces: ConfluenceSpaceConfig[];
   cache_dir: string;
@@ -95,6 +98,21 @@ export interface AnalyzeResponse {
   modules: ModuleConfig[];
 }
 
+export interface VerifyProjectResult {
+  key: string;
+  name: string;
+  valid: boolean;
+}
+
+export interface VerifyProjectsResponse {
+  projects: VerifyProjectResult[];
+}
+
+export interface AddProjectsResponse {
+  added: string[];
+  total: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -117,6 +135,10 @@ export class SettingsService {
     return this.http.post<TestConnectionResult>('/api/settings/test-atlassian', {});
   }
 
+  testBitbucketConnection(): Observable<TestConnectionResult> {
+    return this.http.post<TestConnectionResult>('/api/settings/test-bitbucket', {});
+  }
+
   lookupJiraProject(key: string): Observable<JiraProjectLookup> {
     return this.http.get<JiraProjectLookup>('/api/settings/atlassian/project', { params: { key } });
   }
@@ -131,5 +153,17 @@ export class SettingsService {
 
   browseFolder(initialDir: string = ''): Observable<{ path: string }> {
     return this.http.post<{ path: string }>('/api/settings/browse-folder', { initial_dir: initialDir });
+  }
+
+  listSubfolders(path: string): Observable<{ folders: string[] }> {
+    return this.http.post<{ folders: string[] }>('/api/settings/list-subfolders', { path });
+  }
+
+  verifyProjects(keys: string[]): Observable<VerifyProjectsResponse> {
+    return this.http.post<VerifyProjectsResponse>('/api/settings/atlassian/verify-projects', { keys });
+  }
+
+  addJiraProjects(projects: { key: string; name: string; board_id: number | null }[]): Observable<AddProjectsResponse> {
+    return this.http.post<AddProjectsResponse>('/api/settings/atlassian/add-projects', { projects });
   }
 }

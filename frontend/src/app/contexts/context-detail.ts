@@ -2,22 +2,17 @@ import { Component, computed, ElementRef, inject, Injector, OnInit, signal, View
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { NgTemplateOutlet } from '@angular/common';
 import { CdkDropList, CdkDropListGroup, CdkDrag, CdkDragHandle, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
-import { ContextsService, ContextItem, ContextItemEntry, RepoInfo, PreviewSection, RepoTreeEntry, ContributingContext } from '../services/contexts';
-import { ConfluenceService, ConfluenceSpace, ConfluencePageSummary } from '../services/confluence';
-
-interface RepoFileTreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'dir';
-  children: RepoFileTreeNode[];
-  loaded: boolean;
-}
+import { ContextsService, ContextItem, ContextItemEntry, RepoInfo, PreviewSection, ContributingContext } from '../services/contexts';
+import { ConfluenceService, ConfluenceSpace } from '../services/confluence';
+import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
+import { AddItemPanel, AddItemEvent } from './add-item-panel/add-item-panel';
+import { PreviewPanel } from './preview-panel/preview-panel';
+import { itemKey, getItemIcon, getItemTypeLabel } from './context-utils';
 
 @Component({
   selector: 'app-context-detail',
-  imports: [FormsModule, RouterLink, NgTemplateOutlet, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle],
+  imports: [FormsModule, RouterLink, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle, AddItemPanel, PreviewPanel],
   templateUrl: './context-detail.html',
   styleUrl: './context-detail.scss',
 })
@@ -28,6 +23,7 @@ export class ContextDetail implements OnInit {
   private confluenceService = inject(ConfluenceService);
   private destroyRef = inject(DestroyRef);
   private injector = inject(Injector);
+  private confirmDialog = inject(ConfirmDialogService);
 
   // Route params
   name = signal('');
@@ -55,6 +51,8 @@ export class ContextDetail implements OnInit {
   editing = signal(false);
   editingName = signal(false);
   editNameValue = signal('');
+  editingDescription = signal(false);
+  editDescriptionValue = signal('');
   editingChildName = signal(false);
   editChildNameValue = signal('');
 
@@ -67,39 +65,17 @@ export class ContextDetail implements OnInit {
   expandedChild = signal<string | null>(null);
 
   // Add item mode
-  addItemMode = signal<string | null>(null);
-  addingItem = signal(false);
-  itemLabel = signal('');
-  childAddItemMode = signal<string | null>(null);
+  showParentAddPanel = signal(false);
+  showChildAddPanel = signal(false);
+  parentAdding = signal(false);
+  childAdding = signal(false);
 
-  // Confluence picker
+  // Reference data for add-item-panel
   spaces = signal<ConfluenceSpace[]>([]);
-  selectedSpaceKey = signal('');
-  pageTree = signal<ConfluencePageSummary[]>([]);
-  loadingPages = signal(false);
-  expandedNodes = signal<Set<string>>(new Set());
-  selectedPage = signal<{ id: string; title: string } | null>(null);
-
-  // Jira
-  issueKey = signal('');
-
-  // Instructions
-  instructionsText = signal('');
-
-  // Git repo
   repos = signal<RepoInfo[]>([]);
-  selectedRepoName = signal('');
-
-  // Repo file
-  repoFileRepoName = signal('');
-  repoFilePath = signal('');
-  repoTree = signal<RepoFileTreeNode[]>([]);
-  repoTreeLoading = signal(false);
-  repoTreeExpanded = signal<Set<string>>(new Set());
 
   // Mixin
   availableContextPaths = signal<string[]>([]);
-  selectedMixinPath = signal('');
   contributingMixins = signal<ContributingContext[]>([]);
   showContributing = signal(true);
 
@@ -134,29 +110,6 @@ export class ContextDetail implements OnInit {
   previewLoading = signal(false);
   selectedItemKeys = signal<Set<string>>(new Set());
   primaryClickedKey = signal<string | null>(null);
-  showDelimiters = signal(false);
-
-  tocContent = computed(() => {
-    const sections = this.previewSections();
-    if (sections.length === 0) return '';
-    const name = this.child() ? `${this.name()}/${this.child()}` : this.name();
-    const n = sections.length;
-    const lines: string[] = [
-      `# Context: ${name}`,
-      '',
-      `This context contains ${n} item${n !== 1 ? 's' : ''}:`,
-    ];
-    for (let i = 0; i < n; i++) {
-      lines.push(`${i + 1}. [${this.getItemTypeLabel(sections[i].type)}] ${sections[i].label}`);
-    }
-    lines.push('');
-    lines.push(
-      `Each item is delimited by ######### <item name> BEGIN ######### `
-      + `and ######### <item name> END #########. `
-      + `For example: ######### ${sections[0].label} BEGIN #########`
-    );
-    return lines.join('\n');
-  });
 
   @ViewChild('nameInput') nameInput?: ElementRef<HTMLInputElement>;
   @ViewChild('childNameInput') childNameInput?: ElementRef<HTMLInputElement>;
@@ -174,8 +127,8 @@ export class ContextDetail implements OnInit {
       this.editing.set(false);
       this.editingName.set(false);
       this.editingChildName.set(false);
-      this.addItemMode.set(null);
-      this.childAddItemMode.set(null);
+      this.showParentAddPanel.set(false);
+      this.showChildAddPanel.set(false);
       this.loadContext();
     });
   }
@@ -244,20 +197,29 @@ export class ContextDetail implements OnInit {
 
   // ── Delete context ──
 
-  deleteContext() {
+  async deleteContext() {
     const name = this.name();
     if (!name) return;
+    const ok = await this.confirmDialog.open({
+      title: 'Delete context',
+      message: `Delete "${name}" and all its sub-contexts?`,
+    });
+    if (!ok) return;
     this.service.remove(name).subscribe({
       next: () => this.router.navigate(['/contexts']),
       error: (err) => {
         if (err.status === 409 && err.error?.detail?.usages) {
           const usages = err.error.detail.usages as string[];
-          if (confirm(`This context is referenced as a mixin by: ${usages.join(', ')}. Delete anyway?`)) {
+          this.confirmDialog.open({
+            title: 'Mixin references',
+            message: `This context is referenced as a mixin by: ${usages.join(', ')}. Delete anyway?`,
+          }).then(force => {
+            if (!force) return;
             this.service.remove(name, true).subscribe({
               next: () => this.router.navigate(['/contexts']),
               error: (e) => this.error.set(e.error?.detail || 'Failed to delete context'),
             });
-          }
+          });
         } else {
           this.error.set(err.error?.detail || 'Failed to delete context');
         }
@@ -267,194 +229,37 @@ export class ContextDetail implements OnInit {
 
   // ── Add item ──
 
-  showAddItem(mode: string) {
-    this.addItemMode.set(mode);
-    this.resetPickerState();
-  }
-
-  switchItemType(type: string) {
-    this.addItemMode.set(type);
-    this.resetPickerState();
-  }
-
-  cancelAddItem() {
-    this.addItemMode.set(null);
-  }
-
-  private resetPickerState() {
-    this.issueKey.set('');
-    this.instructionsText.set('');
-    this.selectedRepoName.set('');
-    this.selectedPage.set(null);
-    this.repoFileRepoName.set('');
-    this.repoFilePath.set('');
-    this.itemLabel.set('');
-    this.selectedMixinPath.set('');
-  }
-
-  // Confluence page picker
-  selectSpace(spaceKey: string) {
-    if (spaceKey === this.selectedSpaceKey()) return;
-    this.selectedSpaceKey.set(spaceKey);
-    this.pageTree.set([]);
-    this.expandedNodes.set(new Set());
-    this.selectedPage.set(null);
-    this.itemLabel.set('');
-    if (!spaceKey) return;
-    this.loadingPages.set(true);
-    this.confluenceService.getPages(spaceKey).subscribe({
-      next: (data) => { this.pageTree.set(data.pages); this.loadingPages.set(false); },
-      error: () => this.loadingPages.set(false),
-    });
-  }
-
-  toggleNode(id: string) {
-    this.expandedNodes.update(set => {
-      const next = new Set(set);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  isExpanded(id: string): boolean { return this.expandedNodes().has(id); }
-
-  selectConfluencePage(pageId: string, pageTitle: string) {
-    this.selectedPage.set({ id: pageId, title: pageTitle });
-    this.itemLabel.set(pageTitle);
-  }
-
-  addConfluencePage() {
-    const page = this.selectedPage();
-    if (!page) return;
-    const label = this.itemLabel().trim() || page.title;
-    this.addItemCall('confluence_page', page.id, label);
-  }
-
-  // Jira issue
-  addJiraIssue() {
-    const key = this.issueKey().trim().toUpperCase();
-    if (!key) return;
-    this.addItemCall('jira_issue', key, this.itemLabel().trim() || undefined);
-  }
-
-  onIssueKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') this.addJiraIssue();
-  }
-
-  // Instructions
-  addInstructions() {
-    const text = this.instructionsText().trim();
-    const label = this.itemLabel().trim();
-    if (!label) return;
-    this.addItemCall('instructions', label, label, text);
-  }
-
-  // Git repo
-  selectRepo(repoName: string) {
-    this.selectedRepoName.set(repoName);
-    this.itemLabel.set(repoName);
-  }
-
-  addGitRepo() {
-    const repoName = this.selectedRepoName();
-    if (!repoName) return;
-    this.addItemCall('git_repo', repoName, this.itemLabel().trim() || repoName);
-  }
-
-  // Repo file
-  selectRepoFileRepo(repoName: string) {
-    this.repoFileRepoName.set(repoName);
-    this.repoFilePath.set('');
-    this.itemLabel.set('');
-    this.repoTree.set([]);
-    this.repoTreeExpanded.set(new Set());
-    if (!repoName) return;
-    this.repoTreeLoading.set(true);
-    this.service.getRepoTree(repoName).subscribe({
-      next: (entries) => {
-        this.repoTree.set(entries.map(e => ({ ...e, children: [], loaded: false })));
-        this.repoTreeLoading.set(false);
-      },
-      error: () => this.repoTreeLoading.set(false),
-    });
-  }
-
-  toggleRepoTreeNode(node: RepoFileTreeNode) {
-    if (node.type !== 'dir') return;
-    const expanded = this.repoTreeExpanded();
-    if (expanded.has(node.path)) {
-      this.repoTreeExpanded.update(s => { const n = new Set(s); n.delete(node.path); return n; });
-      return;
-    }
-    this.repoTreeExpanded.update(s => new Set(s).add(node.path));
-    if (node.loaded) return;
-    this.service.getRepoTree(this.repoFileRepoName(), node.path).subscribe({
-      next: (entries) => {
-        const children = entries.map(e => ({ ...e, children: [] as RepoFileTreeNode[], loaded: false }));
-        this.repoTree.update(tree => {
-          const updated = structuredClone(tree);
-          const target = this.findNode(updated, node.path);
-          if (target) { target.children = children; target.loaded = true; }
-          return updated;
-        });
-      },
-    });
-  }
-
-  isRepoTreeExpanded(path: string): boolean { return this.repoTreeExpanded().has(path); }
-
-  selectRepoFile(node: RepoFileTreeNode) {
-    if (node.type !== 'file') return;
-    this.repoFilePath.set(node.path);
-    this.itemLabel.set(node.path);
-  }
-
-  private findNode(tree: RepoFileTreeNode[], path: string): RepoFileTreeNode | null {
-    for (const n of tree) {
-      if (n.path === path) return n;
-      const found = this.findNode(n.children, path);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  addRepoFile() {
-    const repoName = this.repoFileRepoName();
-    const filePath = this.repoFilePath().trim().replace(/\\/g, '/');
-    if (!repoName || !filePath) return;
-    this.addItemCall('repo_file', `${repoName}:${filePath}`, this.itemLabel().trim() || filePath);
-  }
-
-  // Mixin
-  selectMixinPath(path: string) {
-    this.selectedMixinPath.set(path);
-    this.itemLabel.set(path.split('/').pop() || path);
-  }
-
-  addMixin() {
-    const path = this.selectedMixinPath();
-    if (!path) return;
-    this.addItemCall('mixin', path, this.itemLabel().trim() || path);
-  }
-
-  addChildMixin() {
-    const path = this.selectedMixinPath();
-    if (!path) return;
-    this.addChildItemCall('mixin', path, this.itemLabel().trim() || path);
-  }
-
-  private addItemCall(type: string, id: string, label?: string, text?: string) {
-    this.addingItem.set(true);
+  onParentAddItem(event: AddItemEvent) {
+    this.parentAdding.set(true);
     this.error.set('');
-    this.service.addItem(this.name(), type, id, label, text).subscribe({
+    this.service.addItem(this.name(), event.type, event.id, event.label, event.text).subscribe({
       next: () => {
-        this.addingItem.set(false);
-        this.addItemMode.set(null);
+        this.parentAdding.set(false);
+        this.showParentAddPanel.set(false);
         this.reloadContext();
         this.refreshPreview();
       },
       error: (err) => {
-        this.addingItem.set(false);
+        this.parentAdding.set(false);
+        this.error.set(err.error?.detail || 'Failed to add item');
+      },
+    });
+  }
+
+  onChildAddItem(event: AddItemEvent) {
+    const childName = this.expandedChild();
+    if (!childName) return;
+    this.childAdding.set(true);
+    this.error.set('');
+    this.service.addChildItem(this.name(), childName, event.type, event.id, event.label, event.text).subscribe({
+      next: () => {
+        this.childAdding.set(false);
+        this.showChildAddPanel.set(false);
+        this.reloadContext();
+        this.refreshPreview();
+      },
+      error: (err) => {
+        this.childAdding.set(false);
         this.error.set(err.error?.detail || 'Failed to add item');
       },
     });
@@ -462,7 +267,12 @@ export class ContextDetail implements OnInit {
 
   // ── Remove item ──
 
-  removeItem(item: ContextItemEntry) {
+  async removeItem(item: ContextItemEntry) {
+    const ok = await this.confirmDialog.open({
+      title: 'Remove item',
+      message: `Remove "${item.label || item.title}" from this context?`,
+    });
+    if (!ok) return;
     this.service.removeItem(this.name(), item.type, item.id).subscribe({
       next: () => { this.reloadContext(); this.refreshPreview(); },
       error: (err) => this.error.set(err.error?.detail || 'Failed to remove item'),
@@ -526,7 +336,12 @@ export class ContextDetail implements OnInit {
     });
   }
 
-  removeChild(childName: string) {
+  async removeChild(childName: string) {
+    const ok = await this.confirmDialog.open({
+      title: 'Delete sub-context',
+      message: `Delete sub-context "${childName}"?`,
+    });
+    if (!ok) return;
     this.service.removeChild(this.name(), childName).subscribe({
       next: () => {
         if (this.expandedChild() === childName) {
@@ -539,7 +354,11 @@ export class ContextDetail implements OnInit {
       error: (err) => {
         if (err.status === 409 && err.error?.detail?.usages) {
           const usages = err.error.detail.usages as string[];
-          if (confirm(`This sub-context is referenced as a mixin by: ${usages.join(', ')}. Delete anyway?`)) {
+          this.confirmDialog.open({
+            title: 'Mixin references',
+            message: `This sub-context is referenced as a mixin by: ${usages.join(', ')}. Delete anyway?`,
+          }).then(force => {
+            if (!force) return;
             this.service.removeChild(this.name(), childName, true).subscribe({
               next: () => {
                 if (this.expandedChild() === childName) {
@@ -551,7 +370,7 @@ export class ContextDetail implements OnInit {
               },
               error: (e) => this.error.set(e.error?.detail || 'Failed to remove sub-context'),
             });
-          }
+          });
         } else {
           this.error.set(err.error?.detail || 'Failed to remove sub-context');
         }
@@ -563,88 +382,26 @@ export class ContextDetail implements OnInit {
     this.editingChildName.set(false);
     if (this.expandedChild() === childName) {
       this.expandedChild.set(null);
-      this.childAddItemMode.set(null);
+      this.showChildAddPanel.set(false);
       this.loadPreview(this.name());
     } else {
       this.expandedChild.set(childName);
-      this.childAddItemMode.set(null);
+      this.showChildAddPanel.set(false);
       this.loadChildPreview(this.name(), childName);
     }
   }
 
-  showChildAddItem(mode: string) {
-    this.childAddItemMode.set(mode);
-    this.resetPickerState();
-  }
-
-  showChildAddItemFor(childName: string, mode: string) {
+  showChildAddItemFor(childName: string) {
     this.expandedChild.set(childName);
-    this.childAddItemMode.set(mode);
-    this.resetPickerState();
+    this.showChildAddPanel.set(true);
   }
 
-  switchChildItemType(childName: string, type: string) {
-    this.expandedChild.set(childName);
-    this.childAddItemMode.set(type);
-    this.resetPickerState();
-  }
-
-  cancelChildAddItem() {
-    this.childAddItemMode.set(null);
-  }
-
-  addChildConfluencePage() {
-    const page = this.selectedPage();
-    if (!page) return;
-    this.addChildItemCall('confluence_page', page.id, this.itemLabel().trim() || page.title);
-  }
-
-  addChildJiraIssue() {
-    const key = this.issueKey().trim().toUpperCase();
-    if (!key) return;
-    this.addChildItemCall('jira_issue', key, this.itemLabel().trim() || undefined);
-  }
-
-  addChildGitRepo() {
-    const repoName = this.selectedRepoName();
-    if (!repoName) return;
-    this.addChildItemCall('git_repo', repoName, this.itemLabel().trim() || repoName);
-  }
-
-  addChildRepoFile() {
-    const repoName = this.repoFileRepoName();
-    const filePath = this.repoFilePath().trim().replace(/\\/g, '/');
-    if (!repoName || !filePath) return;
-    this.addChildItemCall('repo_file', `${repoName}:${filePath}`, this.itemLabel().trim() || filePath);
-  }
-
-  addChildInstructions() {
-    const text = this.instructionsText().trim();
-    const label = this.itemLabel().trim();
-    if (!label) return;
-    this.addChildItemCall('instructions', label, label, text);
-  }
-
-  private addChildItemCall(type: string, id: string, label?: string, text?: string) {
-    const childName = this.expandedChild();
-    if (!childName) return;
-    this.addingItem.set(true);
-    this.error.set('');
-    this.service.addChildItem(this.name(), childName, type, id, label, text).subscribe({
-      next: () => {
-        this.addingItem.set(false);
-        this.childAddItemMode.set(null);
-        this.reloadContext();
-        this.refreshPreview();
-      },
-      error: (err) => {
-        this.addingItem.set(false);
-        this.error.set(err.error?.detail || 'Failed to add item');
-      },
+  async removeChildItem(childName: string, item: ContextItemEntry) {
+    const ok = await this.confirmDialog.open({
+      title: 'Remove item',
+      message: `Remove "${item.label || item.title}" from "${childName}"?`,
     });
-  }
-
-  removeChildItem(childName: string, item: ContextItemEntry) {
+    if (!ok) return;
     this.service.removeChildItem(this.name(), childName, item.type, item.id).subscribe({
       next: () => { this.reloadContext(); this.refreshPreview(); },
       error: (err) => this.error.set(err.error?.detail || 'Failed to remove item'),
@@ -686,9 +443,7 @@ export class ContextDetail implements OnInit {
     }
   }
 
-  itemKey(item: { type: string; id: string }): string {
-    return `${item.type}::${item.id}`;
-  }
+  itemKey = itemKey;
 
   isParentSelected(): boolean {
     const ctx = this.context();
@@ -814,10 +569,11 @@ export class ContextDetail implements OnInit {
     this.editing.set(!wasEditing);
     if (wasEditing) {
       this.editingName.set(false);
+      this.editingDescription.set(false);
       this.editingChildName.set(false);
       this.editingItemKey.set(null);
-      this.addItemMode.set(null);
-      this.childAddItemMode.set(null);
+      this.showParentAddPanel.set(false);
+      this.showChildAddPanel.set(false);
       this.addingChild.set(false);
     }
   }
@@ -858,6 +614,41 @@ export class ContextDetail implements OnInit {
   onNameKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') this.saveName();
     else if (event.key === 'Escape') this.cancelEditName();
+  }
+
+  startEditDescription() {
+    if (!this.editing()) return;
+    const ctx = this.context();
+    if (!ctx) return;
+    this.editDescriptionValue.set(ctx.description || '');
+    this.editingDescription.set(true);
+  }
+
+  saveDescription() {
+    const name = this.name();
+    const desc = this.editDescriptionValue().trim();
+    const ctx = this.context();
+    if (!ctx || desc === (ctx.description || '')) {
+      this.editingDescription.set(false);
+      return;
+    }
+    this.service.updateDescription(name, desc).subscribe({
+      next: (updated) => {
+        this.context.set(updated);
+        this.editingDescription.set(false);
+      },
+      error: (err) => {
+        this.error.set(err.error?.detail || 'Failed to update description');
+        this.editingDescription.set(false);
+      },
+    });
+  }
+
+  cancelEditDescription() { this.editingDescription.set(false); }
+
+  onDescriptionKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') this.saveDescription();
+    else if (event.key === 'Escape') this.cancelEditDescription();
   }
 
   startEditChildName(childName?: string) {
@@ -956,36 +747,14 @@ export class ContextDetail implements OnInit {
 
   // ── Helpers ──
 
+  copyContextRef() {
+    const path = this.child() ? `${this.name()}/${this.child()}` : this.name();
+    const text = `see roadmap mcp context "${path}" for context`;
+    navigator.clipboard.writeText(text);
+  }
+
   dismissError() { this.error.set(''); }
 
-  getItemIcon(type: string): string {
-    switch (type) {
-      case 'confluence_page': return 'bi-journal-text';
-      case 'jira_issue': return 'bi-bug';
-      case 'instructions': return 'bi-chat-left-text';
-      case 'git_repo': return 'bi-git';
-      case 'repo_file': return 'bi-file-code';
-      case 'parent': return 'bi-box-arrow-in-up';
-      case 'mixin': return 'bi-box-arrow-in-right';
-      default: return 'bi-file-text';
-    }
-  }
-
-  getItemTypeLabel(type: string): string {
-    switch (type) {
-      case 'confluence_page': return 'Confluence';
-      case 'jira_issue': return 'Jira';
-      case 'instructions': return 'Instructions';
-      case 'git_repo': return 'Git Repo';
-      case 'repo_file': return 'File';
-      case 'parent': return 'Parent';
-      case 'mixin': return 'Mixin';
-      default: return type;
-    }
-  }
-
-  getSectionContent(section: PreviewSection): string {
-    if (!this.showDelimiters()) return section.content;
-    return `######### ${section.label} BEGIN #########\n\n${section.content}\n\n######### ${section.label} END #########`;
-  }
+  getItemIcon = getItemIcon;
+  getItemTypeLabel = getItemTypeLabel;
 }

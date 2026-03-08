@@ -17,11 +17,14 @@ export interface ContextItemEntry {
 
 export interface ChildContext {
   name: string;
+  done?: boolean;
   items: ContextItemEntry[];
 }
 
 export interface ContextItem {
   name: string;
+  description?: string;
+  done?: boolean;
   items: ContextItemEntry[];
   children: ChildContext[];
 }
@@ -71,6 +74,34 @@ export class ContextsService {
     return this.http.delete<{ status: string }>(
       `/api/contexts/${encodeURIComponent(name)}`,
       { params: force ? { force: 'true' } : {} },
+    );
+  }
+
+  clone(name: string, cloneName: string): Observable<ContextItem> {
+    return this.http.post<ContextItem>(
+      `/api/contexts/${encodeURIComponent(name)}/clone`,
+      { name: cloneName },
+    );
+  }
+
+  updateDescription(name: string, description: string): Observable<ContextItem> {
+    return this.http.put<ContextItem>(
+      `/api/contexts/${encodeURIComponent(name)}/description`,
+      { description },
+    );
+  }
+
+  setDone(name: string, done: boolean): Observable<ContextItem> {
+    return this.http.put<ContextItem>(
+      `/api/contexts/${encodeURIComponent(name)}/done`,
+      { done },
+    );
+  }
+
+  setChildDone(parentName: string, childName: string, done: boolean): Observable<ContextItem> {
+    return this.http.put<ContextItem>(
+      `/api/contexts/${encodeURIComponent(parentName)}/children/${encodeURIComponent(childName)}/done`,
+      { done },
     );
   }
 
@@ -128,6 +159,13 @@ export class ContextsService {
     );
   }
 
+  cloneChild(parentName: string, childName: string, cloneName: string): Observable<ChildContext> {
+    return this.http.post<ChildContext>(
+      `/api/contexts/${encodeURIComponent(parentName)}/children/${encodeURIComponent(childName)}/clone`,
+      { name: cloneName },
+    );
+  }
+
   renameChild(parentName: string, oldName: string, newName: string): Observable<ChildContext> {
     return this.http.put<ChildContext>(
       `/api/contexts/${encodeURIComponent(parentName)}/children/${encodeURIComponent(oldName)}/rename`,
@@ -175,8 +213,19 @@ export class ContextsService {
     );
   }
 
+  importBitbucketPr(url: string, prJson: string, commentsJson: string): Observable<{ status: string; title: string; label: string }> {
+    return this.http.post<{ status: string; title: string; label: string }>(
+      '/api/contexts/bitbucket-pr/import',
+      { url, pr_json: prJson, comments_json: commentsJson },
+    );
+  }
+
   getRepositories(): Observable<RepoInfo[]> {
     return this.http.get<RepoInfo[]>('/api/contexts/meta/repositories');
+  }
+
+  getBranches(repoName: string): Observable<string[]> {
+    return this.http.get<string[]>(`/api/contexts/meta/repo-branches/${encodeURIComponent(repoName)}`);
   }
 
   getPreview(name: string): Observable<PreviewSection[]> {

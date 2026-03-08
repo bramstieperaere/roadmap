@@ -3,41 +3,47 @@ import { Router } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { JiraService, SprintBoard } from '../services/jira';
 import { JiraStateService } from './jira-state';
+import { BoardPickerComponent } from './board-picker';
 
 @Component({
   selector: 'app-jira-sprint',
-  imports: [DatePipe],
+  imports: [DatePipe, BoardPickerComponent],
   templateUrl: './jira-sprint.html',
   styleUrl: './jira-sprint.scss',
 })
 export class JiraSprintComponent {
   private jiraService = inject(JiraService);
   private router = inject(Router);
-  private state = inject(JiraStateService);
+  state = inject(JiraStateService);
 
   sprint = signal<SprintBoard | null>(null);
   loading = signal(false);
   error = signal('');
+  noBoard = signal(false);
   refreshingIssues = signal(false);
   refreshMessage = signal('');
 
   constructor() {
     effect(() => {
       const key = this.state.selectedProjectKey();
-      if (key) this.load(key, false);
+      const boardId = this.state.selectedBoardId();
+      if (key && boardId) this.load(key, false, boardId);
+      else if (key && !this.state.loadingBoards()) this.noBoard.set(true);
     }, { allowSignalWrites: true });
   }
 
   refresh() {
     const key = this.state.selectedProjectKey();
-    if (key) this.load(key, true);
+    const boardId = this.state.selectedBoardId();
+    if (key && boardId) this.load(key, true, boardId);
   }
 
-  private load(projectKey: string, forceRefresh: boolean) {
+  private load(projectKey: string, forceRefresh: boolean, boardId: number) {
     this.loading.set(true);
     this.error.set('');
+    this.noBoard.set(false);
     this.sprint.set(null);
-    this.jiraService.getSprint(projectKey, forceRefresh).subscribe({
+    this.jiraService.getSprint(projectKey, forceRefresh, boardId).subscribe({
       next: (data) => {
         this.sprint.set(data);
         this.loading.set(false);
@@ -47,6 +53,12 @@ export class JiraSprintComponent {
         this.error.set(err.error?.detail || 'Failed to load sprint');
       },
     });
+  }
+
+  onBoardSelected() {
+    const key = this.state.selectedProjectKey();
+    const boardId = this.state.selectedBoardId();
+    if (key && boardId) this.load(key, false, boardId);
   }
 
   downloadAllIssues() {

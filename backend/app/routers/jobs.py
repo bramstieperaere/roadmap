@@ -321,6 +321,7 @@ def list_jobs():
             repo_path=j.repo_path,
             module_name=j.module_name,
             module_type=j.module_type,
+            params=j.params,
             status=j.status,
             created_at=j.created_at,
             completed_at=j.completed_at,

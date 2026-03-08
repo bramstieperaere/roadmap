@@ -8,6 +8,11 @@ export interface JiraProject {
   board_id: number | null;
 }
 
+export interface JiraBoardOption {
+  id: number;
+  name: string;
+}
+
 export interface JiraIssueSummary {
   key: string;
   summary: string;
@@ -15,6 +20,8 @@ export interface JiraIssueSummary {
   issuetype: string;
   priority: string;
   assignee: string;
+  created: string;
+  updated: string;
 }
 
 export interface SprintInfo {
@@ -194,8 +201,22 @@ export class JiraService {
     return this.http.get<JiraProject[]>('/api/jira/projects');
   }
 
-  getSprint(projectKey: string, refresh = false): Observable<SprintBoard> {
-    return this.http.get<SprintBoard>(`/api/jira/projects/${projectKey}/sprint${refresh ? '?refresh=true' : ''}`);
+  getBoards(projectKey: string): Observable<JiraBoardOption[]> {
+    return this.http.get<JiraBoardOption[]>(`/api/jira/projects/${projectKey}/boards`);
+  }
+
+  setBoard(projectKey: string, boardId: number): Observable<{ status: string; key: string; board_id: number }> {
+    return this.http.post<{ status: string; key: string; board_id: number }>(
+      `/api/jira/projects/${projectKey}/set-board`,
+      { board_id: boardId },
+    );
+  }
+
+  getSprint(projectKey: string, refresh = false, boardId?: number | null): Observable<SprintBoard> {
+    const params: Record<string, string> = {};
+    if (refresh) params['refresh'] = 'true';
+    if (boardId) params['board_id'] = String(boardId);
+    return this.http.get<SprintBoard>(`/api/jira/projects/${projectKey}/sprint`, { params });
   }
 
   getIssue(issueKey: string, refresh = false): Observable<JiraIssue> {
@@ -206,16 +227,22 @@ export class JiraService {
     return this.http.get<JiraProjectMetadata>(`/api/jira/projects/${projectKey}/metadata${refresh ? '?refresh=true' : ''}`);
   }
 
-  listSprints(projectKey: string, refresh = false): Observable<SprintsList> {
-    return this.http.get<SprintsList>(`/api/jira/projects/${projectKey}/sprints${refresh ? '?refresh=true' : ''}`);
+  listSprints(projectKey: string, refresh = false, boardId?: number | null): Observable<SprintsList> {
+    const params: Record<string, string> = {};
+    if (refresh) params['refresh'] = 'true';
+    if (boardId) params['board_id'] = String(boardId);
+    return this.http.get<SprintsList>(`/api/jira/projects/${projectKey}/sprints`, { params });
   }
 
   getSprintById(projectKey: string, sprintId: number, refresh = false): Observable<SprintDetail> {
     return this.http.get<SprintDetail>(`/api/jira/projects/${projectKey}/sprints/${sprintId}${refresh ? '?refresh=true' : ''}`);
   }
 
-  getBacklog(projectKey: string, refresh = false): Observable<BacklogData> {
-    return this.http.get<BacklogData>(`/api/jira/projects/${projectKey}/backlog${refresh ? '?refresh=true' : ''}`);
+  getBacklog(projectKey: string, refresh = false, boardId?: number | null): Observable<BacklogData> {
+    const params: Record<string, string> = {};
+    if (refresh) params['refresh'] = 'true';
+    if (boardId) params['board_id'] = String(boardId);
+    return this.http.get<BacklogData>(`/api/jira/projects/${projectKey}/backlog`, { params });
   }
 
   refreshIssues(projectKey: string, issueKeys: string[]): Observable<RefreshIssuesResult> {

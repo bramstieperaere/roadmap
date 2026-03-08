@@ -1,0 +1,97 @@
+:host {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rm-border);
+}
+
+.preview-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rm-border);
+  background: #fafbfc;
+  flex-shrink: 0;
+}
+
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.preview-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.preview-card {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color 0.15s;
+
+  &.highlighted {
+    border-color: var(--rm-primary, #1a3a5c);
+    box-shadow: 0 0 0 1px var(--rm-primary, #1a3a5c);
+  }
+
+  &.delimiter-card {
+    border-style: dashed;
+    background: #f8f9fa;
+  }
+}
+
+.preview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--rm-border);
+  border-radius: 6px 6px 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.preview-card-content {
+  margin: 0;
+  padding: 0.75rem;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: transparent;
+  border: none;
+  color: var(--rm-text);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.item-type-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--rm-text-muted);
+  background: #e9ecef;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  padding: 0.15rem 0.35rem;
+  line-height: 1;
+}

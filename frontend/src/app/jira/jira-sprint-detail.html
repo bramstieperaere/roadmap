@@ -65,6 +65,8 @@
             <th style="width: 130px">Status</th>
             <th style="width: 100px">Priority</th>
             <th style="width: 150px">Assignee</th>
+            <th style="width: 110px">Created</th>
+            <th style="width: 110px">Updated</th>
           </tr>
         </thead>
         <tbody>
@@ -76,10 +78,12 @@
               <td><span class="status-badge" [class]="getStatusClass(issue.status)">{{ issue.status }}</span></td>
               <td>{{ issue.priority }}</td>
               <td>{{ issue.assignee || '—' }}</td>
+              <td class="text-muted">{{ issue.created | date:'mediumDate' }}</td>
+              <td class="text-muted">{{ issue.updated | date:'mediumDate' }}</td>
             </tr>
           }
           @empty {
-            <tr><td colspan="6" class="text-muted text-center py-3">No issues in this sprint.</td></tr>
+            <tr><td colspan="8" class="text-muted text-center py-3">No issues in this sprint.</td></tr>
           }
         </tbody>
       </table>
