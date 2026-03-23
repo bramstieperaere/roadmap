@@ -84,10 +84,14 @@ class SpringJmsEnricher(TechnologyEnricher):
                             destination: $destination,
                             selector: $selector,
                             concurrency: $concurrency,
-                            container_factory: $container_factory
+                            container_factory: $container_factory,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (l)-[:IMPLEMENTED_BY]->(m)
                     """, {
+                        **self.node_meta(),
                         "method_full_name": record["method_full_name"],
                         "destination": destination,
                         "selector": selector,
@@ -164,10 +168,14 @@ class SpringJmsEnricher(TechnologyEnricher):
                         MATCH (c:Java:Class {
                             full_name: $full_name})
                         CREATE (p:Arch:JMSProducer {
-                            name: $name
+                            name: $name,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (p)-[:IMPLEMENTED_BY]->(c)
                     """, {
+                        **self.node_meta(),
                         "full_name": record["full_name"],
                         "name": record["name"],
                     })
@@ -199,4 +207,7 @@ class SpringJmsEnricher(TechnologyEnricher):
     def _merge_destination(self, name: str):
         run_cypher_write(self.driver, """
             MERGE (d:Arch:JMSDestination {name: $name})
-        """, {"name": name})
+            ON CREATE SET d.created_at = $created_at,
+                          d.job_id = $job_id,
+                          d.job_type = $job_type
+        """, {**self.node_meta(), "name": name})

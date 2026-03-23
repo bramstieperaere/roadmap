@@ -47,6 +47,11 @@ export interface StartRepoResponse {
   message: string;
 }
 
+export interface StartPipelineResponse {
+  job_ids: string[];
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class JobsService {
   private http = inject(HttpClient);
@@ -61,6 +66,24 @@ export class JobsService {
   startRepo(repoIndex: number): Observable<StartRepoResponse> {
     return this.http.post<StartRepoResponse>('/api/jobs/start-repo', {
       repo_index: repoIndex,
+    });
+  }
+
+  startAnalysis(repoIndices: number[]): Observable<StartPipelineResponse> {
+    return this.http.post<StartPipelineResponse>('/api/jobs/start-analysis', {
+      repo_indices: repoIndices,
+    });
+  }
+
+  startEnrichment(repoIndices: number[]): Observable<StartPipelineResponse> {
+    return this.http.post<StartPipelineResponse>('/api/jobs/start-enrichment', {
+      repo_indices: repoIndices,
+    });
+  }
+
+  startDataFlow(repoIndices: number[]): Observable<StartPipelineResponse> {
+    return this.http.post<StartPipelineResponse>('/api/jobs/start-data-flow', {
+      repo_indices: repoIndices,
     });
   }
 

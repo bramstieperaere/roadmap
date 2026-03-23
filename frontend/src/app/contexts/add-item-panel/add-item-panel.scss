@@ -80,5 +80,14 @@
     color: #fff;
 
     i { color: #fff; }
+
+    .page-id-badge { color: rgba(255,255,255,0.65); }
   }
+}
+
+.page-id-badge {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  color: var(--rm-text-muted);
+  flex-shrink: 0;
 }

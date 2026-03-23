@@ -1,3 +1,9 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
 .log-container {
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   font-size: 0.8125rem;

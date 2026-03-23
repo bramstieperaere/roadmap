@@ -129,10 +129,14 @@ class SpringWebEnricher(TechnologyEnricher):
                     MATCH (c:Java:Class {full_name: $full_name})
                     CREATE (ri:Arch:RESTInterface {
                         name: $name,
-                        base_path: $base_path
+                        base_path: $base_path,
+                        created_at: $created_at,
+                        job_id: $job_id,
+                        job_type: $job_type
                     })
                     CREATE (ri)-[:IMPLEMENTED_BY]->(c)
                 """, {
+                    **self.node_meta(),
                     "full_name": cls["full_name"],
                     "name": cls["name"],
                     "base_path": base_path,
@@ -176,11 +180,15 @@ class SpringWebEnricher(TechnologyEnricher):
                             path: $path,
                             http_method: $http_method,
                             produces: $produces,
-                            consumes: $consumes
+                            consumes: $consumes,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (ri)-[:HAS_ENDPOINT]->(ep)
                         CREATE (ep)-[:IMPLEMENTED_BY]->(m)
                     """, {
+                        **self.node_meta(),
                         "ri_name": cls["name"],
                         "class_full_name": cls["full_name"],
                         "method_full_name": method_full_name,

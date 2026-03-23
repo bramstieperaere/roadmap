@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { NgTemplateOutlet } from '@angular/common';
 import { ConfluenceService, ConfluenceSpace, ConfluencePageSummary } from '../../services/confluence';
 import { ContextsService, RepoInfo, RepoTreeEntry } from '../../services/contexts';
+import { WhisperTextarea } from '../../components/whisper-textarea/whisper-textarea';
 
 export interface AddItemEvent {
   type: string;
@@ -21,7 +22,7 @@ interface RepoFileTreeNode {
 
 @Component({
   selector: 'app-add-item-panel',
-  imports: [FormsModule, NgTemplateOutlet],
+  imports: [FormsModule, NgTemplateOutlet, WhisperTextarea],
   templateUrl: './add-item-panel.html',
   styleUrl: './add-item-panel.scss',
 })
@@ -50,6 +51,15 @@ export class AddItemPanel {
   loadingPages = signal(false);
   expandedNodes = signal<Set<string>>(new Set());
   selectedPage = signal<{ id: string; title: string } | null>(null);
+  pageFilter = signal('');
+
+  filteredPageResults = computed(() => {
+    const q = this.pageFilter().trim().toLowerCase();
+    if (!q) return [];
+    return this.flattenPages(this.pageTree()).filter(
+      p => p.title.toLowerCase().includes(q) || p.id.includes(q)
+    );
+  });
 
   // Jira
   issueKey = signal('');
@@ -57,15 +67,36 @@ export class AddItemPanel {
   // Instructions
   instructionsText = signal('');
 
+
   // Git repo
   selectedRepoName = signal('');
+  repoFilter = signal('');
+
+  filteredRepos = computed(() => {
+    const q = this.repoFilter().trim().toLowerCase();
+    const all = this.repos();
+    if (!q) return all;
+    return all.filter(
+      r => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)
+    );
+  });
 
   // Repo file
   repoFileRepoName = signal('');
+  repoFileRepoFilter = signal('');
   repoFilePath = signal('');
   repoTree = signal<RepoFileTreeNode[]>([]);
   repoTreeLoading = signal(false);
   repoTreeExpanded = signal<Set<string>>(new Set());
+
+  filteredRepoFileRepos = computed(() => {
+    const q = this.repoFileRepoFilter().trim().toLowerCase();
+    const all = this.repos();
+    if (!q) return all;
+    return all.filter(
+      r => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)
+    );
+  });
 
   // Bitbucket PR
   bitbucketPrUrl = signal('');
@@ -99,8 +130,10 @@ export class AddItemPanel {
     this.issueKey.set('');
     this.instructionsText.set('');
     this.selectedRepoName.set('');
+    this.repoFilter.set('');
     this.selectedPage.set(null);
     this.repoFileRepoName.set('');
+    this.repoFileRepoFilter.set('');
     this.repoFilePath.set('');
     this.bitbucketPrUrl.set('');
     this.bitbucketPrJson.set('');
@@ -113,12 +146,17 @@ export class AddItemPanel {
 
   // ── Confluence page picker ──
 
+  private flattenPages(pages: ConfluencePageSummary[]): ConfluencePageSummary[] {
+    return pages.flatMap(p => [p, ...this.flattenPages(p.children)]);
+  }
+
   selectSpace(spaceKey: string) {
     if (spaceKey === this.selectedSpaceKey()) return;
     this.selectedSpaceKey.set(spaceKey);
     this.pageTree.set([]);
     this.expandedNodes.set(new Set());
     this.selectedPage.set(null);
+    this.pageFilter.set('');
     this.itemLabel.set('');
     if (!spaceKey) return;
     this.loadingPages.set(true);
@@ -185,8 +223,18 @@ export class AddItemPanel {
 
   // ── Repo file ──
 
+  clearRepoFileRepo() {
+    this.repoFileRepoName.set('');
+    this.repoFileRepoFilter.set('');
+    this.repoFilePath.set('');
+    this.itemLabel.set('');
+    this.repoTree.set([]);
+    this.repoTreeExpanded.set(new Set());
+  }
+
   selectRepoFileRepo(repoName: string) {
     this.repoFileRepoName.set(repoName);
+    this.repoFileRepoFilter.set('');
     this.repoFilePath.set('');
     this.itemLabel.set('');
     this.repoTree.set([]);

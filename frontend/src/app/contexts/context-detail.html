@@ -83,7 +83,12 @@
                           <i class="bi" [class]="getItemIcon(item.type)"></i>
                           <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
                           <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                          @if (item.type !== 'instructions') {
+                          @if (item.type === 'inquiry') {
+                            <span class="inquiry-type-badge">{{ item.inquiry_type }}</span>
+                            @if (item.requested_at) {
+                              <span class="text-muted small flex-shrink-0">{{ item.requested_at.slice(0, 10) }}</span>
+                            }
+                          } @else if (item.type !== 'instructions' && item.type !== 'insight') {
                             <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
                           }
                         </div>
@@ -120,7 +125,7 @@
                             <span class="text-truncate fw-medium text-muted">{{ mixin.path.split('/')[0] }}</span>
                           } @else {
                             <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                            @if (item.type !== 'instructions') {
+                            @if (item.type !== 'instructions' && item.type !== 'insight') {
                               <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
                             }
                           }
@@ -138,7 +143,6 @@
           <!-- Current context card (with primary border) -->
           @if (child()) {
             <!-- Child is the current context -->
-            @let activeChild = child();
             @for (child of contributingChildren(); track child.name) {
               <div class="context-card primary">
                 <div class="context-card-header">
@@ -172,7 +176,7 @@
                             <input type="text" class="form-control form-control-sm" placeholder="Label"
                                    [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
                           </div>
-                          @if (item.type === 'instructions') {
+                          @if ((item.type === 'instructions' || item.type === 'insight')) {
                             <div class="mb-2">
                               <textarea class="form-control form-control-sm" rows="4"
                                         [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
@@ -203,13 +207,13 @@
                               <span class="text-truncate fw-medium text-muted">{{ ctx.name }}</span>
                             } @else {
                               <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                              @if (item.type !== 'instructions') {
+                              @if (item.type !== 'instructions' && item.type !== 'insight') {
                                 <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
                               }
                             }
                           </div>
                           @if (editing() && item.type !== 'parent') {
-                            @if (item.type === 'instructions') {
+                            @if ((item.type === 'instructions' || item.type === 'insight')) {
                               <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
                                       (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
                                 <i class="bi bi-pencil"></i>
@@ -285,6 +289,32 @@
                   </button>
                 }
               </div>
+              <!-- Tags -->
+              @if ((ctx.tags && ctx.tags.length > 0) || editing()) {
+                <div class="context-card-tags">
+                  @for (tag of ctx.tags ?? []; track tag) {
+                    <span class="tag-chip">
+                      {{ tag }}
+                      @if (editing()) {
+                        <button class="tag-remove" (click)="removeTag(tag)"><i class="bi bi-x"></i></button>
+                      }
+                    </span>
+                  }
+                  @if (editing()) {
+                    @if (addingTag()) {
+                      <input type="text" class="form-control form-control-sm tag-input"
+                             placeholder="Tag..."
+                             [ngModel]="newTag()" (ngModelChange)="newTag.set($event)"
+                             (keydown)="onTagKeydown($event)" (blur)="addTag()">
+                    } @else {
+                      <button class="btn btn-link btn-sm py-0 tag-add-btn" (click)="addingTag.set(true)"
+                              title="Add tag">
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                    }
+                  }
+                </div>
+              }
               <div class="context-card-body">
                 <div class="items-list" cdkDropList [cdkDropListData]="'parent'" (cdkDropListDropped)="onDrop($event)">
                   @for (item of ctx.items; track item.type + item.id) {
@@ -294,7 +324,7 @@
                           <input type="text" class="form-control form-control-sm" placeholder="Label"
                                  [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
                         </div>
-                        @if (item.type === 'instructions') {
+                        @if ((item.type === 'instructions' || item.type === 'insight')) {
                           <div class="mb-2">
                             <textarea class="form-control form-control-sm" rows="4"
                                       [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
@@ -322,12 +352,17 @@
                           <i class="bi" [class]="getItemIcon(item.type)"></i>
                           <span class="item-type-badge">{{ getItemTypeLabel(item.type) }}</span>
                           <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                          @if (item.type !== 'instructions') {
+                          @if (item.type === 'inquiry') {
+                            <span class="inquiry-type-badge">{{ item.inquiry_type }}</span>
+                            @if (item.requested_at) {
+                              <span class="text-muted small flex-shrink-0">{{ item.requested_at.slice(0, 10) }}</span>
+                            }
+                          } @else if (item.type !== 'instructions' && item.type !== 'insight') {
                             <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
                           }
                         </div>
                         @if (editing()) {
-                          @if (item.type === 'instructions') {
+                          @if ((item.type === 'instructions' || item.type === 'insight')) {
                             <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
                                     (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
                               <i class="bi bi-pencil"></i>

@@ -40,7 +40,16 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-// ── Jira section pages (sprint, sprints, backlog, metadata) ──────────────────
+// ── Section pages (shared layout for all grouped sub-pages) ──────────────────
+
+.breadcrumb-link {
+  color: var(--rm-text-muted, #6c757d);
+  text-decoration: none;
+  font-size: 0.875rem;
+  cursor: pointer;
+
+  &:hover { color: var(--rm-primary, #1a3a5c); }
+}
 
 .section-page {
   display: flex;

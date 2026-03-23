@@ -1,0 +1,51 @@
+.whisper-input-wrap {
+  position: relative;
+
+  input { padding-right: 2.5rem; }
+}
+
+.btn-mic {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  background: none;
+  border: 1px solid #dee2e6;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--rm-text-muted);
+  font-size: 0.78rem;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--rm-text);
+    background: #e9ecef;
+  }
+
+  &.recording {
+    color: #fff;
+    background: #e03131;
+    border-color: #e03131;
+    animation: pulse-mic 1.2s ease-in-out infinite;
+  }
+
+  &.transcribing {
+    color: var(--rm-text-muted);
+    pointer-events: none;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+@keyframes pulse-mic {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(224, 49, 49, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(224, 49, 49, 0); }
+}

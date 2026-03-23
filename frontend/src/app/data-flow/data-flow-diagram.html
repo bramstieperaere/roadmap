@@ -1,0 +1,163 @@
+@let l = layout();
+@if (l) {
+  <div class="diagram-toolbar">
+    <button class="btn btn-sm btn-outline-secondary" (click)="resetView()" title="Reset zoom">
+      <i class="bi bi-arrows-angle-contract me-1"></i>Fit
+    </button>
+  </div>
+  <div class="diagram-container"
+       (wheel)="onWheel($event)"
+       (mousedown)="onMouseDown($event)"
+       (mousemove)="onMouseMove($event)"
+       (mouseup)="onMouseUp()"
+       (mouseleave)="onMouseUp()">
+    <svg #svgEl [attr.viewBox]="currentViewBox()" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arr-blue" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#339af0"/>
+        </marker>
+        <marker id="arr-purple" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#845ef7"/>
+        </marker>
+        <marker id="arr-teal" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#20c997"/>
+        </marker>
+        <marker id="arr-cyan" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#22b8cf"/>
+        </marker>
+      </defs>
+
+      <!-- Service boundary -->
+      <rect [attr.x]="l.boundaryX" [attr.y]="l.boundaryY"
+            [attr.width]="l.boundaryW" [attr.height]="l.boundaryH"
+            rx="8" fill="none" stroke="#1a3a5c" stroke-width="2" stroke-dasharray="6 3" />
+
+      <!-- Arrows (behind nodes) -->
+      @for (a of l.arrows; track $index) {
+        <path [attr.d]="arrowPath(a)" [attr.stroke]="a.color"
+              [attr.stroke-dasharray]="a.dashed ? '6 3' : 'none'"
+              stroke-width="2" fill="none"
+              [attr.marker-end]="'url(#' + markerId(a.color) + ')'"
+              [class.arrow-dim]="isArrowDimmed(a)"
+              [class.arrow-hit]="isArrowHit(a)"
+              class="arrow" />
+      }
+
+      <!-- Service name (top banner) -->
+      <g>
+        <rect [attr.x]="l.serviceBox.x" [attr.y]="l.serviceBox.y"
+              [attr.width]="l.serviceBox.w" [attr.height]="l.serviceBox.h"
+              rx="6" class="svc" />
+        <text [attr.x]="l.serviceBox.x + l.serviceBox.w / 2"
+              [attr.y]="l.serviceBox.y + l.serviceBox.h / 2 + 4"
+              text-anchor="middle" class="svc-text">{{ detail().name }}</text>
+      </g>
+
+      <!-- Zone label: EXPOSES -->
+      @if (l.inGroups.length) {
+        <text [attr.x]="l.inGroups[0].x" [attr.y]="l.inGroups[0].y - 6"
+              class="zone-label" style="fill:#339af0">EXPOSES</text>
+      }
+
+      <!-- Inbound groups -->
+      @for (g of l.inGroups; track g.id) {
+        <g class="node" [class.dimmed]="isDimmed(g.id)"
+           (mouseenter)="onNodeEnter(g.id)" (mouseleave)="onNodeLeave()">
+          <!-- Group box -->
+          <rect [attr.x]="g.x" [attr.y]="g.y" [attr.width]="g.w" [attr.height]="g.h"
+                rx="5" class="group-box group-in" />
+          <!-- Group header -->
+          <text [attr.x]="g.x + 8" [attr.y]="g.y + 15" class="group-name">
+            {{ g.group.group_name }}
+          </text>
+          <!-- Endpoint rows (clickable → Level 3) -->
+          @for (ep of g.epRects; track ep.id; let ei = $index) {
+            <rect [attr.x]="ep.x" [attr.y]="ep.y" [attr.width]="ep.w" [attr.height]="ep.h"
+                  rx="3" class="ep ep-clickable"
+                  (click)="epClick.emit(g.group.endpoints[ei])" />
+            <text [attr.x]="ep.x + 6" [attr.y]="ep.y + ep.h / 2 + 4" class="ep-text"
+                  style="pointer-events: none">
+              <title>{{ epTooltip(g.group.endpoints[ei]) }}</title>
+              {{ epLabel(g.group.endpoints[ei]) }}
+            </text>
+          }
+        </g>
+      }
+
+      <!-- Zone label: CALLS -->
+      @if (l.outGroups.length) {
+        <text [attr.x]="l.outGroups[0].x" [attr.y]="l.outGroups[0].y - 6"
+              class="zone-label" style="fill:#845ef7">CALLS</text>
+      }
+
+      <!-- Outbound groups -->
+      @for (g of l.outGroups; track g.id) {
+        <g class="node" [class.dimmed]="isDimmed(g.id)"
+           (mouseenter)="onNodeEnter(g.id)" (mouseleave)="onNodeLeave()">
+          <rect [attr.x]="g.x" [attr.y]="g.y" [attr.width]="g.w" [attr.height]="g.h"
+                rx="5" class="group-box group-out" />
+          <text [attr.x]="g.x + 8" [attr.y]="g.y + 15" class="group-name group-name-out">
+            {{ g.group.group_name }}
+          </text>
+          @for (ep of g.epRects; track ep.id; let ei = $index) {
+            <rect [attr.x]="ep.x" [attr.y]="ep.y" [attr.width]="ep.w" [attr.height]="ep.h"
+                  rx="3" class="ep-out" />
+            <text [attr.x]="ep.x + 6" [attr.y]="ep.y + ep.h / 2 + 4" class="ep-text">
+              <title>{{ epTooltip(g.group.endpoints[ei]) }}</title>
+              {{ epLabel(g.group.endpoints[ei]) }}
+            </text>
+          }
+        </g>
+      }
+
+      <!-- Bottom zone label -->
+      @if (l.queues.length || l.databases.length) {
+        @let firstBottom = l.queues.length ? l.queues[0] : l.databases[0];
+        <text [attr.x]="firstBottom.x" [attr.y]="firstBottom.y - 8"
+              class="zone-label" style="fill:#495057">STORAGE &amp; MESSAGING</text>
+      }
+
+      <!-- Queues (pill) -->
+      @for (q of l.queues; track q.id) {
+        <g class="node" [class.dimmed]="isDimmed(q.id)"
+           (mouseenter)="onNodeEnter(q.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ q.direction.toUpperCase() }}: {{ q.name }} ({{ q.type }})</title>
+          <rect [attr.x]="q.x" [attr.y]="q.y" [attr.width]="q.w" [attr.height]="q.h"
+                [attr.rx]="q.h / 2" class="queue" />
+          <text [attr.x]="q.x + q.w / 2" [attr.y]="q.y + q.h / 2 + 4"
+                text-anchor="middle" class="queue-text">{{ q.name }}</text>
+        </g>
+      }
+
+      <!-- Databases (cylinder) -->
+      @for (db of l.databases; track db.id) {
+        <g class="node" [class.dimmed]="isDimmed(db.id)"
+           (mouseenter)="onNodeEnter(db.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ db.name }} ({{ db.technology }})</title>
+          @let cx = db.x + db.w / 2;
+          @let ry = 8;
+          <ellipse [attr.cx]="cx" [attr.cy]="db.y + ry" [attr.rx]="db.w / 2" [attr.ry]="ry" class="db" />
+          <rect [attr.x]="db.x" [attr.y]="db.y + ry"
+                [attr.width]="db.w" [attr.height]="db.h - ry * 2"
+                class="db" style="stroke:none" />
+          <ellipse [attr.cx]="cx" [attr.cy]="db.y + db.h - ry" [attr.rx]="db.w / 2" [attr.ry]="ry" class="db" />
+          <text [attr.x]="cx" [attr.y]="db.y + db.h / 2 + 3"
+                text-anchor="middle" class="db-text">{{ db.name }}</text>
+        </g>
+      }
+    </svg>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#1a3a5c"></div> Service</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#339af0"></div> Inbound Endpoint</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#845ef7"></div> Outbound Endpoint</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#20c997"></div> Queue / Topic</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#22b8cf"></div> Database</div>
+  </div>
+}

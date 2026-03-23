@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.analyzers.git_log_analyzer import run_ingest_commits
 from app.analyzers.jira_issue_importer import run_import_jira_issues
+from app.analyzers.jira_ticket_linker import run_link_jira_tickets
 from app.config import CONFIG_PATH, load_config
 from app.job_store import job_store
 from app.models_jobs import JobStatus, StartJobResponse
@@ -155,7 +156,7 @@ async def _run_find_jira_projects(job_id: str, repos: list[dict]):
 async def start_mining(request: StartMiningRequest):
     _require_unlocked()
 
-    valid_actions = {"find_jira_projects", "ingest_commits", "import_jira_issues"}
+    valid_actions = {"find_jira_projects", "ingest_commits", "import_jira_issues", "link_jira_tickets"}
     if request.action not in valid_actions:
         raise HTTPException(status_code=400,
                             detail=f"Unknown action: {request.action}")
@@ -189,7 +190,7 @@ async def start_mining(request: StartMiningRequest):
                     "repo_names": request.repo_names},
         )
         asyncio.create_task(run_ingest_commits(job.id, repos))
-    else:
+    elif request.action == "import_jira_issues":
         job = job_store.create_job(
             module_name=f"Import Jira Issues ({len(repos)} repo(s))",
             module_type="git_mining",
@@ -197,6 +198,14 @@ async def start_mining(request: StartMiningRequest):
                     "repo_names": request.repo_names},
         )
         asyncio.create_task(run_import_jira_issues(job.id, repos))
+    else:
+        job = job_store.create_job(
+            module_name=f"Link Jira Tickets ({len(repos)} repo(s))",
+            module_type="git_mining",
+            params={"action": request.action,
+                    "repo_names": request.repo_names},
+        )
+        asyncio.create_task(run_link_jira_tickets(job.id, repos))
 
     return StartJobResponse(
         job_id=job.id,

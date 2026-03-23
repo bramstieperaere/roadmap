@@ -1,6 +1,6 @@
 import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ContextsService, ContextItem } from '../services/contexts';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 
@@ -13,21 +13,37 @@ import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialo
 export class ContextsComponent implements OnInit {
   private service = inject(ContextsService);
   private confirm = inject(ConfirmDialogService);
+  private router = inject(Router);
 
   contexts = signal<ContextItem[]>([]);
   loading = signal(false);
   error = signal('');
 
-  // Search filter
-  searchQuery = signal('');
-  hideDone = signal(false);
+  // Search filter (stored in service to survive navigation)
+  searchQuery = this.service.searchQuery;
+  hideDone = this.service.hideDone;
+  collapsed = this.service.collapsed;
+  tagFilter = this.service.tagFilter;
+
+  allTags = computed(() => {
+    const tags = new Set<string>();
+    for (const ctx of this.contexts()) {
+      for (const tag of ctx.tags ?? []) tags.add(tag);
+    }
+    return [...tags].sort();
+  });
 
   filteredContexts = computed(() => {
     const q = this.searchQuery().toLowerCase().trim();
     const hide = this.hideDone();
+    const activeTags = this.tagFilter();
     const all = this.contexts();
     return all.flatMap(ctx => {
       if (hide && ctx.done) return [];
+      if (activeTags.length > 0) {
+        const ctxTags = ctx.tags ?? [];
+        if (!activeTags.some(t => ctxTags.includes(t))) return [];
+      }
       let children = ctx.children;
       if (hide) children = children.filter(c => !c.done);
       if (q) {
@@ -41,6 +57,19 @@ export class ContextsComponent implements OnInit {
       return children !== ctx.children ? [{ ...ctx, children }] : [ctx];
     });
   });
+
+  toggleTagFilter(tag: string, event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const current = this.tagFilter();
+    this.tagFilter.set(
+      current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag]
+    );
+  }
+
+  clearTagFilter() {
+    this.tagFilter.set([]);
+  }
 
   // Dropdown menu
   openMenu = signal<string | null>(null);
@@ -104,11 +133,9 @@ export class ContextsComponent implements OnInit {
     this.adding.set(true);
     this.error.set('');
     this.service.add(name).subscribe({
-      next: () => {
-        this.newName.set('');
-        this.adding.set(false);
+      next: (ctx) => {
         this.showAddPopup.set(false);
-        this.load();
+        this.router.navigate(['/contexts', ctx.name]);
       },
       error: (err) => {
         this.adding.set(false);
@@ -162,7 +189,11 @@ export class ContextsComponent implements OnInit {
   copyContextRef(contextPath: string, event: Event) {
     event.preventDefault();
     event.stopPropagation();
-    const text = `see roadmap mcp context "${contextPath}" for context`;
+    const text = `Use roadmap MCP for context "${contextPath}":\n`
+      + `1. get_context_toc("${contextPath}") — table of contents with item sizes\n`
+      + `2. get_context_item("${contextPath}", <index>) — fetch individual items\n`
+      + `3. get_context("${contextPath}") — fetch everything (can be large)\n`
+      + `4. add_context_insight("${contextPath}", "<label>", "<text>") — write back your analysis/findings`;
     navigator.clipboard.writeText(text);
   }
 

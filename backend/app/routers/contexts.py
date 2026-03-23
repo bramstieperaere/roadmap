@@ -34,6 +34,7 @@ def _read_context(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("description", "")
     data.setdefault("done", False)
+    data.setdefault("tags", [])
     data.setdefault("items", [])
     data.setdefault("children", [])
     for child in data["children"]:
@@ -620,6 +621,21 @@ def update_description(name: str, request: UpdateDescriptionRequest):
     return ctx
 
 
+class UpdateTagsRequest(BaseModel):
+    tags: list[str]
+
+
+@router.put("/{name}/tags")
+def update_tags(name: str, request: UpdateTagsRequest):
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+    ctx = _read_context(path)
+    ctx["tags"] = [t.strip() for t in request.tags if t.strip()]
+    _write_context(path, ctx)
+    return ctx
+
+
 class UpdateDoneRequest(BaseModel):
     done: bool
 
@@ -718,7 +734,7 @@ def update_item(name: str, item_type: str, item_id: str, body: dict):
         if item["type"] == item_type and item["id"] == item_id:
             if "label" in body:
                 item["label"] = body["label"]
-            if "text" in body and item_type == "instructions":
+            if "text" in body and item_type in ("instructions", "insight"):
                 item["text"] = body["text"]
             _write_context(path, ctx)
             return item
@@ -962,7 +978,7 @@ def update_child_item(name: str, child: str, item_type: str, item_id: str, body:
         if item["type"] == item_type and item["id"] == item_id:
             if "label" in body:
                 item["label"] = body["label"]
-            if "text" in body and item_type == "instructions":
+            if "text" in body and item_type in ("instructions", "insight"):
                 item["text"] = body["text"]
             _write_context(path, ctx)
             return item
@@ -1013,11 +1029,15 @@ def _resolve_item(item_type: str, item_id: str, text: str | None = None) -> dict
         return _resolve_commits(item_id)
     elif item_type == "mixin":
         return _resolve_mixin(item_id)
+    elif item_type == "insight":
+        return _resolve_insight(item_id, text)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown item type: {item_type}")
 
 
 def _resolve_confluence_page(page_id: str) -> dict:
+    from app.routers.confluence import _fetch_single_page
+
     cache = _get_cache()
     config = load_config_decrypted()
 
@@ -1035,8 +1055,27 @@ def _resolve_confluence_page(page_id: str) -> dict:
                 "space_key": data.get("space_key", space.key),
             }
 
-    raise HTTPException(status_code=404,
-                        detail=f"Confluence page {page_id} not found in cache")
+    # Not in cache — fetch from Confluence API
+    atl = config.atlassian
+    try:
+        data = _fetch_single_page(atl, page_id)
+    except Exception:
+        raise HTTPException(status_code=404,
+                            detail=f"Confluence page {page_id} not found")
+
+    # Cache the fetched page
+    space_key = data.get("space_key", "unknown")
+    path = cache.confluence_page_path(space_key, page_id)
+    cache.write(path, data)
+
+    title = data.get("title", "Untitled")
+    return {
+        "type": "confluence_page",
+        "id": page_id,
+        "title": title,
+        "label": title,
+        "space_key": space_key,
+    }
 
 
 def _resolve_jira_issue(issue_key: str) -> dict:
@@ -1071,6 +1110,16 @@ def _resolve_instructions(item_id: str, text: str | None) -> dict:
         "type": "instructions",
         "id": item_id,
         "title": "Instructions",
+        "label": item_id,
+        "text": text or "",
+    }
+
+
+def _resolve_insight(item_id: str, text: str | None) -> dict:
+    return {
+        "type": "insight",
+        "id": item_id,
+        "title": "Agent Insight",
         "label": item_id,
         "text": text or "",
     }

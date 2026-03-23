@@ -41,6 +41,8 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
                 JiraIssueService(config.atlassian, cache), item_id, label)
         elif item_type == "instructions":
             content = _render_instructions(label, item.get("text", ""))
+        elif item_type == "insight":
+            content = _render_insight(label, item.get("text", ""))
         elif item_type == "git_repo":
             content = _render_git_repo(item_id, label, item.get("path", ""))
         elif item_type == "repo_file":
@@ -50,6 +52,8 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
                 BitbucketService(config.atlassian, cache), item_id, label)
         elif item_type == "commits":
             content = _render_commits(item, config)
+        elif item_type == "inquiry":
+            content = _render_inquiry(item, config, cache)
         else:
             content = f"Unknown item: {item_type} / {item_id}"
 
@@ -129,10 +133,12 @@ _TYPE_LABELS = {
     "confluence_page": "Confluence",
     "jira_issue": "Jira",
     "instructions": "Instructions",
+    "insight": "Agent Insight",
     "git_repo": "Git Repo",
     "repo_file": "File",
     "bitbucket_pr": "Bitbucket",
     "commits": "Commits",
+    "inquiry": "Inquiry",
 }
 
 
@@ -258,6 +264,53 @@ def list_contexts() -> str:
     return "Available contexts:\n" + "\n".join(lines)
 
 
+@mcp.tool()
+def add_context_insight(name: str, label: str, text: str) -> str:
+    """Write an insight or analysis back to a context as an agent memory item.
+
+    Use this after reading a context to record your analysis, findings,
+    or decisions so they are preserved for future reference.
+
+    Args:
+        name: context name (e.g. 'my-context' or 'parent/child')
+        label: short descriptive title for this insight
+        text: the insight content (markdown supported)
+    """
+    parts = name.split("/", 1)
+    parent_name = parts[0]
+    child_name = parts[1] if len(parts) > 1 else None
+
+    ctx_path = CONFIG_PATH.parent / "contexts" / f"{parent_name}.json"
+    if not ctx_path.exists():
+        return f"Context '{name}' not found."
+
+    ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
+
+    import uuid
+    item = {
+        "type": "insight",
+        "id": f"insight-{uuid.uuid4().hex[:8]}",
+        "title": "Agent Insight",
+        "label": label,
+        "text": text,
+    }
+
+    if child_name:
+        child_ctx = next(
+            (c for c in ctx.get("children", []) if c["name"] == child_name),
+            None,
+        )
+        if not child_ctx:
+            return f"Sub-context '{child_name}' not found in '{parent_name}'."
+        child_ctx.setdefault("items", []).append(item)
+    else:
+        ctx.setdefault("items", []).append(item)
+
+    ctx_path.write_text(json.dumps(ctx, indent=2, ensure_ascii=False),
+                        encoding="utf-8")
+    return f"Insight '{label}' added to context '{name}'."
+
+
 def _render_confluence_page(cache: JiraCache, config, page_id: str,
                             label: str) -> str:
     """Render a Confluence page's content as text."""
@@ -311,6 +364,11 @@ def _render_jira_issue(svc: JiraIssueService, issue_key: str, label: str) -> str
 def _render_instructions(label: str, text: str) -> str:
     """Render free-text instructions."""
     return f"## {label} (Instructions)\n\n{text}"
+
+
+def _render_insight(label: str, text: str) -> str:
+    """Render an agent insight / memory item."""
+    return f"## {label} (Agent Insight)\n\n{text}"
 
 
 def _render_git_repo(repo_name: str, label: str, path: str) -> str:
@@ -456,6 +514,195 @@ def _render_bitbucket_pr(svc: BitbucketService, pr_url: str, label: str) -> str:
             lines.append(f"\n... and {len(comments) - 20} more comments")
 
     return "\n".join(lines)
+
+
+def _upsert_inquiry(name: str, inquiry_type: str, params: dict, label: str) -> None:
+    """Create or update an inquiry item in a context (upsert by type+params)."""
+    import uuid
+    from datetime import datetime, timezone
+
+    parts = name.split("/", 1)
+    parent_name, child_name = parts[0], parts[1] if len(parts) > 1 else None
+
+    ctx_path = CONFIG_PATH.parent / "contexts" / f"{parent_name}.json"
+    if not ctx_path.exists():
+        return
+
+    ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    if child_name:
+        target = next((c for c in ctx.get("children", []) if c["name"] == child_name), None)
+        if not target:
+            return
+        items_list = target.setdefault("items", [])
+    else:
+        items_list = ctx.setdefault("items", [])
+
+    existing = next(
+        (it for it in items_list
+         if it.get("type") == "inquiry"
+         and it.get("inquiry_type") == inquiry_type
+         and it.get("params", {}) == params),
+        None,
+    )
+    if existing:
+        existing["requested_at"] = now
+        existing["label"] = label
+    else:
+        items_list.append({
+            "type": "inquiry",
+            "id": f"inquiry-{uuid.uuid4().hex[:8]}",
+            "title": "Inquiry",
+            "label": label,
+            "inquiry_type": inquiry_type,
+            "params": params,
+            "requested_at": now,
+        })
+
+    ctx_path.write_text(json.dumps(ctx, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _render_git_repo_detail(repo_name: str, label: str, path: str) -> str:
+    """Render a git repo with branches and recent commits."""
+    lines = [
+        f"## {label} (Git Repository)",
+        f"**Repository:** {repo_name}",
+        f"**Checkout path:** {path}",
+    ]
+    try:
+        proc = subprocess.run(
+            ["git", "branch", "-a", "--format=%(refname:short)"],
+            cwd=path, capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0:
+            branches = [b for b in proc.stdout.strip().splitlines() if b][:20]
+            if branches:
+                lines.append(f"\n**Branches:** {', '.join(branches)}")
+
+        proc = subprocess.run(
+            ["git", "log", "--format=%h %aI %an\t%s", "-20"],
+            cwd=path, capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0:
+            commit_lines = [l for l in proc.stdout.strip().splitlines() if l]
+            if commit_lines:
+                lines.append("\n**Recent commits:**")
+                for line in commit_lines:
+                    tab = line.find("\t")
+                    if tab >= 0:
+                        meta, msg = line[:tab], line[tab + 1:]
+                        parts = meta.split(" ", 2)
+                        if len(parts) >= 3:
+                            h, date, author = parts[0], parts[1][:10], parts[2]
+                            lines.append(f"- `{h}` {date} {author} — {msg}")
+                        else:
+                            lines.append(f"- {line}")
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
+def _render_inquiry(item: dict, config, cache) -> str:
+    """Render an agent inquiry by fetching live data for the referenced resource."""
+    inquiry_type = item.get("inquiry_type", "")
+    params = item.get("params", {})
+    label = item.get("label", "Inquiry")
+    requested_at = item.get("requested_at", "")
+    header = f"*[Agent inquiry — {requested_at[:10] if requested_at else 'unknown date'}]*\n\n"
+
+    if inquiry_type == "jira_issue":
+        issue_key = params.get("issue_key", "")
+        return header + _render_jira_issue(JiraIssueService(config.atlassian, cache), issue_key, label)
+
+    if inquiry_type == "confluence_page":
+        page_id = params.get("page_id", "")
+        return header + _render_confluence_page(cache, config, page_id, label)
+
+    if inquiry_type == "git_repo":
+        repo_name = params.get("repo_name", "")
+        repo = next((r for r in config.repositories if r.name == repo_name), None)
+        if not repo:
+            return header + f"## {label}\n\nRepository '{repo_name}' not found in config."
+        return header + _render_git_repo_detail(repo_name, label, repo.path)
+
+    if inquiry_type == "git_repos_list":
+        lines = [f"## {label} (Available Git Repositories)"]
+        for r in config.repositories:
+            lines.append(f"- **{r.name}**: `{r.path}`")
+        return header + "\n".join(lines)
+
+    return header + f"## {label}\n\nUnknown inquiry type: {inquiry_type}"
+
+
+@mcp.tool()
+def list_git_repos() -> str:
+    """List all git repositories available in the roadmap configuration.
+
+    Returns repository names and their local checkout paths.
+    Use request_git_repo_info() to get branches and recent commits for a specific repo.
+    """
+    config = load_config_decrypted()
+    if not config.repositories:
+        return "No git repositories configured."
+    lines = ["Available git repositories:\n"]
+    for r in config.repositories:
+        lines.append(f"- **{r.name}**: `{r.path}`")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def request_git_repo_info(name: str, repo_name: str, label: str = "") -> str:
+    """Fetch branches and recent commits for a git repository.
+
+    Records the inquiry in the context so it is visible in the UI.
+    Use list_git_repos() first to discover available repository names.
+
+    Args:
+        name:      context name (e.g. 'my-context' or 'parent/child')
+        repo_name: repository name as shown by list_git_repos()
+        label:     optional display label (defaults to repo name)
+    """
+    config = load_config_decrypted()
+    repo = next((r for r in config.repositories if r.name == repo_name), None)
+    if not repo:
+        return f"Repository '{repo_name}' not found. Use list_git_repos() to see available names."
+    label = label or repo_name
+    _upsert_inquiry(name, "git_repo", {"repo_name": repo_name}, label)
+    return _render_git_repo_detail(repo_name, label, repo.path)
+
+
+@mcp.tool()
+def request_confluence_page(name: str, page_id: str, label: str = "") -> str:
+    """Fetch a Confluence page by its ID and record the inquiry in the context.
+
+    Args:
+        name:    context name (e.g. 'my-context' or 'parent/child')
+        page_id: numeric Confluence page ID
+        label:   optional display label (defaults to 'Page <page_id>')
+    """
+    config = load_config_decrypted()
+    cache = JiraCache(config.atlassian.cache_dir, config.atlassian.refresh_duration)
+    label = label or f"Page {page_id}"
+    _upsert_inquiry(name, "confluence_page", {"page_id": page_id}, label)
+    return _render_confluence_page(cache, config, page_id, label)
+
+
+@mcp.tool()
+def request_jira_issue(name: str, issue_key: str, label: str = "") -> str:
+    """Fetch a Jira issue by its key and record the inquiry in the context.
+
+    Args:
+        name:      context name (e.g. 'my-context' or 'parent/child')
+        issue_key: Jira issue key, e.g. 'TJ-123'
+        label:     optional display label (defaults to issue key)
+    """
+    config = load_config_decrypted()
+    cache = JiraCache(config.atlassian.cache_dir, config.atlassian.refresh_duration)
+    issue_key = issue_key.upper()
+    label = label or issue_key
+    _upsert_inquiry(name, "jira_issue", {"issue_key": issue_key}, label)
+    return _render_jira_issue(JiraIssueService(config.atlassian, cache), issue_key, label)
 
 
 def create_mcp_sse_app() -> Starlette:

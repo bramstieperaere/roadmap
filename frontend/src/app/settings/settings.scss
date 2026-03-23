@@ -61,6 +61,16 @@
   border-right: 1px solid var(--rm-border);
 }
 
+.nav-group-label {
+  padding: 0.625rem 1rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rm-text-muted);
+  margin-top: 0.25rem;
+}
+
 .nav-tab {
   display: flex;
   align-items: center;
@@ -92,6 +102,10 @@
     font-weight: 600;
     border-right: 2px solid var(--rm-accent);
   }
+}
+
+.nav-tab-sub {
+  padding-left: 1.75rem;
 }
 
 .settings-content {
@@ -278,13 +292,40 @@
   }
 }
 
-// Tag filter bar
-.tag-filter-bar {
+// Filter bar (search + tag chips)
+.filter-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.375rem;
   padding: 0.5rem 0;
+}
+
+.filter-bar-search {
+  position: relative;
+
+  i {
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--rm-text-muted);
+    font-size: 0.75rem;
+    pointer-events: none;
+  }
+
+  input {
+    width: 150px;
+    padding: 0.125rem 0.5rem 0.125rem 1.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    background: #fff;
+    outline: none;
+
+    &:focus { border-color: var(--rm-accent); }
+    &::placeholder { color: var(--rm-text-muted); }
+  }
 }
 
 .tag-chip {

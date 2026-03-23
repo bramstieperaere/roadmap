@@ -100,6 +100,95 @@
   line-height: 1;
 }
 
+.tag-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.tag-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  border: 1px solid var(--rm-border);
+  background: #fff;
+  color: var(--rm-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+
+  &:hover {
+    border-color: var(--rm-primary);
+    color: var(--rm-primary);
+  }
+
+  &.active {
+    background: var(--rm-primary);
+    border-color: var(--rm-primary);
+    color: #fff;
+  }
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 20px;
+  background: #e8eef6;
+  color: var(--rm-primary);
+  cursor: default;
+  white-space: nowrap;
+
+  // In the overview list — clicking a tag filters by it
+  .context-link &, .context-link & {
+    cursor: pointer;
+    &:hover { background: #d0dff0; }
+  }
+}
+
+.context-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.tag-remove {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+
+  &:hover { opacity: 1; }
+}
+
+.tag-input {
+  width: 8rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  height: auto;
+}
+
+.tag-add-btn {
+  color: var(--rm-text-muted);
+  text-decoration: none;
+  &:hover { color: var(--rm-primary); }
+}
+
 .child-add-row {
   display: flex;
   align-items: center;

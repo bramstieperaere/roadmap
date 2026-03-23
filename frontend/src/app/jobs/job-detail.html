@@ -1,9 +1,17 @@
-<div class="container py-4" data-testid="job-detail-page">
-  <div class="mb-3">
-    <a routerLink="/jobs" class="text-decoration-none" data-testid="back-to-jobs">
-      <i class="bi bi-arrow-left me-1"></i>Back to Jobs
-    </a>
+<div class="section-page" data-testid="job-detail-page">
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/processing" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Processing
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <a routerLink="/jobs" class="breadcrumb-link">Jobs</a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <span class="fw-semibold">{{ job()?.id || '...' }}</span>
+    </div>
   </div>
+  <div class="section-content">
+  <div class="container py-4">
 
   @if (loading()) {
     <div class="text-center py-5">
@@ -82,4 +90,6 @@
       </div>
     </div>
   }
-</div>
+  </div><!-- /container -->
+  </div><!-- /section-content -->
+</div><!-- /section-page -->

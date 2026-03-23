@@ -14,20 +14,29 @@
   <div class="settings-body">
     <!-- Vertical tabs -->
     <nav class="settings-nav">
-      <button class="nav-tab" [class.active]="activeTab() === 'neo4j'" (click)="switchTab('neo4j')">
+      <div class="nav-group-label">General</div>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'neo4j'" (click)="switchTab('neo4j')">
         <i class="bi bi-database"></i> Database
       </button>
-      <button class="nav-tab" [class.active]="activeTab() === 'atlassian'" (click)="switchTab('atlassian')">
+      <div class="nav-group-label">Information Sources</div>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'atlassian'" (click)="switchTab('atlassian')">
         <i class="bi bi-cloud"></i> Atlassian
       </button>
-      <button class="nav-tab" [class.active]="activeTab() === 'repos'" (click)="switchTab('repos')">
-        <i class="bi bi-folder2-open"></i> Repositories
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'bitbucket'" (click)="switchTab('bitbucket')">
+        <i class="bi bi-git"></i> Bitbucket
       </button>
-      <button class="nav-tab" [class.active]="activeTab() === 'providers'" (click)="switchTab('providers')">
-        <i class="bi bi-cpu"></i> AI Providers
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'repos'" (click)="switchTab('repos')">
+        <i class="bi bi-folder2-open"></i> Git Repos
       </button>
-      <button class="nav-tab" [class.active]="activeTab() === 'tasks'" (click)="switchTab('tasks')">
-        <i class="bi bi-list-task"></i> AI Tasks
+      <div class="nav-group-label">AI</div>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'providers'" (click)="switchTab('providers')">
+        <i class="bi bi-cpu"></i> Providers
+      </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'tasks'" (click)="switchTab('tasks')">
+        <i class="bi bi-list-task"></i> Tasks
+      </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'whisper'" (click)="switchTab('whisper')">
+        <i class="bi bi-mic"></i> Whisper
       </button>
     </nav>
 
@@ -66,8 +75,13 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label">Password</label>
-                <input type="password" class="form-control" [value]="config().neo4j.password"
-                       (input)="updateNeo4jField('password', $any($event.target).value)" data-testid="neo4j-password">
+                <div class="input-group">
+                  <input [type]="isSecretVisible('neo4j-pw') ? 'text' : 'password'" class="form-control" [value]="config().neo4j.password"
+                         (input)="updateNeo4jField('password', $any($event.target).value)" data-testid="neo4j-password">
+                  <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('neo4j-pw')" tabindex="-1">
+                    <i class="bi" [class.bi-eye]="!isSecretVisible('neo4j-pw')" [class.bi-eye-slash]="isSecretVisible('neo4j-pw')"></i>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="mt-3">
@@ -166,30 +180,11 @@
                        (input)="updateAtlassianField('refresh_duration', $any($event.target).value)"
                        data-testid="atlassian-refresh-duration">
               </div>
-              <div class="col-12"><hr class="my-1"><small class="text-muted">Bitbucket Cloud (app password)</small></div>
-              <div class="col-md-6">
-                <label class="form-label">Bitbucket Username</label>
-                <input type="text" class="form-control" placeholder="bitbucket username"
-                       [value]="config().atlassian.bitbucket_username"
-                       (input)="updateAtlassianField('bitbucket_username', $any($event.target).value)"
-                       data-testid="bitbucket-username">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Bitbucket App Password</label>
-                <input type="password" class="form-control"
-                       [value]="config().atlassian.bitbucket_app_password"
-                       (input)="updateAtlassianField('bitbucket_app_password', $any($event.target).value)"
-                       data-testid="bitbucket-app-password">
-              </div>
             </div>
-            <div class="mt-3 d-flex gap-2">
+            <div class="mt-3">
               <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
                 <i class="bi bi-plug me-1"></i>
                 {{ testingAtlassian() ? 'Testing...' : 'Test Jira / Confluence' }}
-              </button>
-              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
-                <i class="bi bi-git me-1"></i>
-                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
               </button>
             </div>
           } @else {
@@ -223,26 +218,11 @@
                 <label class="form-label">Cache Refresh</label>
                 <div class="field-value" data-testid="atlassian-refresh-duration-value">{{ config().atlassian.refresh_duration }}s</div>
               </div>
-              @if (config().atlassian.bitbucket_username) {
-                <div class="col-12"><hr class="my-1"><small class="text-muted">Bitbucket Cloud</small></div>
-                <div class="col-md-6">
-                  <label class="form-label">Bitbucket Username</label>
-                  <div class="field-value" data-testid="bitbucket-username-value">{{ config().atlassian.bitbucket_username }}</div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label">Bitbucket App Password</label>
-                  <div class="field-value" data-testid="bitbucket-app-password-value">{{ config().atlassian.bitbucket_app_password ? '••••••••' : '—' }}</div>
-                </div>
-              }
             </div>
-            <div class="mt-3 d-flex gap-2">
+            <div class="mt-3">
               <button class="btn btn-outline-secondary btn-sm" (click)="testAtlassianConnection()" [disabled]="testingAtlassian()" data-testid="atlassian-test-connection">
                 <i class="bi bi-plug me-1"></i>
                 {{ testingAtlassian() ? 'Testing...' : 'Test Jira / Confluence' }}
-              </button>
-              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
-                <i class="bi bi-git me-1"></i>
-                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
               </button>
             </div>
           }
@@ -441,11 +421,75 @@
         </div>
       }
 
-      <!-- ═══════════════════ Repositories ═══════════════════ -->
+      <!-- ═══════════════════ Bitbucket ═══════════════════ -->
+      @if (activeTab() === 'bitbucket') {
+        <div data-testid="bitbucket-card">
+          @if (editingSection() === 'bitbucket') {
+            <!-- EDIT MODE -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-git me-2"></i>Bitbucket Connection</h6>
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" (click)="saveSection()" data-testid="save-bitbucket">
+                  <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+              </div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Bitbucket Username</label>
+                <input type="text" class="form-control" placeholder="Bitbucket username"
+                       [value]="config().atlassian.bitbucket_username"
+                       (input)="updateAtlassianField('bitbucket_username', $any($event.target).value)"
+                       data-testid="bitbucket-username">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">App Password</label>
+                <input type="password" class="form-control"
+                       [value]="config().atlassian.bitbucket_app_password"
+                       (input)="updateAtlassianField('bitbucket_app_password', $any($event.target).value)"
+                       data-testid="bitbucket-app-password">
+              </div>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
+                <i class="bi bi-git me-1"></i>
+                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
+              </button>
+            </div>
+          } @else {
+            <!-- READONLY MODE -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="section-title mb-0"><i class="bi bi-git me-2"></i>Bitbucket Connection</h6>
+              <button class="btn btn-outline-primary btn-sm" (click)="startEditing('bitbucket')" [disabled]="editingSection() !== null" data-testid="edit-bitbucket">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </button>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Bitbucket Username</label>
+                <div class="field-value" data-testid="bitbucket-username-value">{{ config().atlassian.bitbucket_username || '—' }}</div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">App Password</label>
+                <div class="field-value" data-testid="bitbucket-app-password-value">{{ config().atlassian.bitbucket_app_password ? '••••••••' : '—' }}</div>
+              </div>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-outline-secondary btn-sm" (click)="testBitbucketConnection()" [disabled]="testingBitbucket()" data-testid="bitbucket-test-connection">
+                <i class="bi bi-git me-1"></i>
+                {{ testingBitbucket() ? 'Testing...' : 'Test Bitbucket' }}
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ═══════════════════ Git Repos ═══════════════════ -->
       @if (activeTab() === 'repos') {
         <div data-testid="repositories-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="section-title mb-0"><i class="bi bi-folder2-open me-2"></i>Repositories</h6>
+            <h6 class="section-title mb-0"><i class="bi bi-folder2-open me-2"></i>Git Repos</h6>
             <div class="d-flex gap-2">
               <button class="btn btn-outline-secondary btn-sm" (click)="startImport()" [disabled]="editingSection() !== null || importing()" data-testid="import-from-folder">
                 <i class="bi bi-folder-plus me-1"></i>Import from Folder
@@ -456,24 +500,28 @@
             </div>
           </div>
 
-          @if (allTags().length > 0) {
-            <div class="tag-filter-bar mb-2" data-testid="tag-filter-bar">
-              <small class="text-muted me-2">Filter by tag:</small>
-              @for (tag of allTags(); track tag) {
-                <button class="tag-chip"
-                        [class.active]="tagFilter().includes(tag)"
-                        (click)="toggleTagFilter(tag)"
-                        [attr.data-testid]="'tag-filter-' + tag">
-                  {{ tag }}
-                </button>
-              }
-              @if (tagFilter().length > 0) {
-                <button class="btn btn-link btn-sm text-muted p-0 ms-2" (click)="clearTagFilter()">
-                  <i class="bi bi-x-circle me-1"></i>Clear
-                </button>
-              }
+          <div class="filter-bar mb-2" data-testid="tag-filter-bar">
+            <small class="text-muted me-2">Filter:</small>
+            <div class="filter-bar-search">
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Search..."
+                     [ngModel]="repoSearch()" (ngModelChange)="repoSearch.set($event)"
+                     data-testid="repo-search">
             </div>
-          }
+            @for (tag of allTags(); track tag) {
+              <button class="tag-chip"
+                      [class.active]="tagFilter().includes(tag)"
+                      (click)="toggleTagFilter(tag)"
+                      [attr.data-testid]="'tag-filter-' + tag">
+                {{ tag }}
+              </button>
+            }
+            @if (tagFilter().length > 0 || repoSearch()) {
+              <button class="btn btn-link btn-sm text-muted p-0 ms-2" (click)="clearTagFilter(); repoSearch.set('')">
+                <i class="bi bi-x-circle me-1"></i>Clear
+              </button>
+            }
+          </div>
 
           <div class="repo-layout">
             <!-- Repo list -->
@@ -492,8 +540,8 @@
               }
               @empty {
                 <p class="text-muted small px-3 py-2 mb-0" data-testid="no-repos-message">
-                  @if (tagFilter().length > 0) {
-                    No repositories match the selected tags.
+                  @if (repoSearch() || tagFilter().length > 0) {
+                    No repositories match the current filter.
                   } @else {
                     No repositories configured.
                   }
@@ -671,7 +719,7 @@
                         @for (tech of technologiesForType(mod.type); track tech.key) {
                           <button
                             class="tech-chip"
-                            [class.active]="mod.technologies?.includes(tech.key)"
+                            [class.active]="mod.technologies.includes(tech.key)"
                             (click)="toggleTechnology(repoIndex, modIndex, tech.key)"
                           >{{ tech.label }}</button>
                         }
@@ -691,11 +739,6 @@
                               [attr.data-testid]="'edit-repo-' + repoIndex">
                         <i class="bi bi-pencil me-1"></i>Edit
                       </button>
-                      <button class="btn btn-outline-warning btn-sm" (click)="startAnalysisJob(repoIndex)"
-                              [disabled]="repo.modules.length === 0" title="Run source code analysis"
-                              [attr.data-testid]="'run-analysis-' + repoIndex">
-                        <i class="bi bi-lightning me-1"></i>Run Analysis
-                      </button>
                     </div>
                   </div>
 
@@ -710,7 +753,7 @@
                     </div>
                   </div>
 
-                  @if (repo.tags?.length) {
+                  @if (repo.tags.length) {
                     <div class="mb-3">
                       <label class="form-label">Tags</label>
                       <div class="d-flex flex-wrap gap-1">
@@ -739,7 +782,7 @@
                             <td>{{ mod.type }}</td>
                             <td>{{ mod.relative_path }}</td>
                             <td>
-                              @if (mod.technologies?.length) {
+                              @if (mod.technologies.length) {
                                 <div class="tech-chips">
                                   @for (tech of mod.technologies; track tech) {
                                     <span class="tech-chip active">{{ knownTechnologies[tech]?.label || tech }}</span>
@@ -803,9 +846,14 @@
                   </div>
                   <div class="col-md-6">
                     <label class="form-label">API Key</label>
-                    <input type="password" class="form-control" placeholder="sk-..."
-                           [value]="provider.api_key" (input)="updateAIProvider(providerIndex, 'api_key', $any($event.target).value)"
-                           [attr.data-testid]="'ai-provider-key-' + providerIndex">
+                    <div class="input-group">
+                      <input [type]="isSecretVisible('provider-' + providerIndex) ? 'text' : 'password'" class="form-control" placeholder="sk-..."
+                             [value]="provider.api_key" (input)="updateAIProvider(providerIndex, 'api_key', $any($event.target).value)"
+                             [attr.data-testid]="'ai-provider-key-' + providerIndex">
+                      <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('provider-' + providerIndex)" tabindex="-1">
+                        <i class="bi" [class.bi-eye]="!isSecretVisible('provider-' + providerIndex)" [class.bi-eye-slash]="isSecretVisible('provider-' + providerIndex)"></i>
+                      </button>
+                    </div>
                   </div>
                   <div class="col-md-4">
                     <label class="form-label">Default Model</label>
@@ -887,6 +935,7 @@
                             [attr.data-testid]="'ai-task-type-' + taskIndex">
                       <option value="repository_analysis">Repository Analysis</option>
                       <option value="functional_doc">Functional Doc Processing</option>
+                      <option value="cypher_generation">Cypher Generation</option>
                     </select>
                   </div>
                   <div class="col-md-6">
@@ -927,6 +976,121 @@
           }
           @empty {
             <p class="text-muted" data-testid="no-tasks-message">No AI tasks configured. Click "Add Task" to map a task type to an AI provider.</p>
+          }
+        </div>
+      }
+
+      <!-- ═══════════════════ Whisper (Speech-to-Text) ═══════════════════ -->
+      @if (activeTab() === 'whisper') {
+        <div data-testid="whisper-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="section-title mb-0"><i class="bi bi-mic me-2"></i>Whisper (Speech-to-Text)</h6>
+          </div>
+
+          @if (editingSection() === 'whisper') {
+            <div class="section-card editing">
+              <div class="d-flex justify-content-end gap-2 mb-2">
+                <button class="btn btn-primary btn-sm" (click)="saveSection()">
+                  <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+              </div>
+              <div class="row g-3 mb-2">
+                <div class="col-md-8">
+                  <label class="form-label">Base URL</label>
+                  <input type="text" class="form-control" placeholder="https://api.openai.com/v1"
+                         [value]="config().whisper.base_url" (input)="updateWhisper('base_url', $any($event.target).value)"
+                         data-testid="whisper-url">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Model</label>
+                  <input type="text" class="form-control" placeholder="whisper-1"
+                         [value]="config().whisper.model" (input)="updateWhisper('model', $any($event.target).value)"
+                         data-testid="whisper-model">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">API Key</label>
+                  <div class="input-group">
+                    <input [type]="isSecretVisible('whisper-key') ? 'text' : 'password'" class="form-control" placeholder="sk-..."
+                           [value]="config().whisper.api_key" (input)="updateWhisper('api_key', $any($event.target).value)"
+                           data-testid="whisper-key">
+                    <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('whisper-key')" tabindex="-1">
+                      <i class="bi" [class.bi-eye]="!isSecretVisible('whisper-key')" [class.bi-eye-slash]="isSecretVisible('whisper-key')"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="row g-3 mt-0">
+                <div class="col-12">
+                  <small class="text-muted d-block mb-2">
+                    <i class="bi bi-magic me-1"></i>Post-processing (optional) — clean up raw transcription with an AI provider
+                  </small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Provider</label>
+                  <select class="form-select"
+                          (change)="updateWhisper('postprocess_provider', $any($event.target).value)"
+                          data-testid="whisper-postprocess-provider">
+                    <option value="" [selected]="!config().whisper.postprocess_provider">-- None --</option>
+                    @for (p of config().ai_providers; track p.name) {
+                      <option [value]="p.name" [selected]="config().whisper.postprocess_provider === p.name">{{ p.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Model override (optional)</label>
+                  <input type="text" class="form-control" placeholder="Uses provider default if empty"
+                         [value]="config().whisper.postprocess_model" (input)="updateWhisper('postprocess_model', $any($event.target).value)"
+                         data-testid="whisper-postprocess-model">
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="section-card">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Configuration</span>
+                <button class="btn btn-outline-primary btn-sm" (click)="startEditing('whisper')" [disabled]="editingSection() !== null"
+                        data-testid="edit-whisper">
+                  <i class="bi bi-pencil me-1"></i>Edit
+                </button>
+              </div>
+              @if (config().whisper.api_key) {
+                <div class="d-flex gap-4 flex-wrap">
+                  <div>
+                    <label class="form-label">Base URL</label>
+                    <div class="field-value">{{ config().whisper.base_url }}</div>
+                  </div>
+                  <div>
+                    <label class="form-label">API Key</label>
+                    <div class="field-value">••••••••</div>
+                  </div>
+                  <div>
+                    <label class="form-label">Model</label>
+                    <div class="field-value">{{ config().whisper.model }}</div>
+                  </div>
+                  @if (config().whisper.postprocess_provider) {
+                    <div>
+                      <label class="form-label">Post-processing</label>
+                      <div class="field-value">{{ config().whisper.postprocess_provider }}{{ config().whisper.postprocess_model ? ' / ' + config().whisper.postprocess_model : '' }}</div>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="text-muted mb-0" data-testid="no-whisper-message">Not configured. Click "Edit" to set up an OpenAI-compatible Whisper endpoint for voice-to-text.</p>
+              }
+            </div>
+          }
+
+          <!-- Test Whisper -->
+          @if (config().whisper.api_key && editingSection() !== 'whisper') {
+            <div class="section-card mt-3" data-testid="whisper-test">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Test</span>
+              </div>
+              <app-whisper-textarea [(value)]="whisperTestText"
+                                    placeholder="Click the microphone, speak, then check the transcription here..."
+                                    [rows]="3" />
+            </div>
           }
         </div>
       }

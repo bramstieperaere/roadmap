@@ -1,5 +1,15 @@
-<div class="container py-4" data-testid="jobs-list-page">
-  <h4 class="mb-4 fw-semibold">Analysis Jobs</h4>
+<div class="section-page" data-testid="jobs-list-page">
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/processing" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Processing
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <span class="fw-semibold">Jobs</span>
+    </div>
+  </div>
+  <div class="section-content">
+  <div class="container py-4">
 
   @if (loading()) {
     <div class="text-center py-5">
@@ -11,7 +21,7 @@
     <div class="card">
       <div class="card-body text-center text-muted py-5" data-testid="no-jobs-message">
         <i class="bi bi-lightning fs-1 d-block mb-2"></i>
-        No analysis jobs yet. Go to <a routerLink="/settings">Settings</a> to run an analysis on a module.
+        No jobs yet. Go to <a routerLink="/processing">Processing</a> to start one.
       </div>
     </div>
   } @else {
@@ -68,4 +78,6 @@
       </div>
     </div>
   }
-</div>
+  </div><!-- /container -->
+  </div><!-- /section-content -->
+</div><!-- /section-page -->

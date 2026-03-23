@@ -1,25 +1,24 @@
-import { Component, computed, inject, OnInit, signal, DestroyRef } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, signal, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
-import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, AtlassianConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
 import { EncryptionService } from '../services/encryption';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
-import { JobsService } from '../services/jobs';
+import { WhisperTextarea } from '../components/whisper-textarea/whisper-textarea';
 
 @Component({
   selector: 'app-settings',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, WhisperTextarea],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
   private encryptionService = inject(EncryptionService);
-  private jobsService = inject(JobsService);
-  private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private confirmDialog = inject(ConfirmDialogService);
+  private route = inject(ActivatedRoute);
 
   config = signal<AppConfig>({
     neo4j: { uri: '', username: '', password: '', database: '' },
@@ -27,6 +26,7 @@ export class SettingsComponent implements OnInit {
     repositories: [],
     ai_providers: [],
     ai_tasks: [],
+    whisper: { base_url: 'https://api.openai.com/v1', api_key: '', model: 'whisper-1', postprocess_provider: '', postprocess_model: '' },
   });
   testingConnection = signal(false);
   testingAtlassian = signal(false);
@@ -36,14 +36,16 @@ export class SettingsComponent implements OnInit {
   boardOptions = signal<JiraBoardOption[]>([]);
   analyzing = signal<number | null>(null);
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
-  activeTab = signal<'neo4j' | 'atlassian' | 'repos' | 'providers' | 'tasks'>('neo4j');
+  activeTab = signal<'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper'>('neo4j');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
+  visibleSecrets = signal<Set<string>>(new Set());
   importing = signal(false);
   importParentPath = signal('');
   importFolders = signal<{ name: string; selected: boolean; alreadyAdded: boolean }[]>([]);
   tagFilter = signal<string[]>([]);
   tagInput = signal('');
+  repoSearch = signal('');
   private configBackup: AppConfig | null = null;
 
   allTags = computed(() => {
@@ -56,19 +58,44 @@ export class SettingsComponent implements OnInit {
 
   filteredRepositories = computed(() => {
     const active = this.tagFilter();
+    const search = this.repoSearch().toLowerCase().trim();
     const repos = this.config().repositories;
-    const indexed = repos.map((repo, index) => ({ repo, index }));
-    if (active.length === 0) return indexed;
-    return indexed.filter(({ repo }) =>
-      active.every(tag => (repo.tags || []).includes(tag)),
-    );
+    let indexed = repos.map((repo, index) => ({ repo, index }));
+    if (active.length > 0) {
+      indexed = indexed.filter(({ repo }) =>
+        active.every(tag => (repo.tags || []).includes(tag)),
+      );
+    }
+    if (search) {
+      indexed = indexed.filter(({ repo }) =>
+        (repo.name || '').toLowerCase().includes(search),
+      );
+    }
+    return indexed;
   });
+
+  constructor() {
+    effect(() => {
+      const items = this.filteredRepositories();
+      const current = this.selectedRepoIndex();
+      if (items.length > 0 && (current === null || !items.some(i => i.index === current))) {
+        this.selectedRepoIndex.set(items[0].index);
+      } else if (items.length === 0) {
+        this.selectedRepoIndex.set(null);
+      }
+    });
+  }
 
   ngOnInit() {
     this.loadSettings();
     this.encryptionService.unlocked$.pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(() => this.loadSettings());
+
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    if (tab && ['neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper'].includes(tab)) {
+      this.activeTab.set(tab as any);
+    }
   }
 
   private loadSettings() {
@@ -116,7 +143,7 @@ export class SettingsComponent implements OnInit {
     this.persistConfig('Settings saved');
   }
 
-  switchTab(tab: 'neo4j' | 'atlassian' | 'repos' | 'providers' | 'tasks') {
+  switchTab(tab: 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper') {
     if (this.editingSection()) this.cancelEditing();
     this.activeTab.set(tab);
   }
@@ -512,6 +539,27 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  // Whisper
+  updateWhisper(field: string, value: string) {
+    this.config.update((c) => ({
+      ...c,
+      whisper: { ...c.whisper, [field]: value },
+    }));
+  }
+
+  // Whisper test
+  whisperTestText = signal('');
+
+  // Secret visibility
+  isSecretVisible(key: string): boolean { return this.visibleSecrets().has(key); }
+  toggleSecret(key: string) {
+    this.visibleSecrets.update(s => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   // Analyze
   analyzeRepository(repoIndex: number) {
     this.analyzing.set(repoIndex);
@@ -528,21 +576,6 @@ export class SettingsComponent implements OnInit {
       error: (err) => {
         this.analyzing.set(null);
         this.showMessage(err.error?.detail || 'Analysis failed', 'danger');
-      },
-    });
-  }
-
-  startAnalysisJob(repoIndex: number) {
-    const repo = this.config().repositories[repoIndex];
-    if (!repo.modules.length) {
-      this.showMessage('No modules to analyze', 'danger');
-      return;
-    }
-
-    this.jobsService.startRepo(repoIndex).subscribe({
-      next: () => this.router.navigate(['/jobs']),
-      error: (err) => {
-        this.showMessage(err.error?.detail || 'Failed to start analysis', 'danger');
       },
     });
   }

@@ -43,12 +43,21 @@ class StartRepoRequest(BaseModel):
     repo_index: int
 
 
+class StartPipelineRequest(BaseModel):
+    repo_indices: list[int]
+
+
 class StartJobResponse(BaseModel):
     job_id: str
     message: str
 
 
 class StartRepoResponse(BaseModel):
+    job_ids: list[str]
+    message: str
+
+
+class StartPipelineResponse(BaseModel):
     job_ids: list[str]
     message: str
 

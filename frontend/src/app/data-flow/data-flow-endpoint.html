@@ -1,0 +1,182 @@
+@let l = layout();
+@if (l) {
+  <div class="diagram-toolbar">
+    <button class="btn btn-sm btn-outline-secondary" (click)="resetView()" title="Reset zoom">
+      <i class="bi bi-arrows-angle-contract me-1"></i>Fit
+    </button>
+  </div>
+  <div class="diagram-container"
+       (wheel)="onWheel($event)"
+       (mousedown)="onMouseDown($event)"
+       (mousemove)="onMouseMove($event)"
+       (mouseup)="onMouseUp()"
+       (mouseleave)="onMouseUp()">
+    <svg #svgEl [attr.viewBox]="currentViewBox()" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arr-orange" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#fd7e14"/>
+        </marker>
+        <marker id="arr-blue" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#339af0"/>
+        </marker>
+        <marker id="arr-purple" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#845ef7"/>
+        </marker>
+        <marker id="arr-teal" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#20c997"/>
+        </marker>
+        <marker id="arr-cyan" viewBox="0 0 8 6" refX="8" refY="3"
+                markerWidth="8" markerHeight="6" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#22b8cf"/>
+        </marker>
+      </defs>
+
+      <!-- Arrows (behind nodes) -->
+      @for (a of l.arrows; track $index) {
+        <path [attr.d]="arrowPath(a)" [attr.stroke]="a.color"
+              [attr.stroke-dasharray]="a.dashed ? '6 3' : 'none'"
+              stroke-width="2" fill="none"
+              [attr.marker-end]="'url(#' + markerId(a.color) + ')'"
+              [class.arrow-dim]="isArrowDimmed(a)"
+              [class.arrow-hit]="isArrowHit(a)"
+              class="arrow" />
+      }
+
+      <!-- Endpoint box -->
+      <g>
+        <rect [attr.x]="l.epBox.x" [attr.y]="l.epBox.y"
+              [attr.width]="l.epBox.w" [attr.height]="l.epBox.h"
+              rx="6" class="ep-box" />
+        <text [attr.x]="l.epBox.x + l.epBox.w / 2"
+              [attr.y]="l.epBox.y + 18"
+              text-anchor="middle" class="ep-box-method">
+          {{ detail().http_method }} {{ detail().path }}
+        </text>
+        <text [attr.x]="l.epBox.x + l.epBox.w / 2"
+              [attr.y]="l.epBox.y + 34"
+              text-anchor="middle" class="ep-box-ctrl">
+          {{ detail().controller_name }}.{{ detail().method_name }}()
+        </text>
+      </g>
+
+      <!-- Zone label: DATA MODELS -->
+      @if (l.reqModels.length || l.resModels.length) {
+        @let firstModel = l.reqModels.length ? l.reqModels[0] : l.resModels[0];
+        <text [attr.x]="firstModel.x" [attr.y]="firstModel.y - 6"
+              class="zone-label" style="fill:#495057">DATA MODELS</text>
+      }
+
+      <!-- Request models -->
+      @for (m of l.reqModels; track m.id) {
+        <g class="node" [class.dimmed]="isDimmed(m.id)"
+           (mouseenter)="onNodeEnter(m.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ m.model.full_name }}</title>
+          <rect [attr.x]="m.x" [attr.y]="m.y" [attr.width]="m.w" [attr.height]="m.h"
+                rx="4" class="model-req" />
+          <text [attr.x]="m.x + m.w / 2" [attr.y]="m.y + m.h / 2 + 4"
+                text-anchor="middle" class="model-text">
+            {{ m.model.name }}
+          </text>
+          <text [attr.x]="m.x + m.w - 6" [attr.y]="m.y + 12"
+                text-anchor="end" class="model-kind">request</text>
+        </g>
+      }
+
+      <!-- Response models -->
+      @for (m of l.resModels; track m.id) {
+        <g class="node" [class.dimmed]="isDimmed(m.id)"
+           (mouseenter)="onNodeEnter(m.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ m.model.full_name }}</title>
+          <rect [attr.x]="m.x" [attr.y]="m.y" [attr.width]="m.w" [attr.height]="m.h"
+                rx="4" class="model-res" />
+          <text [attr.x]="m.x + m.w / 2" [attr.y]="m.y + m.h / 2 + 4"
+                text-anchor="middle" class="model-text">
+            {{ m.model.name }}
+          </text>
+          <text [attr.x]="m.x + m.w - 6" [attr.y]="m.y + 12"
+                text-anchor="end" class="model-kind">response</text>
+        </g>
+      }
+
+      <!-- Zone label: CALLS -->
+      @if (l.outGroups.length) {
+        <text [attr.x]="l.outGroups[0].x" [attr.y]="l.outGroups[0].y - 6"
+              class="zone-label" style="fill:#845ef7">CALLS</text>
+      }
+
+      <!-- Outbound groups -->
+      @for (g of l.outGroups; track g.id) {
+        <g class="node" [class.dimmed]="isDimmed(g.id)"
+           (mouseenter)="onNodeEnter(g.id)" (mouseleave)="onNodeLeave()">
+          <rect [attr.x]="g.x" [attr.y]="g.y" [attr.width]="g.w" [attr.height]="g.h"
+                rx="5" class="group-box group-out" />
+          <text [attr.x]="g.x + 8" [attr.y]="g.y + 15" class="group-name">
+            {{ g.group.group_name }}
+          </text>
+          @for (ep of g.epRects; track ep.id; let ei = $index) {
+            <rect [attr.x]="ep.x" [attr.y]="ep.y" [attr.width]="ep.w" [attr.height]="ep.h"
+                  rx="3" class="ep-out" />
+            <text [attr.x]="ep.x + 6" [attr.y]="ep.y + ep.h / 2 + 4" class="ep-text">
+              <title>{{ g.group.endpoints[ei].http_method }} {{ g.group.endpoints[ei].path }}</title>
+              {{ epLabel(g.group.endpoints[ei].path, g.group.endpoints[ei].http_method) }}
+            </text>
+          }
+        </g>
+      }
+
+      <!-- Zone label: STORAGE -->
+      @if (l.databases.length || l.queues.length) {
+        @let firstStorage = l.databases.length ? l.databases[0] : l.queues[0];
+        <text [attr.x]="firstStorage.x" [attr.y]="firstStorage.y - 6"
+              class="zone-label" style="fill:#495057">STORAGE &amp; MESSAGING</text>
+      }
+
+      <!-- Databases with repo detail -->
+      @for (db of l.databases; track db.id) {
+        <g class="node" [class.dimmed]="isDimmed(db.id)"
+           (mouseenter)="onNodeEnter(db.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ db.db.name }} ({{ db.db.technology }})</title>
+          @let cx = db.x + db.w / 2;
+          @let ry = 8;
+          <ellipse [attr.cx]="cx" [attr.cy]="db.y + ry" [attr.rx]="db.w / 2" [attr.ry]="ry" class="db-fill" />
+          <rect [attr.x]="db.x" [attr.y]="db.y + ry"
+                [attr.width]="db.w" [attr.height]="db.h - ry * 2"
+                class="db-fill" style="stroke:none" />
+          <ellipse [attr.cx]="cx" [attr.cy]="db.y + db.h - ry" [attr.rx]="db.w / 2" [attr.ry]="ry" class="db-fill" />
+          <text [attr.x]="cx" [attr.y]="db.y + 22"
+                text-anchor="middle" class="db-name">{{ db.db.name }}</text>
+          @for (line of db.repoLines; track $index) {
+            <text [attr.x]="db.x + 12" [attr.y]="db.y + 38 + $index * 18"
+                  class="db-repo">{{ line }}</text>
+          }
+        </g>
+      }
+
+      <!-- Queues -->
+      @for (q of l.queues; track q.id) {
+        <g class="node" [class.dimmed]="isDimmed(q.id)"
+           (mouseenter)="onNodeEnter(q.id)" (mouseleave)="onNodeLeave()">
+          <title>{{ q.direction.toUpperCase() }}: {{ q.name }} ({{ q.type }})</title>
+          <rect [attr.x]="q.x" [attr.y]="q.y" [attr.width]="q.w" [attr.height]="q.h"
+                [attr.rx]="q.h / 2" class="queue-fill" />
+          <text [attr.x]="q.x + q.w / 2" [attr.y]="q.y + q.h / 2 + 4"
+                text-anchor="middle" class="queue-text">{{ q.name }}</text>
+        </g>
+      }
+    </svg>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#339af0"></div> Endpoint</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#fd7e14"></div> Request Model</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#339af0; opacity:0.6"></div> Response Model</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#845ef7"></div> Outbound Call</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#22b8cf"></div> Database</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#20c997"></div> Queue / Topic</div>
+  </div>
+}

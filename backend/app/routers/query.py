@@ -100,23 +100,77 @@ Relationships:
 - (Arch:HTTPClient)-[:IMPLEMENTED_BY]->(Java:Class)
 - (Arch:Repository)-[:IMPLEMENTED_BY]->(Java:Class)
 
+## Data Flow Metamodel (label: Data)
+Node labels and their properties:
+- Data:Service: name, is_external
+- Data:Endpoint: path, http_method (GET|POST|PUT|DELETE|PATCH), direction (inbound|outbound), service_name
+- Data:Queue: name, type (queue|topic)
+- Data:Database: name, technology (sql|mongo|redis|elasticsearch)
+- Data:DataModel: full_name, name, kind (dto|entity|message|request|response)
+
+Relationships:
+- (Data:Service)-[:EXPOSES]->(Data:Endpoint)          inbound REST endpoints
+- (Data:Service)-[:CALLS]->(Data:Endpoint)             outbound Feign endpoints
+- (Data:Service)-[:PRODUCES]->(Data:Queue)
+- (Data:Service)-[:CONSUMES]->(Data:Queue)
+- (Data:Service)-[:READS_FROM]->(Data:Database)
+- (Data:Service)-[:WRITES_TO]->(Data:Database)
+- (Data:Endpoint)-[:ACCEPTS]->(Data:DataModel)         request body type
+- (Data:Endpoint)-[:RETURNS]->(Data:DataModel)          response body type
+- (Data:Queue)-[:CARRIES]->(Data:DataModel)             message type
+
+## Cross-metamodel relationships (Data -> Arch/Java):
+- (Data:Service)-[:MAPS_TO]->(Arch:Microservice)
+- (Data:Endpoint)-[:MAPS_TO]->(Arch:RESTEndpoint) or (Arch:FeignEndpoint)
+- (Data:Queue)-[:MAPS_TO]->(Arch:JMSDestination)
+- (Data:Database)-[:MAPS_TO]->(Arch:Repository)
+- (Data:DataModel)-[:MAPS_TO]->(Java:Class)
+
+## Tooling Metamodel (label: Tooling) — Git history and Jira references
+Node labels and their properties:
+- Tooling:Repository: name, path
+- Tooling:Commit: hash (short 12-char), full_hash, date (ISO-8601), author_name, author_email, message, files_changed (list of file paths), issue_keys (list of Jira keys like "PROJ-123"), branches (list of branch names this commit belongs to)
+- Tooling:Branch: name, repo_name
+- Tooling:JiraTicket: key (e.g. "PROJ-123"), project (e.g. "PROJ")
+
+Relationships:
+- (Tooling:Repository)-[:HAS_COMMIT]->(Tooling:Commit)
+- (Tooling:Commit)-[:PARENT {ord}]->(Tooling:Commit)          ord 0 = first parent, ord 1 = merge parent
+- (Tooling:Commit)-[:REFERENCES]->(Tooling:JiraTicket)
+- (Tooling:Repository)-[:HAS_BRANCH]->(Tooling:Branch)
+- (Tooling:Branch)-[:TIP]->(Tooling:Commit)                   newest commit on the branch
+- (Tooling:Branch)-[:FIRST]->(Tooling:Commit)                  oldest commit on the branch
+
+## Cross-metamodel relationships (Tooling -> Java):
+- (Tooling:Repository)-[:SAME_REPO]->(Java:Repository)         links git repo to code repo
+
+Important notes about the Tooling domain:
+- A commit's branches property is a list of branch names; to filter commits on a branch, use WHERE "branch-name" IN c.branches
+- To walk the first-parent chain of a branch (linear history), follow PARENT edges with ord=0
+- The PARENT relationship goes from child to parent (newer to older): (child)-[:PARENT]->(parent)
+- Commits have a short hash (12 chars) and full_hash; use hash for display, full_hash for exact matching
+- files_changed is a list of relative file paths modified in that commit
+
 Method full_name format: "package.ClassName.methodName"
 Class full_name format: "package.ClassName"
 Note: imports is a native Neo4j list property — use WHERE 'com.example.Foo' IN c.imports or UNWIND c.imports AS imp
 """
 
-SYSTEM_PROMPT = f"""You are a Cypher query generator for a Neo4j database containing Java source code analysis data with two metamodels: Code (Java) and Architecture (Arch).
+SYSTEM_PROMPT = f"""You are a Cypher query generator for a Neo4j database containing software project analysis data with four metamodels: Code (Java), Architecture (Arch), Data Flow (Data), and Tooling (git history + Jira).
 
 {NEO4J_SCHEMA}
 
 Rules:
 1. Generate ONLY read-only Cypher queries (MATCH, RETURN, WITH, WHERE, ORDER BY, LIMIT, OPTIONAL MATCH).
 2. NEVER use CREATE, MERGE, DELETE, SET, REMOVE, or DROP.
-3. Always RETURN full nodes and relationships, not just properties, so the graph can be visualized.
+3. ALWAYS RETURN full nodes and relationships (variables), NEVER just properties. The result is rendered as a graph visualization, not a table. For example: RETURN c, hm, m — not RETURN c.name, m.name.
 4. When returning methods, ALWAYS also return their parent Class and the HAS_METHOD relationship.
 5. Limit results to 100 nodes maximum.
 6. Respond with ONLY the Cypher query, no explanation, no markdown fences.
-7. All code nodes have the Java label (Java:Class, Java:Method, etc.) and all architecture nodes have the Arch label (Arch:RESTInterface, Arch:RESTEndpoint).
+7. Each domain has its own label prefix: Java (Java:Class, Java:Method), Arch (Arch:RESTInterface), Data (Data:Service), Tooling (Tooling:Commit, Tooling:Branch). Always use the correct domain prefix.
+8. Use Data domain nodes for questions about data flow, services, endpoints, queues, databases, and data models. Use MAPS_TO relationships to cross-reference between Data and Arch/Java domains.
+9. For questions about git commits, branches, commit history, authors, or Jira tickets, use the Tooling domain — NOT the Java domain. Tooling:Repository is the git repo; Java:Repository is the code analysis repo. They are linked by SAME_REPO but are different nodes.
+10. When filtering commits by branch, use the branches list property: WHERE "branch-name" IN c.branches. Do NOT try to match on Branch nodes for this — the branches property on Commit is the canonical way.
 
 Example queries:
 - "Show all classes in package core":
@@ -169,6 +223,48 @@ Example queries:
 
 - "Show which classes use RestTemplate":
   MATCH (hc:Arch:HTTPClient {{client_type: 'RestTemplate'}})-[ib:IMPLEMENTED_BY]->(c:Java:Class) RETURN hc, ib, c
+
+- "Show all data services and their endpoints":
+  MATCH (ds:Data:Service) OPTIONAL MATCH (ds)-[exp:EXPOSES]->(ie:Data:Endpoint) OPTIONAL MATCH (ds)-[call:CALLS]->(oe:Data:Endpoint) RETURN ds, exp, ie, call, oe
+
+- "Show the data flow for a service":
+  MATCH (ds:Data:Service {{name: 'my-service'}}) OPTIONAL MATCH (ds)-[r1]->(n:Data) OPTIONAL MATCH (n)-[r2]->(dm:Data:DataModel) RETURN ds, r1, n, r2, dm
+
+- "Show all data models":
+  MATCH (dm:Data:DataModel) OPTIONAL MATCH (dm)-[mt:MAPS_TO]->(c:Java:Class) RETURN dm, mt, c
+
+- "Show which queues a service produces to":
+  MATCH (ds:Data:Service)-[p:PRODUCES]->(q:Data:Queue) RETURN ds, p, q
+
+- "Show all databases and their services":
+  MATCH (ds:Data:Service)-[r:READS_FROM|WRITES_TO]->(db:Data:Database) RETURN ds, r, db
+
+- "Show all commits on the develop branch for communication-service":
+  MATCH (r:Tooling:Repository {{name: 'communication-service'}})-[hc:HAS_COMMIT]->(c:Tooling:Commit) WHERE "develop" IN c.branches RETURN r, hc, c LIMIT 100
+
+- "Show the first-parent commit chain for the main branch":
+  MATCH (c:Tooling:Commit)-[p:PARENT {{ord: 0}}]->(parent:Tooling:Commit) WHERE "main" IN c.branches AND "main" IN parent.branches RETURN c, p, parent LIMIT 100
+
+- "Show all branches for a repository":
+  MATCH (r:Tooling:Repository {{name: 'my-repo'}})-[hb:HAS_BRANCH]->(b:Tooling:Branch)-[tip:TIP]->(c:Tooling:Commit) RETURN r, hb, b, tip, c
+
+- "Show commits by a specific author":
+  MATCH (r:Tooling:Repository)-[hc:HAS_COMMIT]->(c:Tooling:Commit) WHERE c.author_name CONTAINS 'John' RETURN r, hc, c ORDER BY c.date DESC LIMIT 100
+
+- "Show commits that reference a Jira ticket":
+  MATCH (c:Tooling:Commit)-[ref:REFERENCES]->(t:Tooling:JiraTicket {{key: 'PROJ-123'}}) RETURN c, ref, t
+
+- "Show all Jira tickets referenced in a repository":
+  MATCH (r:Tooling:Repository)-[:HAS_COMMIT]->(c:Tooling:Commit)-[ref:REFERENCES]->(t:Tooling:JiraTicket) WHERE r.name = 'my-repo' RETURN c, ref, t LIMIT 100
+
+- "Show recent commits across all repos":
+  MATCH (r:Tooling:Repository)-[hc:HAS_COMMIT]->(c:Tooling:Commit) RETURN r, hc, c ORDER BY c.date DESC LIMIT 50
+
+- "Show which commits changed files related to a class":
+  MATCH (c:Tooling:Commit) WHERE any(f IN c.files_changed WHERE f CONTAINS 'OrderService') RETURN c ORDER BY c.date DESC LIMIT 50
+
+- "Link git repo to code repo":
+  MATCH (tr:Tooling:Repository)-[sr:SAME_REPO]->(jr:Java:Repository) RETURN tr, sr, jr
 """
 
 
@@ -476,6 +572,48 @@ _EXPAND_QUERIES = {
         MATCH (n:Arch)
         WHERE elementId(n) = $node_id
         OPTIONAL MATCH (n)<-[r]-(m:Arch)
+        RETURN n, r, m
+        LIMIT 100
+    """,
+    "show_data_service": """
+        MATCH (ds:Data:Service)
+        WHERE elementId(ds) = $node_id
+        OPTIONAL MATCH (ds)-[r]->(n:Data)
+        OPTIONAL MATCH (n)-[r2]->(dm:Data:DataModel)
+        RETURN ds, r, n, r2, dm
+        LIMIT 100
+    """,
+    "show_data_endpoint": """
+        MATCH (de:Data:Endpoint)
+        WHERE elementId(de) = $node_id
+        OPTIONAL MATCH (de)-[r1:ACCEPTS]->(req:Data:DataModel)
+        OPTIONAL MATCH (de)-[r2:RETURNS]->(res:Data:DataModel)
+        OPTIONAL MATCH (de)-[mt:MAPS_TO]->(arch)
+        RETURN de, r1, req, r2, res, mt, arch
+        LIMIT 100
+    """,
+    "show_data_flow": """
+        MATCH (ds:Data:Service)
+        WHERE elementId(ds) = $node_id
+        OPTIONAL MATCH (ds)-[r1:EXPOSES]->(ie:Data:Endpoint)
+        OPTIONAL MATCH (ds)-[r2:CALLS]->(oe:Data:Endpoint)
+        OPTIONAL MATCH (ds)-[r3:PRODUCES]->(pq:Data:Queue)
+        OPTIONAL MATCH (ds)-[r4:CONSUMES]->(cq:Data:Queue)
+        OPTIONAL MATCH (ds)-[r5:READS_FROM]->(rdb:Data:Database)
+        OPTIONAL MATCH (ds)-[r6:WRITES_TO]->(wdb:Data:Database)
+        OPTIONAL MATCH (ie)-[r7:ACCEPTS|RETURNS]->(dm1:Data:DataModel)
+        OPTIONAL MATCH (oe)-[r8:ACCEPTS|RETURNS]->(dm2:Data:DataModel)
+        OPTIONAL MATCH (pq)-[r9:CARRIES]->(dm3:Data:DataModel)
+        OPTIONAL MATCH (cq)-[r10:CARRIES]->(dm4:Data:DataModel)
+        RETURN ds, r1, ie, r2, oe, r3, pq, r4, cq,
+               r5, rdb, r6, wdb,
+               r7, dm1, r8, dm2, r9, dm3, r10, dm4
+        LIMIT 100
+    """,
+    "show_data_node": """
+        MATCH (n:Data)
+        WHERE elementId(n) = $node_id
+        OPTIONAL MATCH (n)-[r]-(m:Data)
         RETURN n, r, m
         LIMIT 100
     """,

@@ -93,6 +93,8 @@ Rules:
 - A directory with package.json containing @angular/* dependencies is an Angular module
 - The repository root itself can be a module if it has pom.xml or package.json with @angular
 - For a multi-module Maven project, list each child module, not the parent
+- CRITICAL: relative_path MUST be the exact directory name from the repository listing. The path must match the actual folder on disk — do not abbreviate or shorten it.
+- For name, use the Maven artifactId if available, otherwise the directory name
 """
 
 
@@ -130,7 +132,12 @@ def analyze_repository(request: AnalyzeRequest):
             content = content.rsplit("```", 1)[0]
 
         modules_data = json.loads(content)
-        modules = [ModuleConfig(**m) for m in modules_data]
+        repo_path = Path(repo.path)
+        modules = []
+        for m in modules_data:
+            mod = ModuleConfig(**m)
+            if (repo_path / mod.relative_path).is_dir():
+                modules.append(mod)
         return AnalyzeResponse(modules=modules)
 
     except json.JSONDecodeError as e:

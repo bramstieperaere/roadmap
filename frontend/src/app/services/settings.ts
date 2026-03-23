@@ -80,12 +80,21 @@ export interface AITaskConfig {
   provider_name: string;
 }
 
+export interface WhisperConfig {
+  base_url: string;
+  api_key: string;
+  model: string;
+  postprocess_provider: string;
+  postprocess_model: string;
+}
+
 export interface AppConfig {
   neo4j: Neo4jConfig;
   atlassian: AtlassianConfig;
   repositories: RepositoryConfig[];
   ai_providers: AIProviderConfig[];
   ai_tasks: AITaskConfig[];
+  whisper: WhisperConfig;
   encryption_salt?: string | null;
 }
 

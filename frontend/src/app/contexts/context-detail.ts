@@ -64,6 +64,10 @@ export class ContextDetail implements OnInit {
   // Expanded child
   expandedChild = signal<string | null>(null);
 
+  // Tags
+  newTag = signal('');
+  addingTag = signal(false);
+
   // Add item mode
   showParentAddPanel = signal(false);
   showChildAddPanel = signal(false);
@@ -282,7 +286,7 @@ export class ContextDetail implements OnInit {
   // ── Edit item (instructions) ──
 
   startEditItem(item: ContextItemEntry) {
-    if (!this.editing()) return;
+    if (!this.editing() || item.type === 'inquiry') return;
     this.editingItemKey.set(this.itemKey(item));
     this.editItemLabel.set(item.label || item.title);
     this.editItemText.set(item.text || '');
@@ -297,7 +301,7 @@ export class ContextDetail implements OnInit {
     const text = this.editItemText().trim();
     if (!label) return;
     const body: { label?: string; text?: string } = { label };
-    if (item.type === 'instructions') body.text = text;
+    if (item.type === 'instructions' || item.type === 'insight') body.text = text;
 
     const obs = childName
       ? this.service.updateChildItem(this.name(), childName, item.type, item.id, body)
@@ -312,7 +316,7 @@ export class ContextDetail implements OnInit {
     });
   }
 
-  onEditItemKeydown(event: KeyboardEvent, item: ContextItemEntry, childName?: string) {
+  onEditItemKeydown(event: KeyboardEvent, _item: ContextItemEntry, _childName?: string) {
     if (event.key === 'Escape') this.cancelEditItem();
   }
 
@@ -651,6 +655,37 @@ export class ContextDetail implements OnInit {
     else if (event.key === 'Escape') this.cancelEditDescription();
   }
 
+  addTag() {
+    const tag = this.newTag().trim();
+    this.newTag.set('');
+    this.addingTag.set(false);
+    if (!tag) return;
+    const ctx = this.context();
+    if (!ctx) return;
+    const tags = [...(ctx.tags ?? [])];
+    if (tags.includes(tag)) return;
+    tags.push(tag);
+    this.service.updateTags(this.name(), tags).subscribe({
+      next: (updated) => this.context.set(updated),
+      error: (err) => this.error.set(err.error?.detail || 'Failed to add tag'),
+    });
+  }
+
+  removeTag(tag: string) {
+    const ctx = this.context();
+    if (!ctx) return;
+    const tags = (ctx.tags ?? []).filter(t => t !== tag);
+    this.service.updateTags(this.name(), tags).subscribe({
+      next: (updated) => this.context.set(updated),
+      error: (err) => this.error.set(err.error?.detail || 'Failed to remove tag'),
+    });
+  }
+
+  onTagKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') { event.preventDefault(); this.addTag(); }
+    else if (event.key === 'Escape') { this.newTag.set(''); this.addingTag.set(false); }
+  }
+
   startEditChildName(childName?: string) {
     if (!this.editing()) return;
     const name = childName || this.expandedChild();
@@ -674,10 +709,16 @@ export class ContextDetail implements OnInit {
     }
     this.service.renameChild(parentName, oldName, newName).subscribe({
       next: () => {
-        this.expandedChild.set(newName);
         this.editingChildName.set(false);
-        this.reloadContext();
-        this.loadChildPreview(parentName, newName);
+        if (this.child()) {
+          // On child route — navigate to updated URL so route params refresh
+          this.router.navigate(['/contexts', parentName, newName], { replaceUrl: true });
+        } else {
+          // On parent route with accordion — just update local state
+          this.expandedChild.set(newName);
+          this.reloadContext();
+          this.loadChildPreview(parentName, newName);
+        }
       },
       error: (err) => {
         this.error.set(err.error?.detail || 'Failed to rename sub-context');
@@ -749,7 +790,11 @@ export class ContextDetail implements OnInit {
 
   copyContextRef() {
     const path = this.child() ? `${this.name()}/${this.child()}` : this.name();
-    const text = `see roadmap mcp context "${path}" for context`;
+    const text = `Use roadmap MCP for context "${path}":\n`
+      + `1. get_context_toc("${path}") — table of contents with item sizes\n`
+      + `2. get_context_item("${path}", <index>) — fetch individual items\n`
+      + `3. get_context("${path}") — fetch everything (can be large)\n`
+      + `4. add_context_insight("${path}", "<label>", "<text>") — write back your analysis/findings`;
     navigator.clipboard.writeText(text);
   }
 

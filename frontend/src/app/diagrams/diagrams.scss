@@ -1,0 +1,85 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.diagrams-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.diagrams-header {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  background: var(--rm-surface);
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.diagrams-body {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.diagram-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 560px;
+}
+
+.diagram-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: var(--rm-surface);
+  text-decoration: none;
+  color: var(--rm-text);
+  transition: border-color 0.12s, box-shadow 0.12s;
+
+  &:hover {
+    border-color: var(--rm-accent, #339af0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    color: var(--rm-text);
+  }
+}
+
+.diagram-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.diagram-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.diagram-card-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  margin-bottom: 0.125rem;
+}
+
+.diagram-card-desc {
+  font-size: 0.8125rem;
+  color: var(--rm-text-muted);
+}
+
+.diagram-card-arrow {
+  color: var(--rm-text-muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}

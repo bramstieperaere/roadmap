@@ -1,0 +1,102 @@
+:host { display: block; }
+
+.diagram-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.diagram-container {
+  width: 100%;
+  height: calc(100vh - 190px);
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+  &:active { cursor: grabbing; }
+}
+
+svg { width: 100%; height: 100%; }
+
+// ── Zone labels ──────────────────────────────────────────
+
+.zone-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+// ── Endpoint box (top) ──────────────────────────────────
+
+.ep-box { fill: #339af0; }
+.ep-box-method { fill: #fff; font-weight: 700; font-size: 12px; }
+.ep-box-ctrl { fill: rgba(255,255,255,0.7); font-size: 10px; }
+
+// ── Data models ─────────────────────────────────────────
+
+.model-req { fill: #fd7e14; }
+.model-res { fill: #339af0; }
+.model-text { fill: #fff; font-weight: 600; font-size: 11px; }
+.model-kind { fill: rgba(255,255,255,0.6); font-size: 8px; }
+
+// ── Outbound groups ─────────────────────────────────────
+
+.group-box { stroke-width: 1.5; }
+.group-out { fill: #f3f0ff; stroke: #845ef7; }
+.group-name { fill: #5f3dc4; font-weight: 700; font-size: 10px; }
+
+.ep-out { fill: #845ef7; }
+.ep-text { fill: #fff; font-weight: 600; font-size: 9px; }
+
+// ── Databases ───────────────────────────────────────────
+
+.db-fill { fill: #22b8cf; }
+.db-name { fill: #fff; font-weight: 700; font-size: 11px; }
+.db-repo { fill: rgba(255,255,255,0.85); font-size: 9px; }
+
+// ── Queues ──────────────────────────────────────────────
+
+.queue-fill { fill: #20c997; }
+.queue-text { fill: #fff; font-weight: 600; font-size: 10px; }
+
+// ── Arrows ──────────────────────────────────────────────
+
+.arrow { transition: opacity 0.15s; }
+.arrow-dim { opacity: 0.1; }
+.arrow-hit { stroke-width: 3 !important; }
+
+// ── Hover ───────────────────────────────────────────────
+
+.node { transition: opacity 0.15s; }
+.dimmed { opacity: 0.15; }
+
+// ── Legend ──────────────────────────────────────────────
+
+.legend {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #495057;
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}

@@ -27,8 +27,8 @@ _MODIFIER_KEYWORDS = frozenset({
 
 class JavaMavenAnalyzer(BaseAnalyzer):
 
-    def __init__(self, job_id: str):
-        super().__init__(job_id)
+    def __init__(self, job_id: str, job_type: str = "analysis"):
+        super().__init__(job_id, job_type)
         self._parser = Parser(JAVA_LANGUAGE)
 
     def run(self, repo_path: str, module_name: str,
@@ -608,11 +608,18 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         # MERGE as safety net for single-module runs
         run_cypher_write(driver, """
             MERGE (r:Java:Repository {path: $repo_path})
-            ON CREATE SET r.name = $repo_name
+            ON CREATE SET r.name = $repo_name,
+                          r.created_at = $created_at,
+                          r.job_id = $job_id,
+                          r.job_type = $job_type
             MERGE (m:Java:Module {name: $module_name})
-            SET m.path = $relative_path
+            SET m.path = $relative_path,
+                m.created_at = $created_at,
+                m.job_id = $job_id,
+                m.job_type = $job_type
             MERGE (r)-[:CONTAINS_MODULE]->(m)
-        """, {"repo_path": repo_path, "repo_name": repo_name,
+        """, {**self.node_meta(),
+              "repo_path": repo_path, "repo_name": repo_name,
               "module_name": module_name,
               "relative_path": relative_path})
 
@@ -623,9 +630,13 @@ class JavaMavenAnalyzer(BaseAnalyzer):
         run_cypher_write(driver, """
             MATCH (m:Java:Module {name: $module_name})
             MERGE (p:Java:Package {full_name: $full_name})
-            SET p.name = $name
+            SET p.name = $name,
+                p.created_at = $created_at,
+                p.job_id = $job_id,
+                p.job_type = $job_type
             MERGE (m)-[:CONTAINS_PACKAGE]->(p)
-        """, {"module_name": module_name,
+        """, {**self.node_meta(),
+              "module_name": module_name,
               "full_name": package_name,
               "name": short_name})
 
@@ -645,9 +656,13 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 c.annotations = $annotations,
                 c.supertypes = $supertypes,
                 c.imports = $imports,
-                c.star_imports = $star_imports
+                c.star_imports = $star_imports,
+                c.created_at = $created_at,
+                c.job_id = $job_id,
+                c.job_type = $job_type
             MERGE (p)-[:CONTAINS_CLASS]->(c)
         """, {
+            **self.node_meta(),
             "package": cls["package"],
             "full_name": cls["full_name"],
             "name": cls["name"],
@@ -679,10 +694,14 @@ class JavaMavenAnalyzer(BaseAnalyzer):
                 visibility: $visibility,
                 start_line: $start_line,
                 end_line: $end_line,
-                annotations: $annotations
+                annotations: $annotations,
+                created_at: $created_at,
+                job_id: $job_id,
+                job_type: $job_type
             })
             CREATE (c)-[:HAS_METHOD]->(m)
         """, {
+            **self.node_meta(),
             "class_name": class_full_name,
             "name": method["name"],
             "full_name": full_name,

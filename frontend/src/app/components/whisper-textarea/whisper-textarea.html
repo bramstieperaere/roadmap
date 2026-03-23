@@ -1,0 +1,22 @@
+<div class="whisper-textarea-wrap">
+  <textarea #textarea
+            [class]="textareaClass()"
+            [rows]="rows()"
+            [placeholder]="placeholder()"
+            [ngModel]="value()" (ngModelChange)="value.set($event)"
+            [disabled]="disabled() || transcribing()"></textarea>
+  @if (whisperConfigured()) {
+    <button class="btn-mic" [class.recording]="recording()" [class.transcribing]="transcribing()"
+            (click)="toggleRecording()" [disabled]="disabled() || transcribing()"
+            [title]="recording() ? 'Stop recording' : transcribing() ? 'Transcribing...' : 'Record voice'">
+      @if (transcribing()) {
+        <span class="spinner-border spinner-border-sm"></span>
+      } @else {
+        <i class="bi" [class.bi-mic-fill]="recording()" [class.bi-mic]="!recording()"></i>
+      }
+    </button>
+  }
+</div>
+@if (error()) {
+  <div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle me-1"></i>{{ error() }}</div>
+}

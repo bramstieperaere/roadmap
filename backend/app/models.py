@@ -60,13 +60,29 @@ class AITaskConfig(BaseModel):
     provider_name: str
 
 
+class WhisperConfig(BaseModel):
+    base_url: str = "https://api.openai.com/v1"
+    api_key: str = ""
+    model: str = "whisper-1"
+    postprocess_provider: str = ""
+    postprocess_model: str = ""
+
+
+class DatabaseOverride(BaseModel):
+    repo_type: str       # "JPA", "Mongo", etc.
+    name: str            # "MSSQL Orders DB"
+    technology: str      # "mssql", "mongo"
+
+
 class AppConfig(BaseModel):
     neo4j: Neo4jConfig = Neo4jConfig()
     atlassian: AtlassianConfig = AtlassianConfig()
     repositories: list[RepositoryConfig] = []
     ai_providers: list[AIProviderConfig] = []
     ai_tasks: list[AITaskConfig] = []
+    whisper: WhisperConfig = WhisperConfig()
     encryption_salt: Optional[str] = None
+    databases: list[DatabaseOverride] = []
 
 
 class UnlockRequest(BaseModel):

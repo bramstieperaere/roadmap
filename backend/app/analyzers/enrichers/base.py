@@ -1,6 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 
+from app.analyzers.node_props import NodeMeta
 from app.job_store import job_store
 
 
@@ -22,9 +23,11 @@ def get_annotation(annotations: list[dict], *fqns: str) -> dict | None:
     return None
 
 
-class TechnologyEnricher(ABC):
-    def __init__(self, job_id: str, driver, module_name: str):
+class TechnologyEnricher(ABC, NodeMeta):
+    def __init__(self, job_id: str, driver, module_name: str,
+                 job_type: str = "enrichment"):
         self.job_id = job_id
+        self.job_type = job_type
         self.driver = driver
         self.module_name = module_name
 

@@ -50,10 +50,14 @@ class RestClientEnricher(TechnologyEnricher):
                         MATCH (c:Java:Class {full_name: $full_name})
                         CREATE (hc:Arch:HTTPClient {
                             name: $name,
-                            client_type: $client_type
+                            client_type: $client_type,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (hc)-[:IMPLEMENTED_BY]->(c)
                     """, {
+                        **self.node_meta(),
                         "full_name": record["full_name"],
                         "name": record["name"],
                         "client_type": client_type,

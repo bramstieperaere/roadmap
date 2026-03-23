@@ -49,10 +49,14 @@ class SpringScheduledEnricher(TechnologyEnricher):
                             fixed_delay: $fixed_delay,
                             fixed_rate: $fixed_rate,
                             initial_delay: $initial_delay,
-                            zone: $zone
+                            zone: $zone,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (st)-[:IMPLEMENTED_BY]->(m)
                     """, {
+                        **self.node_meta(),
                         "method_full_name": record["method_full_name"],
                         "cron": str(args.get("cron", "")),
                         "fixed_delay": str(args.get("fixedDelay", "")),

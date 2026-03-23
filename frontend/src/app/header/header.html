@@ -13,43 +13,23 @@
         </li>
       }
       <li class="nav-item">
-        <a class="nav-link" routerLink="/query" routerLinkActive="active" title="Query" data-testid="header-query-link">
-          <i class="bi bi-diagram-3-fill"></i>
+        <a class="nav-link nav-link-labeled" routerLink="/sources" [class.active]="sourcesActive()" title="Sources" data-testid="header-sources-link">
+          <i class="bi bi-collection"></i><span class="nav-label">Sources</span>
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" routerLink="/sequence" routerLinkActive="active" title="Sequence Diagram" data-testid="header-sequence-link">
-          <i class="bi bi-list-columns-reverse"></i>
+        <a class="nav-link nav-link-labeled" routerLink="/processing" [class.active]="processingActive()" title="Processing" data-testid="header-processing-link">
+          <i class="bi bi-cpu"></i><span class="nav-label">Processing</span>
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" routerLink="/jira" routerLinkActive="active" title="Jira" data-testid="header-jira-link">
-          <i class="bi bi-kanban"></i>
+        <a class="nav-link nav-link-labeled" routerLink="/diagrams" [class.active]="diagramsActive()" title="Diagrams" data-testid="header-diagrams-link">
+          <i class="bi bi-easel"></i><span class="nav-label">Diagrams</span>
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" routerLink="/confluence" routerLinkActive="active" title="Confluence" data-testid="header-confluence-link">
-          <i class="bi bi-journal-text"></i>
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" routerLink="/functional" routerLinkActive="active" title="Functional Docs" data-testid="header-functional-link">
-          <i class="bi bi-file-earmark-text"></i>
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" routerLink="/git-mining" routerLinkActive="active" title="Git Mining" data-testid="header-git-mining-link">
-          <i class="bi bi-git"></i>
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" routerLink="/contexts" routerLinkActive="active" title="Contexts" data-testid="header-contexts-link">
-          <i class="bi bi-list-check"></i>
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" routerLink="/jobs" routerLinkActive="active" title="Jobs" data-testid="header-jobs-link">
-          <i class="bi bi-lightning-fill"></i>
+        <a class="nav-link nav-link-labeled" routerLink="/contexts" routerLinkActive="active" title="Contexts" data-testid="header-contexts-link">
+          <i class="bi bi-list-check"></i><span class="nav-label">Contexts</span>
         </a>
       </li>
       <li class="nav-item">

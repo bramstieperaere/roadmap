@@ -24,8 +24,26 @@
                 data-testid="contexts-hide-done-btn">
           <i class="bi" [class.bi-check-circle-fill]="hideDone()" [class.bi-check-circle]="!hideDone()"></i>
         </button>
+        <button class="btn btn-outline-secondary" (click)="collapsed.set(!collapsed())"
+                [title]="collapsed() ? 'Show sub-contexts' : 'Hide sub-contexts'"
+                data-testid="contexts-collapse-btn">
+          <i class="bi" [class.bi-chevron-expand]="collapsed()" [class.bi-chevron-contract]="!collapsed()"></i>
+        </button>
       </div>
     </div>
+
+    <!-- Tag filter -->
+    @if (allTags().length > 0) {
+      <div class="tag-filter-row mb-3" data-testid="contexts-tag-filter">
+        @for (tag of allTags(); track tag) {
+          <button class="tag-filter-chip" [class.active]="tagFilter().includes(tag)"
+                  (click)="toggleTagFilter(tag, $event)">{{ tag }}</button>
+        }
+        @if (tagFilter().length > 0) {
+          <button class="btn btn-link btn-sm py-0 text-muted" (click)="clearTagFilter()">clear</button>
+        }
+      </div>
+    }
 
     <!-- Context list -->
     <div class="context-list-wrapper">
@@ -48,6 +66,9 @@
                 <span class="fw-medium">{{ ctx.name }}</span>
                 @if (ctx.description) {
                   <span class="text-muted small">({{ ctx.description }})</span>
+                }
+                @for (tag of ctx.tags ?? []; track tag) {
+                  <span class="tag-chip" (click)="toggleTagFilter(tag, $event)">{{ tag }}</span>
                 }
               </div>
               <div class="d-flex align-items-center gap-2">
@@ -72,7 +93,7 @@
                 <i class="bi bi-arrow-right text-muted"></i>
               </div>
             </a>
-            @for (child of ctx.children; track child.name) {
+            @if (!collapsed()) { @for (child of ctx.children; track child.name) {
               <a class="child-link" [class.context-done]="child.done"
                  [routerLink]="['/contexts', ctx.name, child.name]"
                  data-testid="child-context-link">
@@ -102,8 +123,8 @@
                   <i class="bi bi-arrow-right text-muted"></i>
                 </div>
               </a>
-            }
-            @if (addingChildFor() === ctx.name) {
+            } }
+            @if (!collapsed() && addingChildFor() === ctx.name) {
               <div class="child-add-row">
                 <i class="bi bi-arrow-return-right text-muted tree-arrow"></i>
                 <input type="text" class="form-control form-control-sm flex-grow-1"

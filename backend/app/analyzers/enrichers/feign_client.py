@@ -95,10 +95,14 @@ class FeignClientEnricher(TechnologyEnricher):
                         name: $name,
                         url: $url,
                         path: $path,
-                        service_id: $service_id
+                        service_id: $service_id,
+                        created_at: $created_at,
+                        job_id: $job_id,
+                        job_type: $job_type
                     })
                     CREATE (fc)-[:IMPLEMENTED_BY]->(c)
                 """, {
+                    **self.node_meta(),
                     "full_name": cls["full_name"],
                     "name": client_name,
                     "url": url,
@@ -133,11 +137,15 @@ class FeignClientEnricher(TechnologyEnricher):
                             full_name: $method_fn})
                         CREATE (fe:Arch:FeignEndpoint {
                             path: $path,
-                            http_method: $http_method
+                            http_method: $http_method,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (fc)-[:HAS_ENDPOINT]->(fe)
                         CREATE (fe)-[:IMPLEMENTED_BY]->(m)
                     """, {
+                        **self.node_meta(),
                         "class_fn": cls["full_name"],
                         "method_fn": method["full_name"],
                         "path": endpoint_info["path"],

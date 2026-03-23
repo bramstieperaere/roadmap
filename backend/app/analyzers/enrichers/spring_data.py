@@ -68,10 +68,14 @@ class SpringDataEnricher(TechnologyEnricher):
                         CREATE (r:Arch:Repository {
                             name: $name,
                             entity_type: $entity_type,
-                            repo_type: $repo_type
+                            repo_type: $repo_type,
+                            created_at: $created_at,
+                            job_id: $job_id,
+                            job_type: $job_type
                         })
                         CREATE (r)-[:IMPLEMENTED_BY]->(c)
                     """, {
+                        **self.node_meta(),
                         "full_name": record["full_name"],
                         "name": record["name"],
                         "entity_type": entity_type,

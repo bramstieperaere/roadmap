@@ -1,0 +1,504 @@
+<div class="schema-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/processing" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Processing
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <span class="fw-semibold">Graph Schema</span>
+    </div>
+  </div>
+
+  <div class="schema-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+
+    <nav class="schema-nav">
+      <div class="nav-group-label">Domains</div>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'java'" (click)="scrollTo('java')">
+        <i class="bi bi-filetype-java" style="color: #1971c2;"></i>Java
+      </button>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'architecture'" (click)="scrollTo('architecture')">
+        <i class="bi bi-layers" style="color: #6741d9;"></i>Architecture
+      </button>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'data'" (click)="scrollTo('data')">
+        <i class="bi bi-arrow-left-right" style="color: #0ca678;"></i>Data
+      </button>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'tooling'" (click)="scrollTo('tooling')">
+        <i class="bi bi-git" style="color: #f08c00;"></i>Tooling
+      </button>
+      <div class="nav-divider"></div>
+      <div class="nav-group-label">Overview</div>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'domain-relations'" (click)="scrollTo('domain-relations')">
+        <i class="bi bi-diagram-2 text-muted"></i>Domain Relations
+      </button>
+    </nav>
+
+    <!-- ── Content ──────────────────────────────────────────────────────── -->
+
+    <div class="schema-content" #scrollContent>
+
+      <!-- ── Query Generator ─────────────────────────────────────────── -->
+      <div class="query-generator mb-4" [class.qg-disabled]="!aiStatus.configured()">
+        <div class="qg-header">
+          <i class="bi bi-stars"></i>
+          <span class="fw-semibold">Query Generator</span>
+          <span class="ms-2"><app-ai-task-status #aiStatus taskType="cypher_generation" /></span>
+        </div>
+        <div class="qg-body">
+          <div class="d-flex gap-2">
+            <app-whisper-input class="flex-grow-1"
+                               [(value)]="question"
+                               inputClass="form-control form-control-sm"
+                               placeholder="e.g. Show all REST endpoints with their implementing classes"
+                               [disabled]="!aiStatus.configured() || generating()"
+                               (submit)="generateCypher()" />
+            <button class="btn btn-primary btn-sm flex-shrink-0" (click)="generateCypher()"
+                    [disabled]="!aiStatus.configured() || !question().trim() || generating()">
+              @if (generating()) {
+                <span class="spinner-border spinner-border-sm"></span>
+              } @else {
+                <i class="bi bi-lightning-fill me-1"></i>Generate
+              }
+            </button>
+          </div>
+          @if (queryError()) {
+            <div class="text-danger small mt-2"><i class="bi bi-exclamation-triangle me-1"></i>{{ queryError() }}</div>
+          }
+          @if (generatedCypher()) {
+            <div class="qg-result mt-2">
+              <pre class="mb-0">{{ generatedCypher() }}</pre>
+              <div class="qg-actions">
+                <button class="btn-copy" title="Copy Cypher" (click)="copyCypher()">
+                  <i class="bi" [class.bi-clipboard]="copied !== '_cypher'" [class.bi-check2]="copied === '_cypher'"></i>
+                </button>
+                <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser()">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <p class="text-muted small mb-4">
+        All nodes created by pipeline jobs carry three provenance properties:
+        <code>created_at</code> (ISO-8601 UTC), <code>job_id</code>, and <code>job_type</code>
+        (<code>analysis</code> | <code>enrichment</code> | <code>data-flow</code>).
+      </p>
+
+      <!-- ── Java ─────────────────────────────────────────────────────── -->
+
+      <section id="java">
+        <div class="domain-header" style="border-color: #1971c2; background: #e7f5ff;">
+          <i class="bi bi-filetype-java domain-icon" style="color: #1971c2;"></i>
+          <div>
+            <div class="domain-title" style="color: #1971c2;">Java</div>
+            <div class="domain-desc">Source code structure produced by the Code Analysis job</div>
+          </div>
+          <span class="domain-badge" style="background: #1971c2;">analysis</span>
+        </div>
+        <div class="domain-body">
+          <div class="schema-cols">
+            <div>
+              <h6 class="section-label">Node types</h6>
+              <table class="node-table">
+                <thead><tr><th>Labels</th><th>Key properties</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><code class="label-chip">Java:Repository</code></td>
+                    <td><span class="prop">path</span> <span class="prop">name</span></td>
+                  </tr>
+                  <tr>
+                    <td><code class="label-chip">Java:Module</code></td>
+                    <td><span class="prop">name</span> <span class="prop">path</span></td>
+                  </tr>
+                  <tr>
+                    <td><code class="label-chip">Java:Package</code></td>
+                    <td><span class="prop">full_name</span> <span class="prop">name</span></td>
+                  </tr>
+                  <tr>
+                    <td><code class="label-chip">Java:Class</code></td>
+                    <td>
+                      <span class="prop">full_name</span> <span class="prop">name</span>
+                      <span class="prop">kind</span> <span class="prop">visibility</span>
+                      <span class="prop">is_abstract</span> <span class="prop">is_test</span>
+                      <span class="prop">file_path</span> <span class="prop">annotations</span>
+                      <span class="prop">supertypes</span> <span class="prop">imports</span>
+                      <span class="prop">source_code</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code class="label-chip">Java:Method</code></td>
+                    <td>
+                      <span class="prop">full_name</span> <span class="prop">name</span>
+                      <span class="prop">return_type</span> <span class="prop">parameters</span>
+                      <span class="prop">visibility</span> <span class="prop">is_static</span>
+                      <span class="prop">is_abstract</span> <span class="prop">start_line</span>
+                      <span class="prop">end_line</span> <span class="prop">annotations</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <h6 class="section-label mt-3">Relationships</h6>
+              <ul class="rel-list">
+                <li><code>(Repository)-[:CONTAINS_MODULE]-&gt;(Module)</code></li>
+                <li><code>(Module)-[:CONTAINS_PACKAGE]-&gt;(Package)</code></li>
+                <li><code>(Package)-[:CONTAINS_CLASS]-&gt;(Class)</code></li>
+                <li><code>(Class)-[:HAS_METHOD]-&gt;(Method)</code></li>
+                <li><code>(Method)-[:CALLS]-&gt;(Method)</code></li>
+              </ul>
+            </div>
+            <div>
+              <h6 class="section-label">Sample queries</h6>
+              <div class="query-block">
+                <div class="query-label">Classes per module</div>
+                <div class="query-wrap"><pre>{{ queries['j1'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('j1')"><i class="bi" [class.bi-clipboard]="copied !== 'j1'" [class.bi-check2]="copied === 'j1'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Who calls a given method</div>
+                <div class="query-wrap"><pre>{{ queries['j2'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('j2')"><i class="bi" [class.bi-clipboard]="copied !== 'j2'" [class.bi-check2]="copied === 'j2'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Graph: class &rarr; method structure</div>
+                <div class="query-wrap"><pre>{{ queries['j3'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('j3')"><i class="bi" [class.bi-clipboard]="copied !== 'j3'" [class.bi-check2]="copied === 'j3'"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Architecture ──────────────────────────────────────────────── -->
+
+      <section id="architecture">
+        <div class="domain-header" style="border-color: #6741d9; background: #f3f0ff;">
+          <i class="bi bi-layers domain-icon" style="color: #6741d9;"></i>
+          <div>
+            <div class="domain-title" style="color: #6741d9;">Architecture</div>
+            <div class="domain-desc">Detected patterns overlaid on the Java graph by the Enrichment job</div>
+          </div>
+          <span class="domain-badge" style="background: #6741d9;">enrichment</span>
+        </div>
+        <div class="domain-body">
+          <div class="schema-cols">
+            <div>
+              <h6 class="section-label">Node types</h6>
+              <table class="node-table">
+                <thead><tr><th>Labels</th><th>Key properties</th></tr></thead>
+                <tbody>
+                  <tr><td><code class="label-chip">Arch:Microservice</code></td><td><span class="prop">name</span> <span class="prop">technologies[]</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:RESTInterface</code></td><td><span class="prop">name</span> <span class="prop">base_path</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:RESTEndpoint</code></td><td><span class="prop">path</span> <span class="prop">http_method</span> <span class="prop">produces</span> <span class="prop">consumes</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:FeignClient</code></td><td><span class="prop">name</span> <span class="prop">url</span> <span class="prop">path</span> <span class="prop">service_id</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:FeignEndpoint</code></td><td><span class="prop">path</span> <span class="prop">http_method</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:JMSListener</code></td><td><span class="prop">destination</span> <span class="prop">selector</span> <span class="prop">concurrency</span> <span class="prop">container_factory</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:JMSProducer</code></td><td><span class="prop">name</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:JMSDestination</code></td><td><span class="prop">name</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:Repository</code></td><td><span class="prop">name</span> <span class="prop">entity_type</span> <span class="prop">repo_type</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:HTTPClient</code></td><td><span class="prop">name</span> <span class="prop">client_type</span></td></tr>
+                  <tr><td><code class="label-chip">Arch:ScheduledTask</code></td><td><span class="prop">cron</span> <span class="prop">fixed_rate</span> <span class="prop">fixed_delay</span> <span class="prop">initial_delay</span> <span class="prop">zone</span></td></tr>
+                </tbody>
+              </table>
+              <h6 class="section-label mt-3">Relationships</h6>
+              <ul class="rel-list">
+                <li><code>(Microservice)-[:IMPLEMENTED_BY]-&gt;(Java:Repository)</code></li>
+                <li><code>(RESTInterface)-[:IMPLEMENTED_BY]-&gt;(Java:Class)</code></li>
+                <li><code>(RESTInterface)-[:HAS_ENDPOINT]-&gt;(RESTEndpoint)</code></li>
+                <li><code>(RESTEndpoint)-[:IMPLEMENTED_BY]-&gt;(Java:Method)</code></li>
+                <li><code>(FeignClient)-[:IMPLEMENTED_BY]-&gt;(Java:Class)</code></li>
+                <li><code>(FeignClient)-[:HAS_ENDPOINT]-&gt;(FeignEndpoint)</code></li>
+                <li><code>(FeignEndpoint)-[:IMPLEMENTED_BY]-&gt;(Java:Method)</code></li>
+                <li><code>(JMSListener)-[:IMPLEMENTED_BY]-&gt;(Java:Method)</code></li>
+                <li><code>(JMSListener)-[:LISTENS_ON]-&gt;(JMSDestination)</code></li>
+                <li><code>(JMSProducer)-[:IMPLEMENTED_BY]-&gt;(Java:Class)</code></li>
+                <li><code>(JMSProducer)-[:SENDS_TO]-&gt;(JMSDestination)</code></li>
+                <li><code>(Arch:Repository)-[:IMPLEMENTED_BY]-&gt;(Java:Class)</code></li>
+                <li><code>(HTTPClient)-[:IMPLEMENTED_BY]-&gt;(Java:Class)</code></li>
+                <li><code>(ScheduledTask)-[:IMPLEMENTED_BY]-&gt;(Java:Method)</code></li>
+              </ul>
+            </div>
+            <div>
+              <h6 class="section-label">Sample queries</h6>
+              <div class="query-block">
+                <div class="query-label">All REST endpoints with implementing class</div>
+                <div class="query-wrap"><pre>{{ queries['a1'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('a1')"><i class="bi" [class.bi-clipboard]="copied !== 'a1'" [class.bi-check2]="copied === 'a1'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Graph: microservice &rarr; REST interfaces</div>
+                <div class="query-wrap"><pre>{{ queries['a2'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('a2')"><i class="bi" [class.bi-clipboard]="copied !== 'a2'" [class.bi-check2]="copied === 'a2'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">JMS topology graph</div>
+                <div class="query-wrap"><pre>{{ queries['a3'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('a3')"><i class="bi" [class.bi-clipboard]="copied !== 'a3'" [class.bi-check2]="copied === 'a3'"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Data ─────────────────────────────────────────────────────── -->
+
+      <section id="data">
+        <div class="domain-header" style="border-color: #0ca678; background: #e6fcf5;">
+          <i class="bi bi-arrow-left-right domain-icon" style="color: #0ca678;"></i>
+          <div>
+            <div class="domain-title" style="color: #0ca678;">Data</div>
+            <div class="domain-desc">Cross-service data flow view produced by the Data Flow job</div>
+          </div>
+          <span class="domain-badge" style="background: #0ca678;">data-flow</span>
+        </div>
+        <div class="domain-body">
+          <div class="schema-cols">
+            <div>
+              <h6 class="section-label">Node types</h6>
+              <table class="node-table">
+                <thead><tr><th>Labels</th><th>Key properties</th></tr></thead>
+                <tbody>
+                  <tr><td><code class="label-chip">Data:Service</code></td><td><span class="prop">name</span> <span class="prop">is_external</span></td></tr>
+                  <tr><td><code class="label-chip">Data:Endpoint</code></td><td><span class="prop">path</span> <span class="prop">http_method</span> <span class="prop">direction</span> <span class="prop">service_name</span></td></tr>
+                  <tr><td><code class="label-chip">Data:Queue</code></td><td><span class="prop">name</span> <span class="prop">type</span></td></tr>
+                  <tr><td><code class="label-chip">Data:Database</code></td><td><span class="prop">name</span> <span class="prop">technology</span></td></tr>
+                  <tr><td><code class="label-chip">Data:DataModel</code></td><td><span class="prop">full_name</span> <span class="prop">name</span> <span class="prop">kind</span></td></tr>
+                </tbody>
+              </table>
+              <h6 class="section-label mt-3">Relationships</h6>
+              <ul class="rel-list">
+                <li><code>(Service)-[:MAPS_TO]-&gt;(Arch:Microservice)</code></li>
+                <li><code>(Service)-[:EXPOSES]-&gt;(Endpoint)</code> — inbound</li>
+                <li><code>(Service)-[:CALLS]-&gt;(Endpoint)</code> — outbound</li>
+                <li><code>(Endpoint)-[:MAPS_TO]-&gt;(Arch:RESTEndpoint | Arch:FeignEndpoint)</code></li>
+                <li><code>(Service)-[:PRODUCES]-&gt;(Queue)</code></li>
+                <li><code>(Service)-[:CONSUMES]-&gt;(Queue)</code></li>
+                <li><code>(Queue)-[:MAPS_TO]-&gt;(Arch:JMSDestination)</code></li>
+                <li><code>(Service)-[:READS_FROM]-&gt;(Database)</code></li>
+                <li><code>(Service)-[:WRITES_TO]-&gt;(Database)</code></li>
+                <li><code>(Database)-[:MAPS_TO]-&gt;(Arch:Repository)</code></li>
+                <li><code>(DataModel)-[:MAPS_TO]-&gt;(Java:Class)</code></li>
+                <li><code>(Endpoint)-[:ACCEPTS | RETURNS]-&gt;(DataModel)</code></li>
+                <li><code>(Queue)-[:CARRIES]-&gt;(DataModel)</code></li>
+              </ul>
+            </div>
+            <div>
+              <h6 class="section-label">Sample queries</h6>
+              <div class="query-block">
+                <div class="query-label">Services overview (table)</div>
+                <div class="query-wrap"><pre>{{ queries['d1'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('d1')"><i class="bi" [class.bi-clipboard]="copied !== 'd1'" [class.bi-check2]="copied === 'd1'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Full service graph (one service)</div>
+                <div class="query-wrap"><pre>{{ queries['d2'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('d2')"><i class="bi" [class.bi-clipboard]="copied !== 'd2'" [class.bi-check2]="copied === 'd2'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Which services share a queue</div>
+                <div class="query-wrap"><pre>{{ queries['d3'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('d3')"><i class="bi" [class.bi-clipboard]="copied !== 'd3'" [class.bi-check2]="copied === 'd3'"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Tooling ───────────────────────────────────────────────────── -->
+
+      <section id="tooling">
+        <div class="domain-header" style="border-color: #f08c00; background: #fff9db;">
+          <i class="bi bi-git domain-icon" style="color: #f08c00;"></i>
+          <div>
+            <div class="domain-title" style="color: #f08c00;">Tooling</div>
+            <div class="domain-desc">Git history produced by the Git Mining job</div>
+          </div>
+          <span class="domain-badge" style="background: #f08c00;">git-mining</span>
+        </div>
+        <div class="domain-body">
+          <div class="schema-cols">
+            <div>
+              <h6 class="section-label">Node types</h6>
+              <table class="node-table">
+                <thead><tr><th>Labels</th><th>Key properties</th></tr></thead>
+                <tbody>
+                  <tr><td><code class="label-chip">Tooling:Repository</code></td><td><span class="prop">name</span> <span class="prop">path</span></td></tr>
+                  <tr><td><code class="label-chip">Tooling:JiraTicket</code></td><td><span class="prop">key</span> <span class="prop">project</span></td></tr>
+                  <tr>
+                    <td><code class="label-chip">Tooling:Commit</code></td>
+                    <td>
+                      <span class="prop">hash</span> <span class="prop">full_hash</span>
+                      <span class="prop">date</span> <span class="prop">author_name</span>
+                      <span class="prop">author_email</span> <span class="prop">message</span>
+                      <span class="prop">files_changed</span> <span class="prop">issue_keys[]</span>
+                      <span class="prop">branches[]</span>
+                    </td>
+                  </tr>
+                  <tr><td><code class="label-chip">Tooling:Branch</code></td><td><span class="prop">name</span> <span class="prop">repo_name</span></td></tr>
+                </tbody>
+              </table>
+              <h6 class="section-label mt-3">Relationships</h6>
+              <ul class="rel-list">
+                <li><code>(Tooling:Repository)-[:HAS_COMMIT]-&gt;(Commit)</code></li>
+                <li><code>(Commit)-[:PARENT &#123;ord&#125;]-&gt;(Commit)</code> — ord 0 = first parent</li>
+                <li><code>(Commit)-[:REFERENCES]-&gt;(JiraTicket)</code></li>
+                <li><code>(Tooling:Repository)-[:HAS_BRANCH]-&gt;(Branch)</code></li>
+                <li><code>(Branch)-[:TIP]-&gt;(Commit)</code> — newest commit</li>
+                <li><code>(Branch)-[:FIRST]-&gt;(Commit)</code> — oldest commit</li>
+                <li><code>(Tooling:Repository)-[:SAME_REPO]-&gt;(Java:Repository)</code></li>
+              </ul>
+            </div>
+            <div>
+              <h6 class="section-label">Sample queries</h6>
+              <div class="query-block">
+                <div class="query-label">Commits per author</div>
+                <div class="query-wrap"><pre>{{ queries['t1'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('t1')"><i class="bi" [class.bi-clipboard]="copied !== 't1'" [class.bi-check2]="copied === 't1'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">First-parent commit chain for a branch (graph)</div>
+                <div class="query-wrap"><pre>{{ queries['t2'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('t2')"><i class="bi" [class.bi-clipboard]="copied !== 't2'" [class.bi-check2]="copied === 't2'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Commits linked to a Jira issue</div>
+                <div class="query-wrap"><pre>{{ queries['t3'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('t3')"><i class="bi" [class.bi-clipboard]="copied !== 't3'" [class.bi-check2]="copied === 't3'"></i></button>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Cross-domain: commits touching a module's classes</div>
+                <div class="query-wrap"><pre>{{ queries['t4'] }}</pre>
+                  <button class="btn-copy" title="Copy" (click)="copy('t4')"><i class="bi" [class.bi-clipboard]="copied !== 't4'" [class.bi-check2]="copied === 't4'"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Domain Relations ──────────────────────────────────────────── -->
+
+      <section id="domain-relations">
+        <div class="domain-header" style="border-color: #495057; background: #f8f9fa;">
+          <i class="bi bi-diagram-2 domain-icon" style="color: #495057;"></i>
+          <div>
+            <div class="domain-title" style="color: #343a40;">Domain Relations</div>
+            <div class="domain-desc">How domains depend on each other — dependencies are one-directional</div>
+          </div>
+        </div>
+        <div class="domain-body">
+
+          <!-- Dependency diagram -->
+          <h6 class="section-label mb-3">Dependency layers</h6>
+          <div class="dep-diagram">
+
+            <div class="dep-row">
+              <div class="dep-box" style="border-color: #339af0; background: #e7f5ff; color: #1971c2;">
+                <i class="bi bi-arrow-left-right"></i><span>Data</span>
+              </div>
+              <div class="dep-arrow-h">
+                <div class="dep-arrow-line-h"></div>
+                <code>:MAPS_TO</code>
+              </div>
+              <div class="dep-box" style="border-color: #845ef7; background: #f3f0ff; color: #6741d9;">
+                <i class="bi bi-layers"></i><span>Architecture</span>
+              </div>
+              <div class="dep-arrow-h">
+                <div class="dep-arrow-line-h"></div>
+                <code>:IMPLEMENTED_BY</code>
+              </div>
+              <div class="dep-box" style="border-color: #339af0; background: #e7f5ff; color: #1971c2;">
+                <i class="bi bi-filetype-java"></i><span>Java</span>
+              </div>
+            </div>
+
+            <div class="dep-row dep-row-note">
+              <div class="dep-note-spacer"></div>
+              <span class="dep-note">
+                <i class="bi bi-arrow-return-right me-1 text-muted"></i>
+                Data:DataModel also maps directly to Java:Class via <code>:MAPS_TO</code>
+              </span>
+            </div>
+
+            <div class="dep-row">
+              <div class="dep-box" style="border-color: #ffa94d; background: #fff9db; color: #f08c00;">
+                <i class="bi bi-git"></i><span>Tooling</span>
+              </div>
+              <div class="dep-arrow-h dep-arrow-dashed">
+                <div class="dep-arrow-line-h"></div>
+                <code>:SAME_REPO</code>
+              </div>
+              <div class="dep-box" style="border-color: #339af0; background: #e7f5ff; color: #1971c2;">
+                <i class="bi bi-filetype-java"></i><span>Java</span>
+              </div>
+              <span class="dep-optional-label">optional link — only present after both jobs have run</span>
+            </div>
+
+          </div>
+
+          <!-- Dependency table -->
+          <h6 class="section-label mt-4 mb-2">All cross-domain relationships</h6>
+          <table class="node-table dep-table">
+            <thead>
+              <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Relationship</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="domain-chip arch">Architecture</span></td>
+                <td><span class="domain-chip java">Java</span></td>
+                <td><code>:IMPLEMENTED_BY</code></td>
+                <td class="dep-meaning">Arch patterns point to the Java class or method that implements them</td>
+              </tr>
+              <tr>
+                <td><span class="domain-chip data">Data</span></td>
+                <td><span class="domain-chip arch">Architecture</span></td>
+                <td><code>:MAPS_TO</code></td>
+                <td class="dep-meaning">Data:Service, Endpoint, Queue and Database each map to their Arch counterpart</td>
+              </tr>
+              <tr>
+                <td><span class="domain-chip data">Data</span></td>
+                <td><span class="domain-chip java">Java</span></td>
+                <td><code>:MAPS_TO</code></td>
+                <td class="dep-meaning">Data:DataModel maps directly to the Java:Class that defines the type</td>
+              </tr>
+              <tr>
+                <td><span class="domain-chip tooling">Tooling</span></td>
+                <td><span class="domain-chip java">Java</span></td>
+                <td><code>:SAME_REPO</code></td>
+                <td class="dep-meaning">Tooling:Repository is linked to the Java:Repository of the same repo — only created when both code analysis and git mining have run</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="dep-independence-note mt-3">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Java</strong> is the foundation — it carries no dependency on any other domain.
+            <strong>Tooling</strong> is independent of Architecture and Data and can be mined without running code analysis.
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /schema-content -->
+  </div><!-- /schema-layout -->
+</div>

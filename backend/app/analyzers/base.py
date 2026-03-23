@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 
+from app.analyzers.node_props import NodeMeta
 from app.job_store import job_store
 
 
-class BaseAnalyzer(ABC):
-    def __init__(self, job_id: str):
+class BaseAnalyzer(ABC, NodeMeta):
+    def __init__(self, job_id: str, job_type: str):
         self.job_id = job_id
+        self.job_type = job_type
 
     def log_info(self, message: str):
         job_store.add_log(self.job_id, "info", message)

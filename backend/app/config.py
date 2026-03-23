@@ -35,6 +35,8 @@ def load_config_decrypted() -> AppConfig:
     for provider in config.ai_providers:
         if is_encrypted(provider.api_key):
             provider.api_key = decrypt_value(provider.api_key, key)
+    if is_encrypted(config.whisper.api_key):
+        config.whisper.api_key = decrypt_value(config.whisper.api_key, key)
     return config
 
 
@@ -65,6 +67,8 @@ def save_config(config: AppConfig) -> None:
         for provider in config.ai_providers:
             if not is_encrypted(provider.api_key):
                 provider.api_key = encrypt_value(provider.api_key, key)
+        if config.whisper.api_key and not is_encrypted(config.whisper.api_key):
+            config.whisper.api_key = encrypt_value(config.whisper.api_key, key)
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(config.model_dump(), f, default_flow_style=False, sort_keys=False)
 

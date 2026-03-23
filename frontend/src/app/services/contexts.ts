@@ -1,9 +1,9 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface ContextItemEntry {
-  type: string;        // "confluence_page" | "jira_issue" | "instructions" | "git_repo" | "repo_file" | "mixin"
+  type: string;        // "confluence_page" | "jira_issue" | "instructions" | "git_repo" | "repo_file" | "mixin" | "inquiry"
   id: string;
   title: string;
   label: string;
@@ -13,6 +13,10 @@ export interface ContextItemEntry {
   path?: string;       // for git_repo
   repo_name?: string;  // for repo_file
   file_path?: string;  // for repo_file
+  // inquiry fields
+  inquiry_type?: string;
+  params?: Record<string, string>;
+  requested_at?: string;
 }
 
 export interface ChildContext {
@@ -25,6 +29,7 @@ export interface ContextItem {
   name: string;
   description?: string;
   done?: boolean;
+  tags?: string[];
   items: ContextItemEntry[];
   children: ChildContext[];
 }
@@ -58,6 +63,12 @@ export interface ContributingContext {
 export class ContextsService {
   private http = inject(HttpClient);
 
+  // Persistent filter state (survives component destruction)
+  searchQuery = signal('');
+  hideDone = signal(true);
+  collapsed = signal(true);
+  tagFilter = signal<string[]>([]);
+
   getAll(): Observable<ContextItem[]> {
     return this.http.get<ContextItem[]>('/api/contexts');
   }
@@ -81,6 +92,13 @@ export class ContextsService {
     return this.http.post<ContextItem>(
       `/api/contexts/${encodeURIComponent(name)}/clone`,
       { name: cloneName },
+    );
+  }
+
+  updateTags(name: string, tags: string[]): Observable<ContextItem> {
+    return this.http.put<ContextItem>(
+      `/api/contexts/${encodeURIComponent(name)}/tags`,
+      { tags },
     );
   }
 

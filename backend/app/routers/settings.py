@@ -28,6 +28,21 @@ def get_settings():
 @router.put("", response_model=AppConfig)
 def update_settings(config: AppConfig):
     require_unlocked()
+    # Validate module relative_paths exist on disk
+    errors = []
+    for repo in config.repositories:
+        repo_path = Path(repo.path)
+        if not repo_path.is_dir():
+            continue  # repo path itself may not exist yet
+        for mod in repo.modules:
+            module_path = repo_path / mod.relative_path
+            if not module_path.is_dir():
+                errors.append(
+                    f"{repo.name or repo.path}: module "
+                    f"'{mod.name}' path '{mod.relative_path}' "
+                    f"does not exist")
+    if errors:
+        raise HTTPException(status_code=422, detail="; ".join(errors))
     save_config(config)
     return load_config_decrypted()
 

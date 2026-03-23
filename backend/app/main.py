@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts, git_mining
+from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts, git_mining, data_flow, whisper
 
 app = FastAPI(title="Roadmap", description="Software project documentation tool")
 
@@ -83,12 +83,14 @@ app.include_router(encryption.router)
 app.include_router(analysis.router)
 app.include_router(jobs.router)
 app.include_router(query.router)
+app.include_router(whisper.router)
 app.include_router(browse.router)
 app.include_router(jira.router)
 app.include_router(confluence.router)
 app.include_router(functional.router)
 app.include_router(contexts.router)
 app.include_router(git_mining.router)
+app.include_router(data_flow.router)
 
 # --- MCP server (SSE transport) ---
 from app.mcp_server import create_mcp_sse_app

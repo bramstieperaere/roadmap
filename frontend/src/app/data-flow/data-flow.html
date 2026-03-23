@@ -1,0 +1,93 @@
+<div class="section-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/processing" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Processing
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      @if (selectedName(); as name) {
+        <a class="breadcrumb-link" (click)="back()">Data Flow</a>
+        <i class="bi bi-chevron-right text-muted small"></i>
+        @if (selectedEndpoint(); as ep) {
+          <a class="breadcrumb-link" (click)="backToService()">{{ name }}</a>
+          <i class="bi bi-chevron-right text-muted small"></i>
+          <span class="fw-semibold text-truncate" style="max-width: 320px;">{{ ep.http_method }} {{ ep.path }}</span>
+        } @else {
+          <span class="fw-semibold">{{ name }}</span>
+        }
+      } @else {
+        <span class="fw-semibold">Data Flow</span>
+      }
+    </div>
+  </div>
+
+  <div class="section-content p-3">
+
+    @if (selectedEndpoint(); as epDetail) {
+      <!-- Level 3: Endpoint flow -->
+      <app-data-flow-endpoint [detail]="epDetail" />
+
+    } @else if (selectedName(); as name) {
+      <!-- Level 2: Service detail -->
+      @if (loadingDetail() || loadingEndpoint()) {
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <div class="mt-2 text-muted">Loading...</div>
+        </div>
+      } @else if (selectedDetail(); as detail) {
+        <app-data-flow-diagram [detail]="detail" (epClick)="selectEndpoint($event)" />
+      }
+
+    } @else {
+      <!-- Level 1: Services grid -->
+      @if (loading()) {
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      } @else if (error(); as err) {
+        <div class="alert alert-danger">{{ err }}</div>
+      } @else if (services().length === 0) {
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-arrow-left-right d-block mb-2" style="font-size: 2rem;"></i>
+          No data flow services found.<br>
+          Run repository analysis to generate data flow information.
+        </div>
+      } @else {
+        <div class="row g-3">
+          @for (svc of services(); track svc.name) {
+            <div class="col-md-6 col-lg-4 col-xl-3">
+              <div class="card service-card" (click)="selectService(svc.name)">
+                <div class="card-header service-card-header">
+                  <i class="bi bi-hexagon-fill me-2"></i>{{ svc.name }}
+                  @if (svc.is_external) {
+                    <span class="badge bg-warning text-dark ms-2">external</span>
+                  }
+                </div>
+                <div class="card-body py-2">
+                  <div class="count-row">
+                    <i class="bi bi-box-arrow-in-left" style="color: #339af0;"></i>
+                    <span>{{ svc.inbound_count }} inbound</span>
+                  </div>
+                  <div class="count-row">
+                    <i class="bi bi-box-arrow-right" style="color: #845ef7;"></i>
+                    <span>{{ svc.outbound_count }} outbound</span>
+                  </div>
+                  <div class="count-row">
+                    <i class="bi bi-broadcast" style="color: #20c997;"></i>
+                    <span>{{ svc.queue_count }} queues</span>
+                  </div>
+                  <div class="count-row">
+                    <i class="bi bi-database" style="color: #22b8cf;"></i>
+                    <span>{{ svc.database_count }} databases</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    }
+
+  </div><!-- /section-content -->
+</div><!-- /section-page -->

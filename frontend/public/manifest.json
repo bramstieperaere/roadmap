@@ -1,0 +1,9 @@
+{
+  "name": "Roadmap",
+  "short_name": "Roadmap",
+  "icons": [
+    { "src": "favicon.ico", "sizes": "16x16 32x32 48x48", "type": "image/x-icon" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "display": "browser"
+}
