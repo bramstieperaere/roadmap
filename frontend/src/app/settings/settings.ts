@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
+import { GitMiningService, ProcessorInfo } from '../services/git-mining';
 import { EncryptionService } from '../services/encryption';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 import { WhisperTextarea } from '../components/whisper-textarea/whisper-textarea';
@@ -16,6 +17,7 @@ import { WhisperTextarea } from '../components/whisper-textarea/whisper-textarea
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
   private encryptionService = inject(EncryptionService);
+  private gitMiningService = inject(GitMiningService);
   private destroyRef = inject(DestroyRef);
   private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
@@ -27,16 +29,21 @@ export class SettingsComponent implements OnInit {
     ai_providers: [],
     ai_tasks: [],
     whisper: { base_url: 'https://api.openai.com/v1', api_key: '', model: 'whisper-1', postprocess_provider: '', postprocess_model: '' },
+    logzio: { base_url: 'https://api.logz.io', api_token: '', default_size: 50 },
+    scratch_base_dir: '',
+    file_viewers: [],
   });
   testingConnection = signal(false);
   testingAtlassian = signal(false);
   testingBitbucket = signal(false);
+  testingLogzio = signal(false);
   lookingUpProject = signal(false);
   lookingUpSpace = signal(false);
   boardOptions = signal<JiraBoardOption[]>([]);
   analyzing = signal<number | null>(null);
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
-  activeTab = signal<'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper'>('neo4j');
+  processors = signal<ProcessorInfo[]>([]);
+  activeTab = signal<'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors'>('general');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
   visibleSecrets = signal<Set<string>>(new Set());
@@ -92,8 +99,12 @@ export class SettingsComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(() => this.loadSettings());
 
+    this.gitMiningService.getProcessors().subscribe({
+      next: p => this.processors.set(p),
+    });
+
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab && ['neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper'].includes(tab)) {
+    if (tab && ['general', 'viewers', 'neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper', 'logzio', 'processors'].includes(tab)) {
       this.activeTab.set(tab as any);
     }
   }
@@ -143,7 +154,7 @@ export class SettingsComponent implements OnInit {
     this.persistConfig('Settings saved');
   }
 
-  switchTab(tab: 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper') {
+  switchTab(tab: 'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors') {
     if (this.editingSection()) this.cancelEditing();
     this.activeTab.set(tab);
   }
@@ -174,7 +185,7 @@ export class SettingsComponent implements OnInit {
     this.configBackup = structuredClone(this.config());
     this.config.update((c) => ({
       ...c,
-      repositories: [...c.repositories, { name: '', path: '', tags: [], modules: [] }],
+      repositories: [...c.repositories, { name: '', path: '', tags: [], modules: [], processors: [] }],
     }));
     const newIndex = this.config().repositories.length - 1;
     this.selectedRepoIndex.set(newIndex);
@@ -464,6 +475,18 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  toggleProcessor(repoIndex: number, processorName: string) {
+    this.config.update(c => {
+      const repos = [...c.repositories];
+      const current = repos[repoIndex].processors || [];
+      const processors = current.includes(processorName)
+        ? current.filter(p => p !== processorName)
+        : [...current, processorName];
+      repos[repoIndex] = { ...repos[repoIndex], processors };
+      return { ...c, repositories: repos };
+    });
+  }
+
   updateModule(repoIndex: number, moduleIndex: number, field: keyof ModuleConfig, value: string) {
     this.config.update((c) => {
       const repos = [...c.repositories];
@@ -545,6 +568,58 @@ export class SettingsComponent implements OnInit {
       ...c,
       whisper: { ...c.whisper, [field]: value },
     }));
+  }
+
+  // Logz.io
+  updateLogzio(field: string, value: string | number) {
+    this.config.update((c) => ({
+      ...c,
+      logzio: { ...c.logzio, [field]: value },
+    }));
+  }
+
+  testLogzioConnection() {
+    this.testingLogzio.set(true);
+    this.settingsService.testLogzioConnection().subscribe({
+      next: (result) => { this.testingLogzio.set(false); this.showMessage(result.message, 'success'); },
+      error: (err) => { this.testingLogzio.set(false); this.showMessage(err.error?.detail || 'Logz.io connection failed', 'danger'); },
+    });
+  }
+
+  // File viewers
+  addFileViewer() {
+    this.config.update(c => ({
+      ...c,
+      file_viewers: [...c.file_viewers, { extension: '.puml', label: 'PlantUML', renderer: 'plantuml', server_url: '' }],
+    }));
+    this.startEditing('viewer-' + (this.config().file_viewers.length - 1));
+  }
+
+  updateFileViewer(index: number, field: string, value: string) {
+    this.config.update(c => {
+      const viewers = [...c.file_viewers];
+      viewers[index] = { ...viewers[index], [field]: value };
+      return { ...c, file_viewers: viewers };
+    });
+  }
+
+  removeFileViewer(index: number) {
+    this.config.update(c => ({
+      ...c,
+      file_viewers: c.file_viewers.filter((_, i) => i !== index),
+    }));
+    this.editingSection.set(null);
+    this.configBackup = null;
+    this.persistConfig('Viewer removed');
+  }
+
+  // Scratch base dir
+  updateScratchBaseDir(value: string) {
+    this.config.update(c => ({ ...c, scratch_base_dir: value }));
+  }
+
+  saveScratchBaseDir() {
+    this.persistConfig('Saved');
   }
 
   // Whisper test
@@ -634,6 +709,7 @@ export class SettingsComponent implements OnInit {
         path: parent + '/' + f.name,
         tags: [] as string[],
         modules: [] as ModuleConfig[],
+        processors: [] as string[],
       }));
     if (newRepos.length === 0) {
       this.showMessage('No folders selected', 'danger');

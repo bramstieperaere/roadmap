@@ -9,84 +9,80 @@
     }
   </div>
 
-  <div class="processing-body">
-    <div class="job-list">
+  <div class="processing-layout">
 
-      <div class="job-card" data-testid="job-card-analysis">
-        <div class="job-card-icon" style="background: #e7f5ff; color: #1971c2;">
-          <i class="bi bi-diagram-3"></i>
-        </div>
-        <div class="job-card-content">
-          <div class="job-card-title">Code Analysis</div>
-          <div class="job-card-desc">Clean up existing graph nodes, parse source code, and build the class and method metamodel in Neo4j.</div>
-        </div>
-        <button class="btn btn-primary btn-sm flex-shrink-0"
-                (click)="openModal('analysis', 'Code Analysis')"
-                data-testid="start-analysis">
-          <i class="bi bi-play-fill me-1"></i>Start
-        </button>
-      </div>
+    <!-- ── Source nav ──────────────────────────────────────────────── -->
+    <nav class="source-nav">
+      <div class="nav-group-label">Sources</div>
+      <button class="source-nav-item" [class.active]="activeSource() === 'git-repo'" (click)="switchSource('git-repo')">
+        <i class="bi bi-git"></i>Git Repository
+      </button>
+    </nav>
 
-      <div class="job-card" data-testid="job-card-enrichment">
-        <div class="job-card-icon" style="background: #f3f0ff; color: #6741d9;">
-          <i class="bi bi-layers"></i>
-        </div>
-        <div class="job-card-content">
-          <div class="job-card-title">Architecture Enrichment</div>
-          <div class="job-card-desc">Detect technologies and enrich the graph with architecture patterns: Spring Web, JMS, Feign, REST clients, Spring Data.</div>
-        </div>
-        <button class="btn btn-primary btn-sm flex-shrink-0"
-                (click)="openModal('enrichment', 'Architecture Enrichment')"
-                data-testid="start-enrichment">
-          <i class="bi bi-play-fill me-1"></i>Start
-        </button>
-      </div>
+    <!-- ── Content ─────────────────────────────────────────────────── -->
+    <div class="processing-content">
 
-      <div class="job-card" data-testid="job-card-data-flow">
-        <div class="job-card-icon" style="background: #e6fcf5; color: #0ca678;">
-          <i class="bi bi-arrow-left-right"></i>
-        </div>
-        <div class="job-card-content">
-          <div class="job-card-title">Data Flow</div>
-          <div class="job-card-desc">Map service endpoints, queues, and database dependencies across the architecture graph.</div>
-        </div>
-        <button class="btn btn-primary btn-sm flex-shrink-0"
-                (click)="openModal('data-flow', 'Data Flow')"
-                data-testid="start-data-flow">
-          <i class="bi bi-play-fill me-1"></i>Start
-        </button>
-      </div>
+      <div class="job-list">
 
-      <div class="nav-cards">
-        <a class="nav-card" routerLink="/git-mining" data-testid="processing-git-mining-link">
-          <i class="bi bi-git"></i>
-          <span>Git Mining</span>
-          <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
-        </a>
-        <a class="nav-card" routerLink="/jobs" data-testid="processing-jobs-link">
-          <i class="bi bi-lightning-fill"></i>
-          <span>Jobs</span>
-          <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
-        </a>
-        <a class="nav-card" routerLink="/graph-schema" data-testid="processing-graph-schema-link">
-          <i class="bi bi-diagram-3"></i>
-          <span>Graph Schema</span>
-          <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
-        </a>
+        <div class="section-label-sm">Actions</div>
+
+        @for (action of actions; track action.type) {
+          <div class="job-card" [attr.data-testid]="'job-card-' + action.type">
+            <div class="job-card-icon" [style.background]="action.iconBg" [style.color]="action.iconColor">
+              <i class="bi" [class]="action.icon"></i>
+            </div>
+            <div class="job-card-content">
+              <div class="job-card-title">{{ action.title }}</div>
+              <div class="job-card-desc">{{ action.description }}</div>
+            </div>
+            <button class="btn btn-primary btn-sm flex-shrink-0"
+                    (click)="openAction(action.type)"
+                    [attr.data-testid]="'start-' + action.type">
+              <i class="bi bi-play-fill me-1"></i>Start
+            </button>
+          </div>
+        }
+
+        <div class="nav-cards mt-3">
+          <a class="nav-card" routerLink="/git-mining" data-testid="processing-git-mining-link">
+            <i class="bi bi-git"></i>
+            <span>Git Mining</span>
+            <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
+          </a>
+          <a class="nav-card" routerLink="/jobs" data-testid="processing-jobs-link">
+            <i class="bi bi-lightning-fill"></i>
+            <span>Jobs</span>
+            <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
+          </a>
+          <a class="nav-card" routerLink="/graph-schema" data-testid="processing-graph-schema-link">
+            <i class="bi bi-diagram-3"></i>
+            <span>Graph Schema</span>
+            <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
+          </a>
+          <a class="nav-card" routerLink="/facets" data-testid="processing-facets-link">
+            <i class="bi bi-tags" style="color: #e64980;"></i>
+            <span>Facets</span>
+            <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.7rem;"></i>
+          </a>
+        </div>
+
       </div>
 
     </div>
   </div>
 
-  @if (activeModal(); as modal) {
+  <!-- ── Modal ────────────────────────────────────────────────────── -->
+  @if (activeJob(); as job) {
     <div class="modal-backdrop-custom" (click)="closeModal()"></div>
     <div class="modal-panel">
       <div class="modal-panel-header">
-        <span class="fw-semibold">{{ modal.title }} — Select Repositories</span>
+        <span class="fw-semibold">{{ job.action.title }}</span>
         <button class="btn-close" style="font-size: 0.75rem;" (click)="closeModal()"></button>
       </div>
+
+      <!-- Step 1: Repositories -->
       <div class="modal-panel-toolbar">
-        <span class="panel-label">Git Repositories</span>
+        <span class="panel-label">Repositories</span>
         <div class="d-flex gap-2">
           <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectAll()" data-testid="modal-select-all">All</button>
           <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectNone()" data-testid="modal-select-none">None</button>
@@ -104,17 +100,60 @@
             @if (repo.modules.length) {
               <span class="repo-row-badge">{{ repo.modules.length }}</span>
             } @else {
-              <span class="repo-row-warn" title="No modules configured — configure them in Settings → Git Repos">!</span>
+              <span class="repo-row-warn" title="No modules configured">!</span>
             }
           </label>
         }
         @empty {
           <p class="text-muted small px-3 py-2 mb-0">
             No repositories configured. Add them in
-            <a routerLink="/settings" [queryParams]="{tab: 'repos'}">Settings → Git Repos</a>.
+            <a routerLink="/settings" [queryParams]="{tab: 'repos'}">Settings</a>.
           </p>
         }
       </div>
+
+      <!-- Step 2: Traversal (only for git mining actions) -->
+      @if (supportsTraversal && hasSelection) {
+        <div class="modal-panel-toolbar">
+          <span class="panel-label">Traversal</span>
+        </div>
+        <div class="modal-traversal">
+          <label class="traversal-option">
+            <input type="radio" name="traversal" class="form-check-input mt-0"
+                   [checked]="traversalMode() === 'all'"
+                   (change)="setTraversalMode('all')">
+            <span>All commits</span>
+          </label>
+          <label class="traversal-option">
+            <input type="radio" name="traversal" class="form-check-input mt-0"
+                   [checked]="traversalMode() === 'branches'"
+                   (change)="setTraversalMode('branches')">
+            <span>Filter by branch</span>
+          </label>
+          @if (traversalMode() === 'branches') {
+            <div class="branch-picker">
+              @if (loadingBranches()) {
+                <div class="text-center py-2"><span class="spinner-border spinner-border-sm text-primary"></span></div>
+              } @else if (selected().size !== 1) {
+                <div class="text-muted small px-2 py-1">Select exactly one repository to pick branches.</div>
+              } @else if (branches().length === 0) {
+                <div class="text-muted small px-2 py-1">No branches found.</div>
+              } @else {
+                @for (b of branches(); track b) {
+                  <label class="branch-row">
+                    <input type="checkbox" class="form-check-input mt-0"
+                           [checked]="selectedBranches().has(b)"
+                           (change)="toggleBranch(b)">
+                    <i class="bi bi-git text-muted" style="font-size: 0.8rem;"></i>
+                    <span>{{ b }}</span>
+                  </label>
+                }
+              }
+            </div>
+          }
+        </div>
+      }
+
       <div class="modal-panel-footer">
         <button class="btn btn-outline-secondary btn-sm" (click)="closeModal()">Cancel</button>
         <button class="btn btn-primary btn-sm"

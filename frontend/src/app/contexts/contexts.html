@@ -59,6 +59,9 @@
       <div class="context-list" data-testid="contexts-list">
         @for (ctx of filteredContexts(); track ctx.name) {
           <div class="context-card" [attr.data-testid]="'context-' + ctx.name">
+            @if (copiedRef() === ctx.name) {
+              <span class="copied-badge"><i class="bi bi-check2 me-1"></i>Copied</span>
+            }
             <a class="context-link" [class.context-done]="ctx.done"
                [routerLink]="['/contexts', ctx.name]" data-testid="context-link">
               <div class="d-flex align-items-center gap-2 flex-grow-1">
@@ -101,6 +104,9 @@
                   <i class="bi bi-arrow-return-right text-muted tree-arrow"></i>
                   <i class="bi bi-card-text text-muted"></i>
                   <span class="fw-medium">{{ child.name }}</span>
+                  @if (copiedRef() === ctx.name + '/' + child.name) {
+                    <span class="copied-badge"><i class="bi bi-check2 me-1"></i>Copied</span>
+                  }
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <div class="dropdown action-btn" (click)="$event.stopPropagation()">

@@ -50,7 +50,7 @@ def get_entry_classes():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {e}")
     finally:
-        driver.close()
+        pass
 
 NEO4J_SCHEMA = """
 ## Code Metamodel (label: Java)
@@ -151,12 +151,24 @@ Important notes about the Tooling domain:
 - Commits have a short hash (12 chars) and full_hash; use hash for display, full_hash for exact matching
 - files_changed is a list of relative file paths modified in that commit
 
+## Facet Metamodel (label: Facet) — User-defined classification taxonomy
+Node labels and their properties:
+- Facet:Facet: name, description
+- Facet:Value: name, label, ordinal
+
+Relationships:
+- (Facet:Facet)-[:HAS_VALUE]->(Facet:Value)         root-level values of a facet
+- (Facet:Value)-[:NARROWER]->(Facet:Value)           hierarchical refinement (parent to child)
+- (any node)-[:CLASSIFIED_AS]->(Facet:Value)         tags any data node with a facet value
+
+Note: CLASSIFIED_AS can originate from any domain node (Java, Arch, Data, Tooling). Facet is a cross-cutting overlay for the entire graph.
+
 Method full_name format: "package.ClassName.methodName"
 Class full_name format: "package.ClassName"
 Note: imports is a native Neo4j list property — use WHERE 'com.example.Foo' IN c.imports or UNWIND c.imports AS imp
 """
 
-SYSTEM_PROMPT = f"""You are a Cypher query generator for a Neo4j database containing software project analysis data with four metamodels: Code (Java), Architecture (Arch), Data Flow (Data), and Tooling (git history + Jira).
+SYSTEM_PROMPT = f"""You are a Cypher query generator for a Neo4j database containing software project analysis data with five metamodels: Code (Java), Architecture (Arch), Data Flow (Data), Tooling (git history + Jira), and Facet (classification taxonomy).
 
 {NEO4J_SCHEMA}
 
@@ -265,6 +277,15 @@ Example queries:
 
 - "Link git repo to code repo":
   MATCH (tr:Tooling:Repository)-[sr:SAME_REPO]->(jr:Java:Repository) RETURN tr, sr, jr
+
+- "Show all facets and their values":
+  MATCH (f:Facet:Facet)-[hv:HAS_VALUE]->(v:Facet:Value) OPTIONAL MATCH (v)-[nr:NARROWER*]->(child:Facet:Value) RETURN f, hv, v, nr, child
+
+- "Show nodes classified under a value":
+  MATCH (n)-[ca:CLASSIFIED_AS]->(v:Facet:Value {{name: 'Backend'}}) RETURN n, ca, v LIMIT 100
+
+- "Show all Java classes classified as Backend in Q1-2024":
+  MATCH (c:Java:Class)-[ca1:CLASSIFIED_AS]->(v1:Facet:Value {{name: 'Backend'}}) MATCH (c)-[ca2:CLASSIFIED_AS]->(v2:Facet:Value {{name: 'Q1-2024'}}) RETURN c, ca1, v1, ca2, v2
 """
 
 
@@ -306,7 +327,7 @@ def _enrich_orphan_methods(graph_data: dict):
             RETURN c, hm, m
         """, {"ids": list(orphan_ids)})
     finally:
-        driver.close()
+        pass
 
     existing_node_ids = {n["id"] for n in graph_data["nodes"]}
     existing_rel_ids = {r["id"] for r in graph_data["relationships"]}
@@ -363,7 +384,7 @@ def execute_query(request: QueryRequest):
             cypher=cypher, nodes=[], relationships=[],
             error=f"Cypher execution failed: {e}")
     finally:
-        driver.close()
+        pass
 
     # Step 4: Enrich orphan methods with parent Class
     _enrich_orphan_methods(graph_data)
@@ -649,7 +670,7 @@ def expand_node(request: ExpandRequest):
             cypher=cypher, nodes=[], relationships=[],
             error=f"Expansion failed: {e}")
     finally:
-        driver.close()
+        pass
 
     _enrich_orphan_methods(graph_data)
 

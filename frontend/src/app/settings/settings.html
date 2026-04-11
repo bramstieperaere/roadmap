@@ -15,6 +15,12 @@
     <!-- Vertical tabs -->
     <nav class="settings-nav">
       <div class="nav-group-label">General</div>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'general'" (click)="switchTab('general')">
+        <i class="bi bi-card-list"></i> Context
+      </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'viewers'" (click)="switchTab('viewers')">
+        <i class="bi bi-eye"></i> File Viewers
+      </button>
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'neo4j'" (click)="switchTab('neo4j')">
         <i class="bi bi-database"></i> Database
       </button>
@@ -25,8 +31,15 @@
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'bitbucket'" (click)="switchTab('bitbucket')">
         <i class="bi bi-git"></i> Bitbucket
       </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'logzio'" (click)="switchTab('logzio')">
+        <i class="bi bi-search"></i> Logz.io
+      </button>
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'repos'" (click)="switchTab('repos')">
         <i class="bi bi-folder2-open"></i> Git Repos
+      </button>
+      <div class="nav-group-label">Processing</div>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'processors'" (click)="switchTab('processors')">
+        <i class="bi bi-gear"></i> Commit Processors
       </button>
       <div class="nav-group-label">AI</div>
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'providers'" (click)="switchTab('providers')">
@@ -168,10 +181,15 @@
               }
               <div [class]="config().atlassian.deployment_type === 'cloud' ? 'col-md-6' : 'col-md-12'">
                 <label class="form-label">{{ config().atlassian.deployment_type === 'cloud' ? 'API Token' : 'Personal Access Token' }}</label>
-                <input type="password" class="form-control"
-                       [value]="config().atlassian.api_token"
-                       (input)="updateAtlassianField('api_token', $any($event.target).value)"
-                       data-testid="atlassian-api-token">
+                <div class="input-group">
+                  <input [type]="isSecretVisible('atlassian-token') ? 'text' : 'password'" class="form-control"
+                         [value]="config().atlassian.api_token"
+                         (input)="updateAtlassianField('api_token', $any($event.target).value)"
+                         data-testid="atlassian-api-token">
+                  <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('atlassian-token')" tabindex="-1">
+                    <i class="bi" [class.bi-eye]="!isSecretVisible('atlassian-token')" [class.bi-eye-slash]="isSecretVisible('atlassian-token')"></i>
+                  </button>
+                </div>
               </div>
               <div class="col-md-4">
                 <label class="form-label">Cache Refresh (seconds)</label>
@@ -445,10 +463,15 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label">App Password</label>
-                <input type="password" class="form-control"
-                       [value]="config().atlassian.bitbucket_app_password"
-                       (input)="updateAtlassianField('bitbucket_app_password', $any($event.target).value)"
-                       data-testid="bitbucket-app-password">
+                <div class="input-group">
+                  <input [type]="isSecretVisible('bitbucket-pw') ? 'text' : 'password'" class="form-control"
+                         [value]="config().atlassian.bitbucket_app_password"
+                         (input)="updateAtlassianField('bitbucket_app_password', $any($event.target).value)"
+                         data-testid="bitbucket-app-password">
+                  <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('bitbucket-pw')" tabindex="-1">
+                    <i class="bi" [class.bi-eye]="!isSecretVisible('bitbucket-pw')" [class.bi-eye-slash]="isSecretVisible('bitbucket-pw')"></i>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="mt-3">
@@ -486,6 +509,114 @@
       }
 
       <!-- ═══════════════════ Git Repos ═══════════════════ -->
+      @if (activeTab() === 'general') {
+        <div>
+          <h6 class="section-title mb-3"><i class="bi bi-card-list me-2"></i>Context</h6>
+          <div class="section-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold"><i class="bi bi-folder-symlink me-2"></i>Scratch Base Directory</span>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+              <input type="text" class="form-control form-control-sm" style="max-width: 500px;"
+                     placeholder="e.g. C:\_\project\scratch"
+                     [value]="config().scratch_base_dir"
+                     (input)="updateScratchBaseDir($any($event.target).value)"
+                     data-testid="scratch-base-dir">
+              <button class="btn btn-primary btn-sm" (click)="saveScratchBaseDir()" data-testid="save-scratch-dir">
+                <i class="bi bi-check-lg"></i>
+              </button>
+            </div>
+            <small class="text-muted d-block mt-1">Base directory for AI-generated files. Context name is appended as a subdirectory.</small>
+          </div>
+        </div>
+      }
+
+      @if (activeTab() === 'viewers') {
+        <div data-testid="file-viewers-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="section-title mb-0"><i class="bi bi-eye me-2"></i>File Viewers</h6>
+            <button class="btn btn-outline-primary btn-sm" (click)="addFileViewer()" [disabled]="editingSection() !== null">
+              <i class="bi bi-plus-lg me-1"></i>Add Viewer
+            </button>
+          </div>
+
+          @for (viewer of config().file_viewers; track $index) {
+            @let vi = $index;
+            @if (editingSection() === 'viewer-' + vi) {
+              <div class="section-card editing mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-semibold">{{ viewer.label || 'New Viewer' }}</span>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" (click)="saveSection()"><i class="bi bi-check-lg me-1"></i>Save</button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                  </div>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-3">
+                    <label class="form-label">Extension</label>
+                    <input type="text" class="form-control" placeholder=".puml"
+                           [value]="viewer.extension" (input)="updateFileViewer(vi, 'extension', $any($event.target).value)">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Label</label>
+                    <input type="text" class="form-control" placeholder="PlantUML"
+                           [value]="viewer.label" (input)="updateFileViewer(vi, 'label', $any($event.target).value)">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Renderer</label>
+                    <select class="form-select"
+                            (change)="updateFileViewer(vi, 'renderer', $any($event.target).value)">
+                      <option value="text" [selected]="viewer.renderer === 'text'">Text</option>
+                      <option value="plantuml" [selected]="viewer.renderer === 'plantuml'">PlantUML</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-outline-danger btn-sm w-100" (click)="removeFileViewer(vi)">
+                      <i class="bi bi-trash me-1"></i>Remove
+                    </button>
+                  </div>
+                  @if (viewer.renderer === 'plantuml') {
+                    <div class="col-md-8">
+                      <label class="form-label">Server URL</label>
+                      <input type="text" class="form-control" placeholder="http://localhost:8080/plantuml"
+                             [value]="viewer.server_url" (input)="updateFileViewer(vi, 'server_url', $any($event.target).value)">
+                      <small class="text-muted d-block mt-1">
+                        <strong>Local server</strong> (private, recommended):
+                        <code>docker run -d -p 8080:8080 plantuml/plantuml-server:jetty</code>
+                        then set URL to <code>http://localhost:8080/plantuml</code>
+                      </small>
+                      <small class="text-muted d-block mt-1">
+                        <strong>Public server</strong>: <code>https://www.plantuml.com/plantuml</code>
+                        <br><i class="bi bi-exclamation-triangle me-1" style="color: #e67700;"></i><span style="color: #495057;">The diagram source is encoded (not encrypted) in the URL and sent to the server. Anyone with the URL can view and decode the original diagram. Not indexed or publicly browsable, but not private either. Avoid for sensitive or proprietary content.</span>
+                      </small>
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
+              <div class="section-card mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="d-flex align-items-center gap-3">
+                    <span class="fw-semibold">{{ viewer.label }}</span>
+                    <code>{{ viewer.extension }}</code>
+                    <span class="badge bg-light text-dark">{{ viewer.renderer }}</span>
+                    @if (viewer.server_url) {
+                      <small class="text-muted">{{ viewer.server_url }}</small>
+                    }
+                  </div>
+                  <button class="btn btn-outline-primary btn-sm" (click)="startEditing('viewer-' + vi)" [disabled]="editingSection() !== null">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                  </button>
+                </div>
+              </div>
+            }
+          }
+          @empty {
+            <p class="text-muted">No file viewers configured. Add one to enable rendering of PlantUML or other file types.</p>
+          }
+        </div>
+      }
+
       @if (activeTab() === 'repos') {
         <div data-testid="repositories-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
@@ -664,6 +795,24 @@
                     </div>
                   </div>
 
+                  <!-- Commit Processors -->
+                  @if (processors().length > 0) {
+                    <div class="mb-3">
+                      <label class="form-label">Commit Processors</label>
+                      <div class="d-flex flex-wrap gap-2">
+                        @for (proc of processors(); track proc.name) {
+                          <label class="form-check form-check-inline mb-0">
+                            <input type="checkbox" class="form-check-input"
+                                   [checked]="(repo.processors || []).includes(proc.name)"
+                                   (change)="toggleProcessor(repoIndex, proc.name)">
+                            <span class="form-check-label small">{{ proc.label }}</span>
+                          </label>
+                        }
+                      </div>
+                      <div class="form-text">Processors run automatically during git commit ingestion.</div>
+                    </div>
+                  }
+
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <small class="text-muted fw-semibold text-uppercase">Modules</small>
                     <div class="d-flex gap-2">
@@ -759,6 +908,17 @@
                       <div class="d-flex flex-wrap gap-1">
                         @for (tag of repo.tags; track tag) {
                           <span class="tag-badge-readonly">{{ tag }}</span>
+                        }
+                      </div>
+                    </div>
+                  }
+
+                  @if ((repo.processors || []).length > 0) {
+                    <div class="mb-3">
+                      <label class="form-label">Commit Processors</label>
+                      <div class="d-flex flex-wrap gap-1">
+                        @for (name of repo.processors; track name) {
+                          <span class="tag-badge-readonly">{{ name }}</span>
                         }
                       </div>
                     </div>
@@ -936,6 +1096,8 @@
                       <option value="repository_analysis">Repository Analysis</option>
                       <option value="functional_doc">Functional Doc Processing</option>
                       <option value="cypher_generation">Cypher Generation</option>
+                      <option value="commit_classification">Commit Classification</option>
+                      <option value="context_assistant">Context Assistant</option>
                     </select>
                   </div>
                   <div class="col-md-6">
@@ -1091,6 +1253,122 @@
                                     placeholder="Click the microphone, speak, then check the transcription here..."
                                     [rows]="3" />
             </div>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'logzio') {
+        <div data-testid="logzio-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="section-title mb-0"><i class="bi bi-search me-2"></i>Logz.io (Log Search)</h6>
+          </div>
+
+          @if (editingSection() === 'logzio') {
+            <div class="section-card editing">
+              <div class="d-flex justify-content-end gap-2 mb-2">
+                <button class="btn btn-primary btn-sm" (click)="saveSection()">
+                  <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+              </div>
+              <div class="row g-3 mb-2">
+                <div class="col-md-8">
+                  <label class="form-label">Base URL</label>
+                  <input type="text" class="form-control" placeholder="https://api.logz.io"
+                         [value]="config().logzio.base_url" (input)="updateLogzio('base_url', $any($event.target).value)"
+                         data-testid="logzio-url">
+                  <small class="text-muted">Region-specific, e.g. https://api-eu.logz.io for EU</small>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Result Size</label>
+                  <input type="number" class="form-control" min="1" max="1000"
+                         [value]="config().logzio.default_size" (input)="updateLogzio('default_size', +$any($event.target).value)"
+                         data-testid="logzio-size">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">API Token</label>
+                  <div class="input-group">
+                    <input [type]="isSecretVisible('logzio-token') ? 'text' : 'password'" class="form-control" placeholder="API token..."
+                           [value]="config().logzio.api_token" (input)="updateLogzio('api_token', $any($event.target).value)"
+                           data-testid="logzio-token">
+                    <button class="btn btn-outline-secondary" type="button" (click)="toggleSecret('logzio-token')" tabindex="-1">
+                      <i class="bi" [class.bi-eye]="!isSecretVisible('logzio-token')" [class.bi-eye-slash]="isSecretVisible('logzio-token')"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="section-card">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Configuration</span>
+                <button class="btn btn-outline-primary btn-sm" (click)="startEditing('logzio')" [disabled]="editingSection() !== null"
+                        data-testid="edit-logzio">
+                  <i class="bi bi-pencil me-1"></i>Edit
+                </button>
+              </div>
+              @if (config().logzio.api_token) {
+                <div class="d-flex gap-4 flex-wrap">
+                  <div>
+                    <label class="form-label">Base URL</label>
+                    <div class="field-value">{{ config().logzio.base_url }}</div>
+                  </div>
+                  <div>
+                    <label class="form-label">API Token</label>
+                    <div class="field-value">••••••••</div>
+                  </div>
+                  <div>
+                    <label class="form-label">Default Size</label>
+                    <div class="field-value">{{ config().logzio.default_size }}</div>
+                  </div>
+                </div>
+              } @else {
+                <p class="text-muted mb-0" data-testid="no-logzio-message">Not configured. Click "Edit" to set up your Logz.io API connection.</p>
+              }
+            </div>
+          }
+
+          @if (config().logzio.api_token && editingSection() !== 'logzio') {
+            <div class="section-card mt-3" data-testid="logzio-test">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Test Connection</span>
+                <button class="btn btn-outline-primary btn-sm" (click)="testLogzioConnection()" [disabled]="testingLogzio()"
+                        data-testid="test-logzio">
+                  @if (testingLogzio()) {
+                    <span class="spinner-border spinner-border-sm me-1"></span>Testing...
+                  } @else {
+                    <i class="bi bi-plug me-1"></i>Test
+                  }
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ═══════════════════ Commit Processors ═══════════════════ -->
+      @if (activeTab() === 'processors') {
+        <div data-testid="processors-tab">
+          <h6 class="section-title mb-3"><i class="bi bi-gear me-2"></i>Commit Processors</h6>
+          <p class="text-muted small mb-3">
+            Commit processors run during git ingestion and extract structured data from commits.
+            Enable them in the <strong>Git Mining</strong> page when ingesting commits.
+          </p>
+          @if (processors().length === 0) {
+            <div class="text-muted text-center py-4">No processors available.</div>
+          } @else {
+            @for (proc of processors(); track proc.name) {
+              <div class="section-card mb-2">
+                <div class="d-flex align-items-start gap-3">
+                  <i class="bi bi-gear fs-4 text-primary mt-1"></i>
+                  <div>
+                    <div class="fw-semibold">{{ proc.label }}</div>
+                    <div class="text-muted small">{{ proc.description }}</div>
+                    <div class="mt-1"><code class="small">{{ proc.name }}</code></div>
+                  </div>
+                </div>
+              </div>
+            }
           }
         </div>
       }

@@ -1,0 +1,168 @@
+<div class="section-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      @if (returnTo()) {
+        <a [routerLink]="returnTo()" class="breadcrumb-link">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+        <i class="bi bi-chevron-right text-muted small"></i>
+      }
+      <span class="fw-semibold"><i class="bi bi-folder2-open me-1"></i>{{ dirName() }}</span>
+    </div>
+  </div>
+
+  <div class="section-content p-3 d-flex flex-column">
+
+    @if (error()) {
+      <div class="alert alert-danger py-2">{{ error() }}</div>
+    }
+
+    @if (loading()) {
+      <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    } @else {
+      <div class="dir-layout">
+        <!-- File list panel -->
+        <div class="file-list-panel" [class.collapsed]="fileListCollapsed()">
+          @if (!fileListCollapsed()) {
+            <div class="path-bar">
+              <code class="path-text">{{ currentPath() }}</code>
+              <div class="d-flex gap-1 ms-auto">
+                @if (parentPath()) {
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="goUp()">
+                    <i class="bi bi-arrow-up me-1"></i>Up
+                  </button>
+                }
+                <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="fileListCollapsed.set(true)" title="Hide file list">
+                  <i class="bi bi-chevron-bar-left"></i>
+                </button>
+              </div>
+            </div>
+            <div class="file-list">
+              @if (entries().length === 0) {
+                <div class="text-muted text-center py-4 small">Empty directory</div>
+              }
+              @for (entry of entries(); track entry.path) {
+                <div class="file-row" [class.active]="viewingFile()?.path === entry.path" (click)="openEntry(entry)">
+                  <i class="bi" [class.bi-folder-fill]="entry.type === 'dir'"
+                     [class]="entry.type === 'file' ? fileIcon(entry.ext || '') : ''"
+                     [style.color]="entry.type === 'dir' ? '#f08c00' : ''"></i>
+                  <span class="file-name" [class.fw-semibold]="entry.type === 'dir'">{{ entry.name }}</span>
+                  @if (entry.type === 'file' && entry.size) {
+                    <span class="file-size">{{ formatSize(entry.size) }}</span>
+                  }
+                  @if (entry.type === 'dir') {
+                    <i class="bi bi-chevron-right ms-auto text-muted" style="font-size: 0.65rem;"></i>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- File viewer -->
+        @if (loadingFile()) {
+          <div class="file-viewer-panel text-center py-5">
+            <div class="spinner-border text-primary"></div>
+          </div>
+        } @else if (viewingFile(); as file) {
+          <div class="file-viewer-panel">
+            <div class="viewer-header">
+              @if (fileListCollapsed()) {
+                <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="fileListCollapsed.set(false)" title="Show file list">
+                  <i class="bi bi-chevron-bar-right"></i>
+                </button>
+                <span class="zoom-divider"></span>
+              }
+              <i class="bi" [class]="fileIcon(file.ext)"></i>
+              <span class="fw-semibold">{{ file.name }}</span>
+              <div class="ms-auto d-flex align-items-center gap-1">
+                @if (file.isImage || (pumlSvgUrl() && !showSource())) {
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="zoomOut()" title="Zoom out"><i class="bi bi-dash-lg"></i></button>
+                  <span class="zoom-label">{{ zoom() }}%</span>
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="zoomIn()" title="Zoom in"><i class="bi bi-plus-lg"></i></button>
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="zoomFit()" title="Fit to width"><i class="bi bi-arrows-angle-expand"></i></button>
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="zoomReset()" title="Reset (100%)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                  <span class="zoom-divider"></span>
+                  <button class="btn btn-sm btn-xs" [class]="showMinimap() ? 'btn-secondary' : 'btn-outline-secondary'"
+                          (click)="toggleMinimap()" title="Toggle minimap">
+                    <i class="bi bi-pip"></i>
+                  </button>
+                }
+                @if (pumlSvgUrl() || markdownHtml() || htmlBlobUrl()) {
+                  <span class="zoom-divider"></span>
+                  <button class="btn btn-sm btn-xs" [class]="showSource() ? 'btn-secondary' : 'btn-outline-secondary'"
+                          (click)="showSource.set(!showSource())" title="Toggle source">
+                    <i class="bi bi-code-slash"></i>
+                  </button>
+                }
+              </div>
+            </div>
+            @if (file.isImage) {
+              <div class="render-wrapper">
+                <div class="image-render" #scrollContainer (scroll)="updateMinimap()">
+                  <img [src]="file.imageUrl" [alt]="file.name" class="image-preview"
+                       [style.width.%]="zoom()" (load)="onScrollContainerReady()">
+                </div>
+                @if (showMinimap()) {
+                  <div class="minimap" (mousedown)="onMinimapDown($event)">
+                    <img [src]="file.imageUrl" [alt]="'Minimap'" class="minimap-img">
+                    <div class="minimap-viewport"
+                         [style.left.%]="minimapViewport().left"
+                         [style.top.%]="minimapViewport().top"
+                         [style.width.%]="minimapViewport().width"
+                         [style.height.%]="minimapViewport().height"></div>
+                  </div>
+                }
+              </div>
+            } @else if (pumlSvgUrl()) {
+              @if (showSource()) {
+                <pre class="viewer-content">{{ file.content }}</pre>
+              } @else {
+                <div class="render-wrapper">
+                  <div class="puml-render" #scrollContainer (scroll)="updateMinimap()">
+                    <img [src]="pumlSvgUrl()" alt="PlantUML diagram" class="puml-img"
+                         [style.width.%]="zoom()" (load)="onScrollContainerReady()">
+                  </div>
+                  @if (showMinimap()) {
+                    <div class="minimap" (mousedown)="onMinimapDown($event)">
+                      <img [src]="pumlSvgUrl()" alt="Minimap" class="minimap-img">
+                      <div class="minimap-viewport"
+                           [style.left.%]="minimapViewport().left"
+                           [style.top.%]="minimapViewport().top"
+                           [style.width.%]="minimapViewport().width"
+                           [style.height.%]="minimapViewport().height"></div>
+                    </div>
+                  }
+                </div>
+              }
+            } @else if (file.ext === '.puml' && pumlError()) {
+              <div class="puml-not-configured">
+                <i class="bi bi-diagram-2 d-block mb-1" style="font-size: 1.5rem;"></i>
+                <span>{{ pumlError() }}</span>
+                <a [routerLink]="['/settings']" [queryParams]="{tab: 'viewers'}">Configure in Settings</a>
+              </div>
+              <pre class="viewer-content">{{ file.content }}</pre>
+            } @else if (htmlBlobUrl()) {
+              @if (showSource()) {
+                <pre class="viewer-content">{{ file.content }}</pre>
+              } @else {
+                <iframe [src]="htmlBlobUrl()" class="html-preview"
+                        sandbox="allow-same-origin" title="HTML Preview"></iframe>
+              }
+            } @else if (markdownHtml()) {
+              @if (showSource()) {
+                <pre class="viewer-content">{{ file.content }}</pre>
+              } @else {
+                <div class="markdown-content" [innerHTML]="markdownHtml()"></div>
+              }
+            } @else {
+              <pre class="viewer-content">{{ file.content }}</pre>
+            }
+          </div>
+        }
+      </div>
+    }
+
+  </div>
+</div>

@@ -186,15 +186,20 @@ export class ContextsComponent implements OnInit {
     else if (event.key === 'Escape') this.cancelAddChild();
   }
 
+  copiedRef = signal('');
+
   copyContextRef(contextPath: string, event: Event) {
     event.preventDefault();
     event.stopPropagation();
     const text = `Use roadmap MCP for context "${contextPath}":\n`
       + `1. get_context_toc("${contextPath}") — table of contents with item sizes\n`
       + `2. get_context_item("${contextPath}", <index>) — fetch individual items\n`
-      + `3. get_context("${contextPath}") — fetch everything (can be large)\n`
-      + `4. add_context_insight("${contextPath}", "<label>", "<text>") — write back your analysis/findings`;
-    navigator.clipboard.writeText(text);
+      + `3. get_context("${contextPath}") — fetch everything (can be large)`;
+    navigator.clipboard.writeText(text).then(() => {
+      this.copiedRef.set(contextPath);
+      this.openMenu.set(null);
+      setTimeout(() => { if (this.copiedRef() === contextPath) this.copiedRef.set(''); }, 1500);
+    });
   }
 
   cloneContext(name: string, event: Event) {

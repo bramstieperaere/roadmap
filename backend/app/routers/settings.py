@@ -91,6 +91,16 @@ def test_bitbucket():
     return {"status": "ok", "message": "Bitbucket: connected (no workspaces found)"}
 
 
+@router.post("/test-logzio")
+def test_logzio():
+    require_unlocked()
+    config = load_config_decrypted()
+    from app.logzio_client import require_logzio_configured, logzio_search
+    require_logzio_configured(config.logzio)
+    logzio_search(config.logzio, query="*", size=1)
+    return {"status": "ok", "message": "Connected to Logz.io successfully"}
+
+
 @router.get("/atlassian/project")
 def lookup_jira_project(key: str):
     require_unlocked()

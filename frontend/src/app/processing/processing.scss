@@ -34,7 +34,67 @@
   &-danger  { background: #ffe3e3; color: #c92a2a; }
 }
 
-.processing-body {
+// ── Layout ────────────────────────────────────────────────────────────────────
+
+.processing-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+// ── Source nav ────────────────────────────────────────────────────────────────
+
+.source-nav {
+  width: 172px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--rm-border);
+  background: var(--rm-surface);
+  padding: 0.75rem 0;
+  overflow-y: auto;
+}
+
+.nav-group-label {
+  font-size: 0.6375rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--rm-text-muted);
+  padding: 0.1rem 1rem 0.4rem;
+}
+
+.source-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 1rem;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  text-align: left;
+  font-size: 0.8125rem;
+  color: var(--rm-text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+
+  i { font-size: 0.9rem; flex-shrink: 0; }
+
+  &:hover {
+    background: color-mix(in srgb, var(--rm-border) 40%, transparent);
+    color: var(--rm-text);
+  }
+
+  &.active {
+    border-left-color: #1a3a5c;
+    color: var(--rm-text);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--rm-border) 25%, transparent);
+  }
+}
+
+// ── Content ──────────────────────────────────────────────────────────────────
+
+.processing-content {
   flex: 1;
   padding: 1.5rem 2rem;
   overflow-y: auto;
@@ -46,7 +106,16 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-width: 640px;
+  max-width: 680px;
+}
+
+.section-label-sm {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rm-text-muted);
+  padding-bottom: 0.25rem;
 }
 
 .job-card {
@@ -227,4 +296,41 @@
   border-radius: 10px;
   padding: 0 0.375rem;
   flex-shrink: 0;
+}
+
+// ── Traversal options (modal step 2) ──────────────────────────────────────
+
+.modal-traversal {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.traversal-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.branch-picker {
+  margin-top: 0.35rem;
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.branch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 50%, transparent);
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #f8f9fa; }
 }

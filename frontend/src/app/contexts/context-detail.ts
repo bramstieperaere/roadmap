@@ -2,17 +2,18 @@ import { Component, computed, ElementRef, inject, Injector, OnInit, signal, View
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { CdkDropList, CdkDropListGroup, CdkDrag, CdkDragHandle, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
+import { CdkDropList, CdkDropListGroup, CdkDrag, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { ContextsService, ContextItem, ContextItemEntry, RepoInfo, PreviewSection, ContributingContext } from '../services/contexts';
 import { ConfluenceService, ConfluenceSpace } from '../services/confluence';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 import { AddItemPanel, AddItemEvent } from './add-item-panel/add-item-panel';
 import { PreviewPanel } from './preview-panel/preview-panel';
-import { itemKey, getItemIcon, getItemTypeLabel } from './context-utils';
+import { ContextChat, ChatAddItemEvent, ChatTagEvent, ChatDescriptionEvent } from './context-chat/context-chat';
+import { itemKey, getItemIcon, getItemTypeLabel, getItemDisplayId } from './context-utils';
 
 @Component({
   selector: 'app-context-detail',
-  imports: [FormsModule, RouterLink, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle, AddItemPanel, PreviewPanel],
+  imports: [FormsModule, RouterLink, CdkDropListGroup, CdkDropList, CdkDrag, AddItemPanel, PreviewPanel, ContextChat],
   templateUrl: './context-detail.html',
   styleUrl: './context-detail.scss',
 })
@@ -55,6 +56,8 @@ export class ContextDetail implements OnInit {
   editDescriptionValue = signal('');
   editingChildName = signal(false);
   editChildNameValue = signal('');
+  editingChildDescription = signal(false);
+  editChildDescriptionValue = signal('');
 
   // Inline item editing (instructions)
   editingItemKey = signal<string | null>(null);
@@ -231,6 +234,46 @@ export class ContextDetail implements OnInit {
     });
   }
 
+  // Chat assistant
+  showChat = signal(false);
+
+  chatExistingItems = computed(() => {
+    const ctx = this.context();
+    if (!ctx) return [];
+    return ctx.items.map(i => ({ type: i.type, id: i.id, label: i.label || i.title }));
+  });
+
+  onChatAddItem(event: ChatAddItemEvent) {
+    this.error.set('');
+    this.service.addItem(this.name(), event.type, event.id, event.label, event.text).subscribe({
+      next: () => { this.reloadContext(); this.refreshPreview(); },
+      error: (err) => this.error.set(err.error?.detail || 'Failed to add item'),
+    });
+  }
+
+  onChatTag(event: ChatTagEvent) {
+    const ctx = this.context();
+    if (!ctx) return;
+    const tags = [...(ctx.tags ?? [])];
+    if (event.action === 'add' && !tags.includes(event.tag)) {
+      tags.push(event.tag);
+    } else if (event.action === 'remove') {
+      const idx = tags.indexOf(event.tag);
+      if (idx >= 0) tags.splice(idx, 1);
+    } else return;
+    this.service.updateTags(this.name(), tags).subscribe({
+      next: (updated) => this.context.set(updated),
+      error: (err) => this.error.set(err.error?.detail || 'Failed to update tags'),
+    });
+  }
+
+  onChatDescription(event: ChatDescriptionEvent) {
+    this.service.updateDescription(this.name(), event.description).subscribe({
+      next: (updated) => this.context.set(updated),
+      error: (err) => this.error.set(err.error?.detail || 'Failed to update description'),
+    });
+  }
+
   // ── Add item ──
 
   onParentAddItem(event: AddItemEvent) {
@@ -301,7 +344,7 @@ export class ContextDetail implements OnInit {
     const text = this.editItemText().trim();
     if (!label) return;
     const body: { label?: string; text?: string } = { label };
-    if (item.type === 'instructions' || item.type === 'insight') body.text = text;
+    if (item.type === 'instructions') body.text = text;
 
     const obs = childName
       ? this.service.updateChildItem(this.name(), childName, item.type, item.id, body)
@@ -734,6 +777,48 @@ export class ContextDetail implements OnInit {
     else if (event.key === 'Escape') this.cancelEditChildName();
   }
 
+  // ── Child description editing ──
+
+  startEditChildDescription(childName: string) {
+    if (!this.editing()) return;
+    const ctx = this.context();
+    if (!ctx) return;
+    const child = ctx.children?.find(c => c.name === childName);
+    this.editChildDescriptionValue.set(child?.description || '');
+    this.editingChildDescription.set(true);
+    this.expandedChild.set(childName);
+  }
+
+  saveChildDescription() {
+    const parentName = this.name();
+    const childName = this.expandedChild() || this.child();
+    if (!childName) { this.editingChildDescription.set(false); return; }
+    const desc = this.editChildDescriptionValue().trim();
+    const ctx = this.context();
+    const child = ctx?.children?.find(c => c.name === childName);
+    if (!child || desc === (child.description || '')) {
+      this.editingChildDescription.set(false);
+      return;
+    }
+    this.service.updateChildDescription(parentName, childName, desc).subscribe({
+      next: (updated) => {
+        this.context.set(updated);
+        this.editingChildDescription.set(false);
+      },
+      error: (err) => {
+        this.error.set(err.error?.detail || 'Failed to update description');
+        this.editingChildDescription.set(false);
+      },
+    });
+  }
+
+  cancelEditChildDescription() { this.editingChildDescription.set(false); }
+
+  onChildDescriptionKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') this.saveChildDescription();
+    else if (event.key === 'Escape') this.cancelEditChildDescription();
+  }
+
   // ── Drag and drop ──
 
   onDrop(event: CdkDragDrop<string>) {
@@ -788,18 +873,23 @@ export class ContextDetail implements OnInit {
 
   // ── Helpers ──
 
+  copiedRef = signal(false);
+
   copyContextRef() {
     const path = this.child() ? `${this.name()}/${this.child()}` : this.name();
     const text = `Use roadmap MCP for context "${path}":\n`
       + `1. get_context_toc("${path}") — table of contents with item sizes\n`
       + `2. get_context_item("${path}", <index>) — fetch individual items\n`
-      + `3. get_context("${path}") — fetch everything (can be large)\n`
-      + `4. add_context_insight("${path}", "<label>", "<text>") — write back your analysis/findings`;
-    navigator.clipboard.writeText(text);
+      + `3. get_context("${path}") — fetch everything (can be large)`;
+    navigator.clipboard.writeText(text).then(() => {
+      this.copiedRef.set(true);
+      setTimeout(() => this.copiedRef.set(false), 1500);
+    });
   }
 
   dismissError() { this.error.set(''); }
 
   getItemIcon = getItemIcon;
   getItemTypeLabel = getItemTypeLabel;
+  getItemDisplayId = getItemDisplayId;
 }

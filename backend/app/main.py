@@ -1,5 +1,6 @@
 import base64
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,19 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts, git_mining, data_flow, whisper
-
-app = FastAPI(title="Roadmap", description="Software project documentation tool")
-
-_STARTED_AT = datetime.now(timezone.utc).isoformat()
+from app.neo4j_client import close_neo4j_driver
+from app.routers import settings, encryption, analysis, jobs, query, browse, jira, confluence, functional, contexts, git_mining, data_flow, whisper, facets, context_assistant, browse_dir
 
 
-@app.get("/api/info")
-def get_info():
-    return {"started_at": _STARTED_AT}
-
-
-@app.on_event("startup")
 def _auto_unlock():
     """Auto-unlock if ROADMAP_KEY environment variable is set."""
     password = os.environ.get("ROADMAP_KEY")
@@ -63,6 +55,24 @@ def _auto_unlock():
 
     print("[STARTUP] Auto-unlocked via ROADMAP_KEY", flush=True)
 
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    _auto_unlock()
+    yield
+    close_neo4j_driver()
+
+
+app = FastAPI(title="Roadmap", description="Software project documentation tool",
+              lifespan=_lifespan)
+
+_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
+@app.get("/api/info")
+def get_info():
+    return {"started_at": _STARTED_AT}
+
 class NoCacheAPIMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -84,6 +94,9 @@ app.include_router(analysis.router)
 app.include_router(jobs.router)
 app.include_router(query.router)
 app.include_router(whisper.router)
+app.include_router(facets.router)
+app.include_router(context_assistant.router)
+app.include_router(browse_dir.router)
 app.include_router(browse.router)
 app.include_router(jira.router)
 app.include_router(confluence.router)

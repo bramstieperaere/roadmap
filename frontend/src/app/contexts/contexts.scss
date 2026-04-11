@@ -67,7 +67,19 @@
 
 .context-done {
   text-decoration: line-through;
-  opacity: 0.55;
+  color: var(--rm-text-muted);
+
+  .action-btn { text-decoration: none; }
+}
+
+.copied-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #2b8a3e;
+  background: #d3f9d8;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
 }
 
 .action-btn {

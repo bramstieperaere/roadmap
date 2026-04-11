@@ -1,0 +1,334 @@
+<div class="section-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/sources" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Sources
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      <span class="fw-semibold">Git Repos</span>
+    </div>
+  </div>
+
+  <div class="section-content p-3">
+
+    <!-- ── Pickers ─────────────────────────────────────────────────── -->
+    <div class="picker-row mb-3">
+      <div class="picker">
+        <label class="picker-label">Repository</label>
+        <div class="autocomplete-wrap">
+          <input type="text" class="form-control form-control-sm ac-input"
+                 placeholder="Search repositories..."
+                 [ngModel]="repoQuery()" (ngModelChange)="onRepoInput($event)"
+                 (focus)="onRepoFocus()" (blur)="onRepoBlur()">
+          @if (repoQuery()) {
+            <button class="ac-clear" type="button" (mousedown)="clearRepo()" title="Clear"><i class="bi bi-x-lg"></i></button>
+          }
+          @if (repoOpen() && filteredRepos().length > 0) {
+            <div class="autocomplete-list">
+              @for (r of filteredRepos(); track r.name) {
+                <div class="autocomplete-item" [class.active]="selectedRepo() === r.name"
+                     (mousedown)="selectRepo(r.name)">
+                  <i class="bi bi-git text-muted"></i>
+                  <span>{{ r.name }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="picker">
+        <label class="picker-label">Branch</label>
+        <div class="autocomplete-wrap">
+          <input type="text" class="form-control form-control-sm ac-input"
+                 placeholder="Search branches..."
+                 [disabled]="!selectedRepo() || noBranches()"
+                 [ngModel]="branchQuery()" (ngModelChange)="onBranchInput($event)"
+                 (focus)="onBranchFocus()" (blur)="onBranchBlur()">
+          @if (branchQuery()) {
+            <button class="ac-clear" type="button" (mousedown)="clearBranch()" title="Clear"><i class="bi bi-x-lg"></i></button>
+          }
+          @if (loadingBranches()) {
+            <div class="autocomplete-list">
+              <div class="autocomplete-item text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>
+            </div>
+          } @else if (branchOpen() && filteredBranches().length > 0) {
+            <div class="autocomplete-list">
+              @for (b of filteredBranches(); track b.name) {
+                <div class="autocomplete-item" [class.active]="selectedBranch() === b.name"
+                     (mousedown)="selectBranch(b.name)">
+                  <i class="bi bi-signpost-split text-muted"></i>
+                  <span>{{ b.name }}</span>
+                  @if (b.tip_hash) {
+                    <code class="tip-hash ms-auto">{{ b.tip_hash }}</code>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+        @if (noBranches() && !loadingBranches()) {
+          <div class="picker-hint text-warning small mt-1">
+            <i class="bi bi-exclamation-triangle me-1"></i>No branches ingested for this repository.
+            Run <a routerLink="/processing">Ingest Git Commits</a> first.
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (error()) {
+      <div class="alert alert-danger py-2">{{ error() }}</div>
+    }
+
+    <!-- ── Processor filters ───────────────────────────────────────── -->
+    @if (commits().length > 0 && processors().length > 0) {
+      <div class="filter-bar mb-3">
+        <span class="text-muted small me-2"><i class="bi bi-funnel me-1"></i>Filter:</span>
+        @for (proc of processors(); track proc.name) {
+          <button class="btn btn-sm filter-toggle"
+                  [class.active]="activeProcessorFilters().has(proc.name)"
+                  (click)="toggleProcessorFilter(proc.name)">
+            <i class="bi bi-database me-1"></i>{{ proc.label }}
+          </button>
+        }
+        @if (activeProcessorFilters().size > 0) {
+          <span class="text-muted small ms-2">
+            {{ filteredCommits().length }} of {{ commits().length }} commits
+          </span>
+        }
+      </div>
+    }
+
+    <!-- ── Timeline ────────────────────────────────────────────────── -->
+    @if (loadingCommits()) {
+      <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    } @else if (selectedBranch() && commits().length === 0) {
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-clock-history d-block mb-2" style="font-size: 2rem;"></i>
+        No commits found on this branch.
+      </div>
+    } @else if (filteredCommits().length > 0) {
+      <div class="commit-count text-muted small mb-3">{{ filteredCommits().length }} commits on <strong>{{ selectedBranch() }}</strong></div>
+      <div class="commits-layout">
+        <div class="timeline">
+          @for (group of commitsByDate(); track group.date) {
+            <div class="timeline-date">
+              <span class="timeline-date-label">{{ group.date }}</span>
+            </div>
+            @for (c of group.commits; track c.hash) {
+              <div class="timeline-entry">
+                <div class="timeline-dot" [class.dot-active]="selectedCommit()?.hash === c.hash"></div>
+                <div class="timeline-card" [class.active]="selectedCommit()?.hash === c.hash"
+                     (click)="selectCommit(c)">
+                  <div class="d-flex align-items-start gap-2">
+                    <code class="commit-hash">{{ c.hash }}</code>
+                    <span class="commit-message">{{ firstLine(c.message) }}</span>
+                  </div>
+                  <div class="commit-meta">
+                    <span><i class="bi bi-person me-1"></i>{{ c.author_name }}</span>
+                    <span><i class="bi bi-clock me-1"></i>{{ formatTime(c.date) }}</span>
+                    @if (c.files_count) {
+                      <span><i class="bi bi-file-diff me-1"></i>{{ c.files_count }} files</span>
+                    }
+                    @for (key of c.issue_keys; track key) {
+                      <span class="issue-badge">{{ key }}</span>
+                    }
+                    @if (c.db_changes) {
+                      <span class="issue-badge" style="background: #e8f4e8; color: #2d6a2d;" title="Database changes"><i class="bi bi-database me-1"></i>DB</span>
+                    }
+                    @if (coveragePercent(c) !== null) {
+                      <span class="coverage-badge" [title]="(c.documented_files?.length || 0) + '/' + c.files_count + ' files documented'">
+                        <i class="bi bi-file-check me-1"></i>{{ coveragePercent(c) }}%
+                      </span>
+                    }
+                    @for (tag of getTagsFor(c.hash); track tag.name) {
+                      <span class="commit-tag commit-tag-sm" [class]="tagColorClass(tag.name)">{{ tag.label }}</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          }
+        </div>
+
+        <!-- ── Detail panel ──────────────────────────────────────── -->
+        @if (selectedCommit(); as commit) {
+          <div class="detail-panel">
+            <div class="detail-header">
+              <code class="commit-hash">{{ commit.hash }}</code>
+              <span class="text-muted small">{{ formatDate(commit.date) }} {{ formatTime(commit.date) }}</span>
+            </div>
+            <div class="detail-body">
+              <div class="detail-field">
+                <div class="detail-label">Message</div>
+                <div class="detail-value">{{ commit.message }}</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-label">Author</div>
+                <div class="detail-value">{{ commit.author_name }} <span class="text-muted">&lt;{{ commit.author_email }}&gt;</span></div>
+              </div>
+              @if (commit.files_count) {
+                <div class="detail-field">
+                  <div class="detail-label">Files changed</div>
+                  <div class="detail-value">{{ commit.files_count }}</div>
+                </div>
+              }
+              <div class="detail-field">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="detail-label">Tags</div>
+                  <button class="btn btn-outline-primary btn-sm btn-xs" (click)="classifyCommit(commit.hash)"
+                          [disabled]="classifying()" title="Classify with AI">
+                    @if (classifying()) {
+                      <span class="spinner-border spinner-border-sm"></span>
+                    } @else {
+                      <i class="bi bi-stars me-1"></i>Classify
+                    }
+                  </button>
+                </div>
+                @if (loadingTags()) {
+                  <div class="py-1"><span class="spinner-border spinner-border-sm text-muted"></span></div>
+                } @else if (getTagsFor(commit.hash).length > 0) {
+                  <div class="tag-list">
+                    @for (tag of getTagsFor(commit.hash); track tag.name) {
+                      <span class="commit-tag" [class]="tagColorClass(tag.name)">{{ tag.label }}</span>
+                    }
+                  </div>
+                } @else {
+                  <div class="text-muted small">No tags yet</div>
+                }
+                @if (classifyMessage()) {
+                  <div class="text-muted small mt-1">{{ classifyMessage() }}</div>
+                }
+              </div>
+
+              @if (parseDbChanges(commit); as db) {
+                <div class="detail-field">
+                  <div class="detail-label">
+                    <i class="bi bi-database me-1"></i>Database Changes
+                  </div>
+                  @if (db.files.length > 0) {
+                    <div class="mb-2">
+                      @for (f of db.files; track f) {
+                        <div class="text-muted small"><i class="bi bi-file-earmark-code me-1"></i>{{ f }}</div>
+                      }
+                    </div>
+                  }
+                  <div class="db-changes-list">
+                    @for (change of db.changes; track $index) {
+                      <div class="db-change-row">
+                        <i class="bi me-2" [class]="dbChangeIcon(change.op)"></i>
+                        <code class="small">{{ dbChangeLabel(change) }}</code>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              @if (commit.documented_files?.length) {
+                <div class="detail-field">
+                  <div class="detail-label">
+                    <i class="bi bi-file-check me-1"></i>Processor Coverage
+                  </div>
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="coverage-bar-track">
+                      <div class="coverage-bar-fill" [style.width.%]="coveragePercent(commit) || 0"></div>
+                    </div>
+                    <span class="small fw-medium">{{ commit.documented_files!.length }}/{{ commit.files_count }} files ({{ coveragePercent(commit) }}%)</span>
+                  </div>
+                  <div class="documented-files-list">
+                    @for (f of commit.documented_files; track f) {
+                      <div class="text-muted small"><i class="bi bi-check2 text-success me-1"></i>{{ f }}</div>
+                    }
+                  </div>
+                </div>
+              }
+
+              @if (commit.issue_keys.length > 0) {
+                <div class="detail-field">
+                  <div class="detail-label">Jira Tickets</div>
+                  @if (loadingIssues()) {
+                    <div class="py-1"><span class="spinner-border spinner-border-sm text-primary"></span></div>
+                  }
+                  @for (key of commit.issue_keys; track key) {
+                    @if (getIssue(key); as issue) {
+                      <div class="jira-card">
+                        <div class="jira-card-header">
+                          <span class="jira-key">{{ issue.key }}</span>
+                          <span class="jira-status" [class]="statusClass(issue.status)">{{ issue.status }}</span>
+                        </div>
+                        <div class="jira-summary">{{ issue.summary }}</div>
+                        <div class="jira-meta">
+                          @if (issue.issuetype) {
+                            <span><i class="bi bi-bookmark me-1"></i>{{ issue.issuetype }}</span>
+                          }
+                          @if (issue.priority) {
+                            <span><i class="bi bi-flag me-1"></i>{{ issue.priority }}</span>
+                          }
+                          @if (issue.assignee) {
+                            <span><i class="bi bi-person me-1"></i>{{ issue.assignee }}</span>
+                          }
+                        </div>
+                      </div>
+                    } @else if (!loadingIssues()) {
+                      <div class="jira-card jira-card-stub">
+                        <span class="jira-key">{{ key }}</span>
+                        <span class="text-muted small">Not in cache</span>
+                      </div>
+                    }
+                  }
+                </div>
+              }
+
+              <!-- Merge source commits -->
+              @if (isMergeCommit(commit)) {
+                <div class="detail-field">
+                  <div class="detail-label">Merged Commits</div>
+                  @if (loadingMergeSource()) {
+                    <div class="py-1"><span class="spinner-border spinner-border-sm text-primary"></span></div>
+                  } @else if (mergeSourceCommits().length === 0) {
+                    <div class="text-muted small">No source commits found.</div>
+                  } @else {
+                    <div class="merge-commits-list">
+                      @for (mc of mergeSourceCommits(); track mc.hash) {
+                        <div class="merge-commit-row" (click)="selectCommit(mc)">
+                          <code class="commit-hash">{{ mc.hash }}</code>
+                          <div class="merge-commit-info">
+                            <div class="merge-commit-msg">{{ firstLine(mc.message) }}</div>
+                            <div class="commit-meta">
+                              <span><i class="bi bi-person me-1"></i>{{ mc.author_name }}</span>
+                              <span><i class="bi bi-clock me-1"></i>{{ formatDate(mc.date) }}</span>
+                              @for (key of mc.issue_keys; track key) {
+                                <span class="issue-badge">{{ key }}</span>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    } @else if (selectedBranch() && commits().length > 0 && filteredCommits().length === 0) {
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-funnel d-block mb-2" style="font-size: 2rem;"></i>
+        No commits match the active filter.
+      </div>
+    } @else if (!selectedRepo()) {
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-git d-block mb-2" style="font-size: 2rem;"></i>
+        Select a repository and branch to view commits.
+      </div>
+    } @else if (!selectedBranch()) {
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-signpost-split d-block mb-2" style="font-size: 2rem;"></i>
+        Select a branch to view commits.
+      </div>
+    }
+
+  </div>
+</div>

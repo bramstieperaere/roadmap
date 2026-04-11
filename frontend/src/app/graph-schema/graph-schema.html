@@ -28,6 +28,9 @@
       <button class="schema-nav-item" [class.active]="activeSection() === 'tooling'" (click)="scrollTo('tooling')">
         <i class="bi bi-git" style="color: #f08c00;"></i>Tooling
       </button>
+      <button class="schema-nav-item" [class.active]="activeSection() === 'facet'" (click)="scrollTo('facet')">
+        <i class="bi bi-tags" style="color: #e64980;"></i>Facet
+      </button>
       <div class="nav-divider"></div>
       <div class="nav-group-label">Overview</div>
       <button class="schema-nav-item" [class.active]="activeSection() === 'domain-relations'" (click)="scrollTo('domain-relations')">
@@ -155,19 +158,28 @@
               <div class="query-block">
                 <div class="query-label">Classes per module</div>
                 <div class="query-wrap"><pre>{{ queries['j1'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('j1')"><i class="bi" [class.bi-clipboard]="copied !== 'j1'" [class.bi-check2]="copied === 'j1'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('j1')"><i class="bi" [class.bi-clipboard]="copied !== 'j1'" [class.bi-check2]="copied === 'j1'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('j1')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Who calls a given method</div>
                 <div class="query-wrap"><pre>{{ queries['j2'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('j2')"><i class="bi" [class.bi-clipboard]="copied !== 'j2'" [class.bi-check2]="copied === 'j2'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('j2')"><i class="bi" [class.bi-clipboard]="copied !== 'j2'" [class.bi-check2]="copied === 'j2'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('j2')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Graph: class &rarr; method structure</div>
                 <div class="query-wrap"><pre>{{ queries['j3'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('j3')"><i class="bi" [class.bi-clipboard]="copied !== 'j3'" [class.bi-check2]="copied === 'j3'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('j3')"><i class="bi" [class.bi-clipboard]="copied !== 'j3'" [class.bi-check2]="copied === 'j3'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('j3')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -229,19 +241,28 @@
               <div class="query-block">
                 <div class="query-label">All REST endpoints with implementing class</div>
                 <div class="query-wrap"><pre>{{ queries['a1'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('a1')"><i class="bi" [class.bi-clipboard]="copied !== 'a1'" [class.bi-check2]="copied === 'a1'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('a1')"><i class="bi" [class.bi-clipboard]="copied !== 'a1'" [class.bi-check2]="copied === 'a1'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('a1')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Graph: microservice &rarr; REST interfaces</div>
                 <div class="query-wrap"><pre>{{ queries['a2'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('a2')"><i class="bi" [class.bi-clipboard]="copied !== 'a2'" [class.bi-check2]="copied === 'a2'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('a2')"><i class="bi" [class.bi-clipboard]="copied !== 'a2'" [class.bi-check2]="copied === 'a2'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('a2')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">JMS topology graph</div>
                 <div class="query-wrap"><pre>{{ queries['a3'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('a3')"><i class="bi" [class.bi-clipboard]="copied !== 'a3'" [class.bi-check2]="copied === 'a3'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('a3')"><i class="bi" [class.bi-clipboard]="copied !== 'a3'" [class.bi-check2]="copied === 'a3'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('a3')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -296,19 +317,28 @@
               <div class="query-block">
                 <div class="query-label">Services overview (table)</div>
                 <div class="query-wrap"><pre>{{ queries['d1'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('d1')"><i class="bi" [class.bi-clipboard]="copied !== 'd1'" [class.bi-check2]="copied === 'd1'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('d1')"><i class="bi" [class.bi-clipboard]="copied !== 'd1'" [class.bi-check2]="copied === 'd1'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('d1')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Full service graph (one service)</div>
                 <div class="query-wrap"><pre>{{ queries['d2'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('d2')"><i class="bi" [class.bi-clipboard]="copied !== 'd2'" [class.bi-check2]="copied === 'd2'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('d2')"><i class="bi" [class.bi-clipboard]="copied !== 'd2'" [class.bi-check2]="copied === 'd2'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('d2')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Which services share a queue</div>
                 <div class="query-wrap"><pre>{{ queries['d3'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('d3')"><i class="bi" [class.bi-clipboard]="copied !== 'd3'" [class.bi-check2]="copied === 'd3'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('d3')"><i class="bi" [class.bi-clipboard]="copied !== 'd3'" [class.bi-check2]="copied === 'd3'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('d3')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -365,25 +395,100 @@
               <div class="query-block">
                 <div class="query-label">Commits per author</div>
                 <div class="query-wrap"><pre>{{ queries['t1'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('t1')"><i class="bi" [class.bi-clipboard]="copied !== 't1'" [class.bi-check2]="copied === 't1'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('t1')"><i class="bi" [class.bi-clipboard]="copied !== 't1'" [class.bi-check2]="copied === 't1'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('t1')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">First-parent commit chain for a branch (graph)</div>
                 <div class="query-wrap"><pre>{{ queries['t2'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('t2')"><i class="bi" [class.bi-clipboard]="copied !== 't2'" [class.bi-check2]="copied === 't2'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('t2')"><i class="bi" [class.bi-clipboard]="copied !== 't2'" [class.bi-check2]="copied === 't2'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('t2')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Commits linked to a Jira issue</div>
                 <div class="query-wrap"><pre>{{ queries['t3'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('t3')"><i class="bi" [class.bi-clipboard]="copied !== 't3'" [class.bi-check2]="copied === 't3'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('t3')"><i class="bi" [class.bi-clipboard]="copied !== 't3'" [class.bi-check2]="copied === 't3'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('t3')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
               <div class="query-block">
                 <div class="query-label">Cross-domain: commits touching a module's classes</div>
                 <div class="query-wrap"><pre>{{ queries['t4'] }}</pre>
-                  <button class="btn-copy" title="Copy" (click)="copy('t4')"><i class="bi" [class.bi-clipboard]="copied !== 't4'" [class.bi-check2]="copied === 't4'"></i></button>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('t4')"><i class="bi" [class.bi-clipboard]="copied !== 't4'" [class.bi-check2]="copied === 't4'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('t4')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Facet ──────────────────────────────────────────────────── -->
+
+      <section id="facet">
+        <div class="domain-header" style="border-color: #e64980; background: #fff0f6;">
+          <i class="bi bi-tags domain-icon" style="color: #e64980;"></i>
+          <div>
+            <div class="domain-title" style="color: #e64980;">Facet</div>
+            <div class="domain-desc">User-defined classification taxonomy for slicing and dicing the graph</div>
+          </div>
+          <span class="domain-badge" style="background: #e64980;">manual</span>
+        </div>
+        <div class="domain-body">
+          <div class="schema-cols">
+            <div>
+              <h6 class="section-label">Node types</h6>
+              <table class="node-table">
+                <thead><tr><th>Labels</th><th>Key properties</th></tr></thead>
+                <tbody>
+                  <tr><td><code class="label-chip">Facet:Facet</code></td><td><span class="prop">name</span> <span class="prop">description</span></td></tr>
+                  <tr><td><code class="label-chip">Facet:Value</code></td><td><span class="prop">name</span> <span class="prop">label</span> <span class="prop">ordinal</span></td></tr>
+                </tbody>
+              </table>
+              <h6 class="section-label mt-3">Relationships</h6>
+              <ul class="rel-list">
+                <li><code>(Facet:Facet)-[:HAS_VALUE]-&gt;(Facet:Value)</code> — root values</li>
+                <li><code>(Facet:Value)-[:NARROWER]-&gt;(Facet:Value)</code> — hierarchical refinement</li>
+                <li><code>(any node)-[:CLASSIFIED_AS]-&gt;(Facet:Value)</code> — tagging</li>
+              </ul>
+            </div>
+            <div>
+              <h6 class="section-label">Sample queries</h6>
+              <div class="query-block">
+                <div class="query-label">All facets with their root values</div>
+                <div class="query-wrap"><pre>{{ queries['f1'] }}</pre>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('f1')"><i class="bi" [class.bi-clipboard]="copied !== 'f1'" [class.bi-check2]="copied === 'f1'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('f1')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Full value hierarchy of a facet</div>
+                <div class="query-wrap"><pre>{{ queries['f2'] }}</pre>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('f2')"><i class="bi" [class.bi-clipboard]="copied !== 'f2'" [class.bi-check2]="copied === 'f2'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('f2')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
+                </div>
+              </div>
+              <div class="query-block">
+                <div class="query-label">Nodes classified under a value</div>
+                <div class="query-wrap"><pre>{{ queries['f3'] }}</pre>
+                  <div class="query-actions">
+                    <button class="btn-copy" title="Copy" (click)="copy('f3')"><i class="bi" [class.bi-clipboard]="copied !== 'f3'" [class.bi-check2]="copied === 'f3'"></i></button>
+                    <button class="btn-copy" title="Open in Neo4j Browser" (click)="openInBrowser('f3')"><i class="bi bi-box-arrow-up-right"></i></button>
+                  </div>
                 </div>
               </div>
             </div>

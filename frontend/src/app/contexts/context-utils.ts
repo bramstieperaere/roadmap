@@ -15,8 +15,18 @@ export function getItemIcon(type: string): string {
     case 'parent': return 'bi-box-arrow-in-up';
     case 'mixin': return 'bi-box-arrow-in-right';
     case 'inquiry': return 'bi-send';
+    case 'scratch_dir': return 'bi-folder-symlink';
+    case 'logzio': return 'bi-search';
+    case 'url': return 'bi-link-45deg';
     default: return 'bi-file-text';
   }
+}
+
+export function getItemDisplayId(item: { type: string; id: string }): string {
+  if (item.type === 'url' && item.id.length > 20) {
+    return item.id.substring(0, 20) + '...';
+  }
+  return item.id;
 }
 
 export function getItemTypeLabel(type: string): string {
@@ -32,6 +42,9 @@ export function getItemTypeLabel(type: string): string {
     case 'parent': return 'Parent';
     case 'mixin': return 'Mixin';
     case 'inquiry': return 'Inquiry';
+    case 'scratch_dir': return 'Scratch Dir';
+    case 'logzio': return 'Logz.io';
+    case 'url': return 'URL';
     default: return type;
   }
 }

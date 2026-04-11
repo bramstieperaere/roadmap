@@ -40,6 +40,13 @@
               <i class="bi" [class]="getItemIcon(section.type)"></i>
               <span>{{ section.label }}</span>
               <span class="item-type-badge">{{ getItemTypeLabel(section.type) }}</span>
+              @if (section.type === 'scratch_dir') {
+                <a class="scratch-dir-link"
+                   [routerLink]="['/browse-dir']" [queryParams]="{path: section.id, returnTo: '/contexts/' + contextName()}"
+                   title="Browse directory">
+                  <i class="bi bi-folder2-open"></i>{{ section.id }}
+                </a>
+              }
             </div>
             <pre class="preview-card-content">{{ getSectionContent(section) }}</pre>
           </div>

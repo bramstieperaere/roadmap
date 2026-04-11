@@ -20,7 +20,7 @@ export class Header implements OnInit {
   sourcesActive = computed(() => {
     this.currentUrl();
     const url = this.router.url;
-    return url.startsWith('/sources') || url.startsWith('/jira') || url.startsWith('/confluence');
+    return url.startsWith('/sources') || url.startsWith('/jira') || url.startsWith('/confluence') || url.startsWith('/git-repos');
   });
 
   diagramsActive = computed(() => {

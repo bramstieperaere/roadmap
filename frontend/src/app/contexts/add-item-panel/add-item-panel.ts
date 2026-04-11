@@ -4,6 +4,14 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ConfluenceService, ConfluenceSpace, ConfluencePageSummary } from '../../services/confluence';
 import { ContextsService, RepoInfo, RepoTreeEntry } from '../../services/contexts';
 import { WhisperTextarea } from '../../components/whisper-textarea/whisper-textarea';
+import { getItemIcon, getItemTypeLabel } from '../context-utils';
+
+interface ItemTypeEntry {
+  type: string;
+  label: string;
+  icon: string;
+  description: string;
+}
 
 export interface AddItemEvent {
   type: string;
@@ -35,10 +43,37 @@ export class AddItemPanel {
   repos = input<RepoInfo[]>([]);
   mixinPaths = input<string[]>([]);
   adding = input(false);
+  contextName = input('');
 
   // Outputs
   addItem = output<AddItemEvent>();
   cancel = output<void>();
+
+  // Wizard
+  step = signal<'type' | 'details' | 'confirm'>('type');
+
+  itemTypes: ItemTypeEntry[] = [
+    { type: 'confluence_page', label: 'Confluence Page', icon: getItemIcon('confluence_page'), description: 'Import a Confluence wiki page' },
+    { type: 'jira_issue', label: 'Jira Issue', icon: getItemIcon('jira_issue'), description: 'Reference a Jira ticket' },
+    { type: 'git_repo', label: 'Git Repository', icon: getItemIcon('git_repo'), description: 'Add a full git repository' },
+    { type: 'repo_file', label: 'Repository File', icon: getItemIcon('repo_file'), description: 'Pick a specific file from a repo' },
+    { type: 'bitbucket_pr', label: 'Bitbucket PR', icon: getItemIcon('bitbucket_pr'), description: 'Import a Bitbucket pull request' },
+    { type: 'commits', label: 'Commits', icon: getItemIcon('commits'), description: 'Reference specific git commits' },
+    { type: 'instructions', label: 'Instructions', icon: getItemIcon('instructions'), description: 'Add free-text instructions' },
+    { type: 'scratch_dir', label: 'Scratch Directory', icon: getItemIcon('scratch_dir'), description: 'Link a scratch working directory' },
+    { type: 'url', label: 'URL', icon: getItemIcon('url'), description: 'Fetch content from a web URL' },
+    { type: 'logzio', label: 'Logz.io Log Search', icon: getItemIcon('logzio'), description: 'Query Logz.io for log entries' },
+    { type: 'mixin', label: 'Mixin', icon: getItemIcon('mixin'), description: 'Include another context' },
+  ];
+
+  // Type filter
+  typeFilter = signal('');
+  filteredItemTypes = computed(() => {
+    const q = this.typeFilter().toLowerCase().trim();
+    if (!q) return this.itemTypes;
+    return this.itemTypes.filter(t =>
+      t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
+  });
 
   // Internal state
   mode = signal<string>('picking');
@@ -98,6 +133,11 @@ export class AddItemPanel {
     );
   });
 
+  // Scratch dir
+  scratchPath = signal('');
+  scratchConfigured = signal(false);
+  scratchLoading = signal(false);
+
   // Bitbucket PR
   bitbucketPrUrl = signal('');
   bitbucketPrJson = signal('');
@@ -116,6 +156,16 @@ export class AddItemPanel {
   commitsRepoName = signal('');
   commitsHashes = signal('');
 
+  // URL
+  urlValue = signal('');
+  urlDescription = signal('');
+
+  // Logz.io
+  logzioQuery = signal('');
+  logzioFromTime = signal('');
+  logzioToTime = signal('');
+  logzioSize = signal(50);
+
   // Mixin
   selectedMixinPath = signal('');
 
@@ -124,6 +174,7 @@ export class AddItemPanel {
   switchType(type: string) {
     this.mode.set(type);
     this.resetPickerState();
+    if (type === 'scratch_dir') this.loadScratchPath();
   }
 
   private resetPickerState() {
@@ -141,6 +192,12 @@ export class AddItemPanel {
     this.itemLabel.set('');
     this.commitsRepoName.set('');
     this.commitsHashes.set('');
+    this.urlValue.set('');
+    this.urlDescription.set('');
+    this.logzioQuery.set('');
+    this.logzioFromTime.set('');
+    this.logzioToTime.set('');
+    this.logzioSize.set(50);
     this.selectedMixinPath.set('');
   }
 
@@ -206,6 +263,29 @@ export class AddItemPanel {
     if (!text) return;
     const label = this.itemLabel().trim() || 'Instructions';
     this.addItem.emit({ type: 'instructions', id: label, label, text });
+  }
+
+  // ── Scratch dir ──
+
+  private loadScratchPath() {
+    const name = this.contextName();
+    if (!name) return;
+    this.scratchLoading.set(true);
+    this.service.getScratchDir(name).subscribe({
+      next: (res: { path: string; configured: boolean }) => {
+        this.scratchPath.set(res.path);
+        this.scratchConfigured.set(res.configured);
+        this.itemLabel.set(name);
+        this.scratchLoading.set(false);
+      },
+      error: () => this.scratchLoading.set(false),
+    });
+  }
+
+  addScratchDir() {
+    const path = this.scratchPath();
+    if (!path) return;
+    this.addItem.emit({ type: 'scratch_dir', id: path, label: this.itemLabel().trim() || this.contextName() });
   }
 
   // ── Git repo ──
@@ -344,5 +424,107 @@ export class AddItemPanel {
     const path = this.selectedMixinPath();
     if (!path) return;
     this.addItem.emit({ type: 'mixin', id: path, label: this.itemLabel().trim() || path });
+  }
+
+  // ── URL ──
+
+  addUrl() {
+    const url = this.urlValue().trim();
+    if (!url) return;
+    const label = this.itemLabel().trim() || (url.length > 20 ? url.substring(0, 20) + '...' : url);
+    const description = this.urlDescription().trim() || undefined;
+    this.addItem.emit({ type: 'url', id: url, label, text: description });
+  }
+
+  // ── Logz.io ──
+
+  addLogzioSearch() {
+    const query = this.logzioQuery().trim();
+    if (!query) return;
+    const params = JSON.stringify({
+      query,
+      from_time: this.logzioFromTime() || undefined,
+      to_time: this.logzioToTime() || undefined,
+      size: this.logzioSize() || 50,
+    });
+    const label = this.itemLabel().trim() || `Logz.io: ${query.substring(0, 60)}`;
+    this.addItem.emit({ type: 'logzio', id: query, label, text: params });
+  }
+
+  // ── Wizard navigation ──
+
+  pickType(type: string) {
+    this.switchType(type);
+    this.typeFilter.set('');
+    this.step.set('details');
+  }
+
+  goToStep(s: 'type' | 'details' | 'confirm') {
+    if (s === 'details' && this.mode() === 'picking') return;
+    if (s === 'confirm' && !this.canProceedToConfirm()) return;
+    this.step.set(s);
+  }
+
+  prevStep() {
+    if (this.step() === 'confirm') this.step.set('details');
+    else if (this.step() === 'details') this.step.set('type');
+  }
+
+  canProceedToConfirm(): boolean {
+    switch (this.mode()) {
+      case 'confluence_page': return !!this.selectedPage();
+      case 'jira_issue': return !!this.issueKey().trim();
+      case 'git_repo': return !!this.selectedRepoName();
+      case 'repo_file': return !!this.repoFilePath().trim();
+      case 'bitbucket_pr': return !!this.bitbucketPrUrl().trim() && !!this.bitbucketPrJson().trim() && !!this.bitbucketCommentsJson().trim();
+      case 'commits': return !!this.commitsRepoName() && !!this.commitsHashes().trim();
+      case 'instructions': return !!this.instructionsText().trim();
+      case 'scratch_dir': return !!this.scratchPath() && this.scratchConfigured();
+      case 'url': return !!this.urlValue().trim();
+      case 'logzio': return !!this.logzioQuery().trim();
+      case 'mixin': return !!this.selectedMixinPath();
+      default: return false;
+    }
+  }
+
+  getSelectedTypeIcon(): string {
+    return this.itemTypes.find(t => t.type === this.mode())?.icon || 'bi-file-text';
+  }
+
+  getSelectedTypeLabel(): string {
+    return this.itemTypes.find(t => t.type === this.mode())?.label || this.mode();
+  }
+
+  getDetailsSummary(): string {
+    switch (this.mode()) {
+      case 'confluence_page': return this.selectedPage()?.title || '';
+      case 'jira_issue': return this.issueKey().trim();
+      case 'git_repo': return this.selectedRepoName();
+      case 'repo_file': return `${this.repoFileRepoName()}:${this.repoFilePath()}`;
+      case 'bitbucket_pr': return this.bitbucketPrUrl().trim();
+      case 'commits': return `${this.commitsRepoName()}: ${this.commitsHashes().trim().split(/[\s,]+/).length} commit(s)`;
+      case 'instructions': return this.instructionsText().trim().substring(0, 80) + (this.instructionsText().length > 80 ? '...' : '');
+      case 'scratch_dir': return this.scratchPath();
+      case 'url': return this.urlValue().trim();
+      case 'logzio': return this.logzioQuery().trim();
+      case 'mixin': return this.selectedMixinPath();
+      default: return '';
+    }
+  }
+
+  submitItem() {
+    switch (this.mode()) {
+      case 'confluence_page': this.addConfluencePage(); break;
+      case 'jira_issue': this.addJiraIssue(); break;
+      case 'git_repo': this.addGitRepo(); break;
+      case 'repo_file': this.addRepoFile(); break;
+      case 'bitbucket_pr': this.importBitbucketPr(); break;
+      case 'commits': this.addCommits(); break;
+      case 'instructions': this.addInstructions(); break;
+      case 'scratch_dir': this.addScratchDir(); break;
+      case 'url': this.addUrl(); break;
+      case 'logzio': this.addLogzioSearch(); break;
+      case 'mixin': this.addMixin(); break;
+    }
   }
 }

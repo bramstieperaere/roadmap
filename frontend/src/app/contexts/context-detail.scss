@@ -29,12 +29,21 @@
   min-height: 0;
 }
 
-.detail-body {
-  padding: 1.5rem 2rem;
-  overflow-y: auto;
+.detail-left {
+  display: flex;
+  flex-direction: column;
   max-width: 800px;
   min-width: 380px;
   flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.detail-body {
+  padding: 1.5rem 2rem;
+}
+
+.chat-container {
+  padding: 0 2rem 1.5rem;
 }
 
 // ── Context cards ──

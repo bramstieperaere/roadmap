@@ -26,6 +26,7 @@ export interface RepositoryConfig {
   path: string;
   tags: string[];
   modules: ModuleConfig[];
+  processors: string[];
 }
 
 export interface JiraProjectConfig {
@@ -80,12 +81,25 @@ export interface AITaskConfig {
   provider_name: string;
 }
 
+export interface FileViewerConfig {
+  extension: string;
+  label: string;
+  renderer: string;
+  server_url: string;
+}
+
 export interface WhisperConfig {
   base_url: string;
   api_key: string;
   model: string;
   postprocess_provider: string;
   postprocess_model: string;
+}
+
+export interface LogzioConfig {
+  base_url: string;
+  api_token: string;
+  default_size: number;
 }
 
 export interface AppConfig {
@@ -95,6 +109,9 @@ export interface AppConfig {
   ai_providers: AIProviderConfig[];
   ai_tasks: AITaskConfig[];
   whisper: WhisperConfig;
+  logzio: LogzioConfig;
+  scratch_base_dir: string;
+  file_viewers: FileViewerConfig[];
   encryption_salt?: string | null;
 }
 
@@ -146,6 +163,10 @@ export class SettingsService {
 
   testBitbucketConnection(): Observable<TestConnectionResult> {
     return this.http.post<TestConnectionResult>('/api/settings/test-bitbucket', {});
+  }
+
+  testLogzioConnection(): Observable<TestConnectionResult> {
+    return this.http.post<TestConnectionResult>('/api/settings/test-logzio', {});
   }
 
   lookupJiraProject(key: string): Observable<JiraProjectLookup> {

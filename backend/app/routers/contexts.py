@@ -7,6 +7,7 @@ instructions, git repos). Child contexts include a 'parent' placeholder item.
 """
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -26,8 +27,13 @@ def _contexts_dir() -> Path:
     return d
 
 
+def _sanitize_filename(name: str) -> str:
+    """Replace characters that are invalid in Windows filenames."""
+    return re.sub(r'[<>:"/\\|?*]', '_', name)
+
+
 def _context_path(name: str) -> Path:
-    return _contexts_dir() / f"{name}.json"
+    return _contexts_dir() / f"{_sanitize_filename(name)}.json"
 
 
 def _read_context(path: Path) -> dict:
@@ -242,6 +248,18 @@ class MoveItemRequest(BaseModel):
 
 class RenameContextRequest(BaseModel):
     new_name: str
+
+
+@router.get("/meta/scratch-dir/{context_name}")
+def get_scratch_dir(context_name: str):
+    """Return the default scratch directory path for a context."""
+    config = load_config_decrypted()
+    base = config.scratch_base_dir
+    if not base:
+        return {"path": "", "configured": False}
+    from pathlib import Path
+    p = Path(base) / context_name
+    return {"path": str(p), "configured": True}
 
 
 @router.get("/meta/repositories")
@@ -572,6 +590,9 @@ def clone_context(name: str, request: AddContextRequest):
     import copy
     ctx = copy.deepcopy(_read_context(src_path))
     ctx["name"] = clone_name
+    ctx.pop("done", None)
+    for c in ctx.get("children", []):
+        c.pop("done", None)
     _write_context(dst_path, ctx)
     return ctx
 
@@ -617,6 +638,21 @@ def update_description(name: str, request: UpdateDescriptionRequest):
         raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
     ctx = _read_context(path)
     ctx["description"] = request.description.strip()
+    _write_context(path, ctx)
+    return ctx
+
+
+@router.put("/{name}/children/{child}/description")
+def update_child_description(name: str, child: str,
+                             request: UpdateDescriptionRequest):
+    path = _context_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Context '{name}' not found")
+    ctx = _read_context(path)
+    child_ctx = next((c for c in ctx.get("children", []) if c["name"] == child), None)
+    if not child_ctx:
+        raise HTTPException(status_code=404, detail=f"Sub-context '{child}' not found")
+    child_ctx["description"] = request.description.strip()
     _write_context(path, ctx)
     return ctx
 
@@ -734,7 +770,7 @@ def update_item(name: str, item_type: str, item_id: str, body: dict):
         if item["type"] == item_type and item["id"] == item_id:
             if "label" in body:
                 item["label"] = body["label"]
-            if "text" in body and item_type in ("instructions", "insight"):
+            if "text" in body and item_type == "instructions":
                 item["text"] = body["text"]
             _write_context(path, ctx)
             return item
@@ -873,6 +909,7 @@ def clone_child(name: str, child: str, request: AddContextRequest):
     import copy
     cloned = copy.deepcopy(child_ctx)
     cloned["name"] = clone_name
+    cloned.pop("done", None)
     ctx["children"].append(cloned)
     _write_context(path, ctx)
     return cloned
@@ -978,7 +1015,7 @@ def update_child_item(name: str, child: str, item_type: str, item_id: str, body:
         if item["type"] == item_type and item["id"] == item_id:
             if "label" in body:
                 item["label"] = body["label"]
-            if "text" in body and item_type in ("instructions", "insight"):
+            if "text" in body and item_type == "instructions":
                 item["text"] = body["text"]
             _write_context(path, ctx)
             return item
@@ -1029,8 +1066,12 @@ def _resolve_item(item_type: str, item_id: str, text: str | None = None) -> dict
         return _resolve_commits(item_id)
     elif item_type == "mixin":
         return _resolve_mixin(item_id)
-    elif item_type == "insight":
-        return _resolve_insight(item_id, text)
+    elif item_type == "scratch_dir":
+        return _resolve_scratch_dir(item_id)
+    elif item_type == "logzio":
+        return _resolve_logzio(item_id, text)
+    elif item_type == "url":
+        return _resolve_url(item_id, text)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown item type: {item_type}")
 
@@ -1115,13 +1156,79 @@ def _resolve_instructions(item_id: str, text: str | None) -> dict:
     }
 
 
-def _resolve_insight(item_id: str, text: str | None) -> dict:
+def _resolve_scratch_dir(path: str) -> dict:
+    from pathlib import Path
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
     return {
-        "type": "insight",
+        "type": "scratch_dir",
+        "id": path,
+        "title": p.name,
+        "label": p.name,
+        "path": str(p),
+    }
+
+
+def _resolve_logzio(item_id: str, text: str | None) -> dict:
+    import json as _json
+    params = _json.loads(text) if text else {}
+    query = params.get("query", item_id)
+    from_time = params.get("from_time", "")
+    to_time = params.get("to_time", "")
+    size = params.get("size", 50)
+    label = f"Logz.io: {query[:60]}"
+    return {
+        "type": "logzio",
         "id": item_id,
-        "title": "Agent Insight",
-        "label": item_id,
-        "text": text or "",
+        "title": label,
+        "label": label,
+        "query": query,
+        "from_time": from_time,
+        "to_time": to_time,
+        "size": size,
+    }
+
+
+def _resolve_url(url: str, text: str | None) -> dict:
+    """Fetch URL content at add time and store it in the item."""
+    import urllib.request
+    import urllib.error
+
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Roadmap/1.0",
+            "Accept": "text/html, text/plain, application/json, */*",
+        })
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            raw = resp.read(512_000).decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=400, detail=f"URL returned {e.code}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+
+    # Strip HTML tags for cleaner AI context
+    if "html" in content_type.lower():
+        import re
+        # Remove script/style blocks, then all tags
+        raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", raw,
+                      flags=re.DOTALL | re.IGNORECASE)
+        raw = re.sub(r"<[^>]+>", " ", raw)
+        raw = re.sub(r"[ \t]+", " ", raw)
+        raw = re.sub(r"\n\s*\n", "\n\n", raw)
+        raw = raw.strip()
+
+    short = url[:20] + "..." if len(url) > 20 else url
+    return {
+        "type": "url",
+        "id": url,
+        "title": short,
+        "label": short,
+        "description": text or "",
+        "content": raw,
     }
 
 

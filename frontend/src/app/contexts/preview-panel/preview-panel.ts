@@ -1,9 +1,11 @@
 import { Component, computed, input, output, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { PreviewSection } from '../../services/contexts';
 import { itemKey, getItemIcon, getItemTypeLabel } from '../context-utils';
 
 @Component({
   selector: 'app-preview-panel',
+  imports: [RouterLink],
   templateUrl: './preview-panel.html',
   styleUrl: './preview-panel.scss',
 })

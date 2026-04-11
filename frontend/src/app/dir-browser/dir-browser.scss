@@ -1,0 +1,341 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.dir-layout {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+// ── File list panel ──
+
+.file-list-panel {
+  width: 320px;
+  flex-shrink: 0;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--rm-surface);
+  display: flex;
+  flex-direction: column;
+  margin-right: 0.75rem;
+  transition: width 0.2s;
+
+  &.collapsed {
+    width: auto;
+    border: none;
+    margin-right: 0;
+    background: none;
+  }
+}
+
+.path-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--rm-border);
+  flex-shrink: 0;
+}
+
+.path-text {
+  font-size: 0.72rem;
+  color: var(--rm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 40%, transparent);
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #f8f9fa; }
+  &.active { background: #e7f5ff; }
+
+  > i { font-size: 0.9rem; flex-shrink: 0; }
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 0.7rem;
+  color: var(--rm-text-muted);
+  flex-shrink: 0;
+}
+
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.4rem 0.3rem;
+  color: var(--rm-text-muted);
+  font-size: 0.8rem;
+
+  &:hover { color: var(--rm-text); background: #e9ecef; }
+}
+
+.btn-xs {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+}
+
+// ── File viewer ──
+
+.file-viewer-panel {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--rm-surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--rm-border);
+  font-size: 0.8125rem;
+  flex-shrink: 0;
+}
+
+.viewer-content {
+  padding: 0.75rem;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  overflow: auto;
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+}
+
+// ── PlantUML ──
+
+.zoom-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--rm-text-muted);
+  min-width: 2.2rem;
+  text-align: center;
+}
+
+.zoom-divider {
+  width: 1px;
+  height: 1rem;
+  background: var(--rm-border);
+  margin: 0 0.15rem;
+}
+
+.puml-render {
+  padding: 0.75rem;
+  overflow: auto;
+  background: #fff;
+  text-align: center;
+  flex: 1;
+}
+
+.puml-img {
+  height: auto;
+  transition: width 0.15s;
+}
+
+// ── HTML preview ──
+
+.html-preview {
+  flex: 1;
+  border: none;
+  background: #fff;
+  width: 100%;
+}
+
+// ── Image viewer ──
+
+.image-render {
+  padding: 0.75rem;
+  overflow: auto;
+  background: #fff;
+  text-align: center;
+  flex: 1;
+}
+
+.image-preview {
+  height: auto;
+  transition: width 0.15s;
+}
+
+// ── Render wrapper (positions minimap) ──
+
+.render-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// ── Minimap ──
+
+.minimap {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  width: 180px;
+  max-height: 140px;
+  border: 1px solid var(--rm-border);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  cursor: crosshair;
+  z-index: 10;
+}
+
+.minimap-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.minimap-viewport {
+  position: absolute;
+  border: 2px solid #339af0;
+  background: rgba(51, 154, 240, 0.1);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+// ── Markdown ──
+
+.markdown-content {
+  padding: 1rem 1.25rem;
+  overflow: auto;
+  background: #fff;
+  flex: 1;
+  font-size: 0.85rem;
+  line-height: 1.7;
+
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    color: #1a3a5c;
+  }
+
+  h1 { font-size: 1.4rem; border-bottom: 1px solid var(--rm-border); padding-bottom: 0.3em; }
+  h2 { font-size: 1.2rem; border-bottom: 1px solid var(--rm-border); padding-bottom: 0.2em; }
+  h3 { font-size: 1.05rem; }
+
+  p { margin-bottom: 0.75em; }
+
+  ul, ol { padding-left: 1.5em; margin-bottom: 0.75em; }
+
+  code {
+    background: #f1f3f5;
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+    font-size: 0.82em;
+  }
+
+  pre {
+    background: #f8f9fa;
+    border: 1px solid var(--rm-border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    overflow-x: auto;
+    margin-bottom: 0.75em;
+
+    code {
+      background: none;
+      padding: 0;
+    }
+  }
+
+  blockquote {
+    border-left: 3px solid #339af0;
+    margin: 0 0 0.75em;
+    padding: 0.4em 0.8em;
+    color: var(--rm-text-muted);
+    background: #f8f9fa;
+    border-radius: 0 4px 4px 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    margin-bottom: 0.75em;
+    width: auto;
+
+    th, td {
+      border: 1px solid var(--rm-border);
+      padding: 0.35rem 0.6rem;
+      font-size: 0.82rem;
+    }
+
+    th { background: #f8f9fa; font-weight: 600; }
+  }
+
+  img { max-width: 100%; }
+
+  a { color: #339af0; }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--rm-border);
+    margin: 1em 0;
+  }
+}
+
+// ── PlantUML not configured ──
+
+.puml-not-configured {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--rm-text-muted);
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--rm-border);
+
+  a {
+    color: var(--rm-primary, #1a3a5c);
+    text-decoration: underline;
+    font-weight: 500;
+  }
+}

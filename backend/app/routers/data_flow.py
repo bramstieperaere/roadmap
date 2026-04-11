@@ -107,7 +107,7 @@ def list_services():
         """)
         return [ServiceCard(**dict(r)) for r in records]
     finally:
-        driver.close()
+        pass
 
 
 def _query_grouped_endpoints(driver, service_name: str,
@@ -206,7 +206,7 @@ def get_service_detail(name: str):
             databases=databases,
         )
     finally:
-        driver.close()
+        pass
 
 
 @router.get("/services/{name}/endpoint-flow",
@@ -313,4 +313,4 @@ def get_endpoint_flow(name: str, path: str, method: str):
             queues=queues,
         )
     finally:
-        driver.close()
+        pass

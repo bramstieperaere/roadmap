@@ -1,0 +1,485 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+// ── Autocomplete pickers ──
+
+.picker-row {
+  display: flex;
+  gap: 1rem;
+  max-width: 700px;
+}
+
+.picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rm-text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.autocomplete-wrap {
+  position: relative;
+
+  .ac-input { padding-right: 1.75rem; }
+}
+
+.ac-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--rm-text-muted);
+  font-size: 0.7rem;
+  padding: 0.15rem;
+  line-height: 1;
+  z-index: 2;
+
+  &:hover { color: var(--rm-text); }
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--rm-surface, #fff);
+  border: 1px solid var(--rm-border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 40%, transparent);
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #f1f3f5; }
+  &.active { background: #e7f5ff; font-weight: 600; }
+
+  i { font-size: 0.85rem; flex-shrink: 0; }
+}
+
+.tip-hash {
+  font-size: 0.68rem;
+  color: var(--rm-text-muted);
+}
+
+// ── Commits layout ──
+
+.commits-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+// ── Timeline ──
+
+.commit-count {
+  border-bottom: 1px solid var(--rm-border);
+  padding-bottom: 0.5rem;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 1.5rem;
+  flex: 1;
+  min-width: 0;
+  max-width: 800px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--rm-border);
+  }
+}
+
+.timeline-date {
+  position: relative;
+  margin: 1rem 0 0.5rem;
+
+  &:first-child { margin-top: 0; }
+}
+
+.timeline-date-label {
+  display: inline-block;
+  position: relative;
+  left: -0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rm-text-muted);
+  background: var(--rm-bg, #f8f9fa);
+  padding: 0.1rem 0.5rem 0.1rem 0;
+}
+
+.timeline-entry {
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -1.25rem;
+  top: 0.5rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #adb5bd;
+  border: 2px solid var(--rm-bg, #f8f9fa);
+}
+
+.timeline-dot.dot-active {
+  background: #1971c2;
+  width: 10px;
+  height: 10px;
+  left: -1.3rem;
+  top: 0.45rem;
+}
+
+.timeline-card {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  background: var(--rm-surface);
+  cursor: pointer;
+
+  &:hover { background: #f8f9fa; }
+
+  &.active {
+    border-color: #339af0;
+    background: #e7f5ff;
+  }
+}
+
+.commit-hash {
+  font-size: 0.72rem;
+  color: #1971c2;
+  background: #e7f5ff;
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.commit-message {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.commit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--rm-text-muted);
+
+  i { font-size: 0.7rem; }
+}
+
+.issue-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: #fff9db;
+  color: #f08c00;
+  border: 1px solid #ffd43b;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+}
+
+// ── Detail panel ──
+
+.detail-panel {
+  width: 340px;
+  flex-shrink: 0;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: var(--rm-surface);
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--rm-border);
+  background: #f8f9fa;
+}
+
+.detail-body {
+  padding: 0.75rem;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.detail-field {
+  margin-bottom: 0.75rem;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.detail-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rm-text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.detail-value {
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// ── Jira cards ──
+
+.jira-card {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  margin-top: 0.4rem;
+  background: #fff;
+}
+
+.jira-card-stub {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.jira-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.jira-key {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1971c2;
+}
+
+.jira-summary {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+}
+
+.jira-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.7rem;
+  color: var(--rm-text-muted);
+
+  i { font-size: 0.65rem; }
+}
+
+.jira-status {
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+}
+
+.status-done {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.status-progress {
+  background: #e7f5ff;
+  color: #1971c2;
+}
+
+.status-todo {
+  background: #f1f3f5;
+  color: #495057;
+}
+
+// ── Tags ──
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.commit-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
+
+.commit-tag-sm {
+  font-size: 0.6rem;
+  padding: 0 0.3rem;
+}
+
+.tag-blue    { background: #dbe4ff; color: #364fc7; }
+.tag-red     { background: #ffe3e3; color: #c92a2a; }
+.tag-yellow  { background: #fff3bf; color: #e67700; }
+.tag-purple  { background: #e5dbff; color: #6741d9; }
+.tag-orange  { background: #ffe8cc; color: #d9480f; }
+.tag-green   { background: #d3f9d8; color: #2b8a3e; }
+.tag-gray    { background: #f1f3f5; color: #495057; }
+.tag-teal    { background: #c3fae8; color: #087f5b; }
+.tag-indigo  { background: #d0bfff; color: #5f3dc4; }
+.tag-dark    { background: #dee2e6; color: #343a40; }
+
+.btn-xs {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+}
+
+// ── Merge source commits ──
+
+.merge-commits-list {
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+
+.merge-commit-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 50%, transparent);
+  cursor: pointer;
+  align-items: flex-start;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #f8f9fa; }
+
+  .commit-hash { margin-top: 0.15rem; }
+}
+
+.merge-commit-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.merge-commit-msg {
+  font-size: 0.78rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+// ── Filter bar ──
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.filter-toggle {
+  border: 1px solid #dee2e6;
+  background: #fff;
+  color: #495057;
+  font-size: 0.78rem;
+  padding: 2px 10px;
+  border-radius: 20px;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: #1a3a5c;
+    color: #1a3a5c;
+  }
+
+  &.active {
+    background: #1a3a5c;
+    border-color: #1a3a5c;
+    color: #fff;
+  }
+}
+
+// ── Coverage ──
+
+.coverage-badge {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #e8eef4;
+  color: #1a3a5c;
+  white-space: nowrap;
+}
+
+.coverage-bar-track {
+  flex: 1;
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 120px;
+}
+
+.coverage-bar-fill {
+  height: 100%;
+  background: #198754;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+// ── DB changes ──
+
+.db-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.db-change-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  code {
+    word-break: break-all;
+  }
+}

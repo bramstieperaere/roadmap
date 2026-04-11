@@ -16,9 +16,15 @@
           {{ context()?.name || name() }}
         </span>
       }
-      <button class="btn btn-sm btn-outline-secondary ms-2"
+      <button class="btn btn-sm ms-2"
+              [class.btn-outline-secondary]="!copiedRef()"
+              [class.btn-outline-success]="copiedRef()"
               (click)="copyContextRef()" title="Copy MCP reference">
-        <i class="bi bi-clipboard me-1"></i>Copy ref
+        @if (copiedRef()) {
+          <i class="bi bi-check2 me-1"></i>Copied
+        } @else {
+          <i class="bi bi-clipboard me-1"></i>Copy ref
+        }
       </button>
     </div>
   </div>
@@ -39,7 +45,8 @@
     } @else if (context()) {
       @let ctx = context()!;
       <div class="detail-layout">
-        <!-- Left panel: context management -->
+        <!-- Left column: context management + chat -->
+        <div class="detail-left">
         <div class="detail-body" cdkDropListGroup>
           <!-- Edit toolbar -->
           <div class="d-flex justify-content-end mb-2">
@@ -51,6 +58,13 @@
                   <i class="bi" [class.bi-layers]="showContributing()" [class.bi-layers-half]="!showContributing()"></i>
                 </button>
               }
+              <button class="btn btn-sm btn-icon"
+                      [class.btn-outline-secondary]="!showChat()"
+                      [class.btn-primary]="showChat()"
+                      (click)="showChat.set(!showChat())"
+                      title="AI Assistant">
+                <i class="bi bi-stars"></i>
+              </button>
               <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="toggleEdit()"
                       [title]="editing() ? 'Done editing' : 'Edit'"
                       data-testid="context-edit-toggle">
@@ -88,8 +102,8 @@
                             @if (item.requested_at) {
                               <span class="text-muted small flex-shrink-0">{{ item.requested_at.slice(0, 10) }}</span>
                             }
-                          } @else if (item.type !== 'instructions' && item.type !== 'insight') {
-                            <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                          } @else if (item.type !== 'instructions') {
+                            <span class="text-muted small flex-shrink-0">{{ getItemDisplayId(item) }}</span>
                           }
                         </div>
                       </div>
@@ -125,8 +139,8 @@
                             <span class="text-truncate fw-medium text-muted">{{ mixin.path.split('/')[0] }}</span>
                           } @else {
                             <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                            @if (item.type !== 'instructions' && item.type !== 'insight') {
-                              <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                            @if (item.type !== 'instructions') {
+                              <span class="text-muted small flex-shrink-0">{{ getItemDisplayId(item) }}</span>
                             }
                           }
                         </div>
@@ -158,6 +172,23 @@
                         {{ child.name }}
                       </span>
                     }
+                    @if (editingChildDescription() && expandedChild() === child.name) {
+                      <input type="text" class="form-control form-control-sm flex-grow-1"
+                             placeholder="Description (optional)"
+                             [ngModel]="editChildDescriptionValue()" (ngModelChange)="editChildDescriptionValue.set($event)"
+                             (keydown)="onChildDescriptionKeydown($event)" (blur)="saveChildDescription()"
+                             (click)="$event.stopPropagation()">
+                    } @else if (child.description) {
+                      <span class="text-muted small" [class.editable-name]="editing()"
+                            (click)="editing() && startEditChildDescription(child.name)">
+                        ({{ child.description }})
+                      </span>
+                    } @else if (editing()) {
+                      <span class="text-muted small editable-name"
+                            (click)="startEditChildDescription(child.name)">
+                        (add description)
+                      </span>
+                    }
                   </div>
                   @if (editing()) {
                     <div class="d-flex gap-1">
@@ -176,7 +207,7 @@
                             <input type="text" class="form-control form-control-sm" placeholder="Label"
                                    [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
                           </div>
-                          @if ((item.type === 'instructions' || item.type === 'insight')) {
+                          @if ((item.type === 'instructions')) {
                             <div class="mb-2">
                               <textarea class="form-control form-control-sm" rows="4"
                                         [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
@@ -198,7 +229,7 @@
                              [class.selected]="primaryClickedKey() !== itemKey(item) && (item.type === 'parent' ? isParentSelected() : item.type === 'mixin' ? isMixinSelected(item.id) : selectedItemKeys().has(itemKey(item)))"
                              (click)="scrollToPreview(item)">
                           @if (editing()) {
-                            <i class="bi bi-grip-vertical drag-handle" cdkDragHandle></i>
+                            <i class="bi bi-grip-vertical drag-handle"></i>
                           }
                           <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
                             <i class="bi" [class]="getItemIcon(item.type)"></i>
@@ -207,13 +238,13 @@
                               <span class="text-truncate fw-medium text-muted">{{ ctx.name }}</span>
                             } @else {
                               <span class="text-truncate fw-medium">{{ item.label || item.title }}</span>
-                              @if (item.type !== 'instructions' && item.type !== 'insight') {
-                                <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                              @if (item.type !== 'instructions') {
+                                <span class="text-muted small flex-shrink-0">{{ getItemDisplayId(item) }}</span>
                               }
                             }
                           </div>
                           @if (editing() && item.type !== 'parent') {
-                            @if ((item.type === 'instructions' || item.type === 'insight')) {
+                            @if ((item.type === 'instructions')) {
                               <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
                                       (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
                                 <i class="bi bi-pencil"></i>
@@ -241,7 +272,7 @@
 
                   @if (editing() && expandedChild() === child.name && showChildAddPanel()) {
                     <div class="mt-2">
-                      <app-add-item-panel
+                      <app-add-item-panel [contextName]="name()"
                         [spaces]="spaces()" [repos]="repos()" [mixinPaths]="filteredMixinPaths()" [adding]="childAdding()"
                         (addItem)="onChildAddItem($event)" (cancel)="showChildAddPanel.set(false)" />
                     </div>
@@ -324,7 +355,7 @@
                           <input type="text" class="form-control form-control-sm" placeholder="Label"
                                  [ngModel]="editItemLabel()" (ngModelChange)="editItemLabel.set($event)">
                         </div>
-                        @if ((item.type === 'instructions' || item.type === 'insight')) {
+                        @if ((item.type === 'instructions')) {
                           <div class="mb-2">
                             <textarea class="form-control form-control-sm" rows="4"
                                       [ngModel]="editItemText()" (ngModelChange)="editItemText.set($event)"
@@ -346,7 +377,7 @@
                            [class.selected]="primaryClickedKey() !== itemKey(item) && (item.type === 'mixin' ? isMixinSelected(item.id) : selectedItemKeys().has(itemKey(item)))"
                            (click)="scrollToPreview(item)">
                         @if (editing()) {
-                          <i class="bi bi-grip-vertical drag-handle" cdkDragHandle></i>
+                          <i class="bi bi-grip-vertical drag-handle"></i>
                         }
                         <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
                           <i class="bi" [class]="getItemIcon(item.type)"></i>
@@ -357,12 +388,12 @@
                             @if (item.requested_at) {
                               <span class="text-muted small flex-shrink-0">{{ item.requested_at.slice(0, 10) }}</span>
                             }
-                          } @else if (item.type !== 'instructions' && item.type !== 'insight') {
-                            <span class="text-muted small flex-shrink-0">{{ item.id }}</span>
+                          } @else if (item.type !== 'instructions') {
+                            <span class="text-muted small flex-shrink-0">{{ getItemDisplayId(item) }}</span>
                           }
                         </div>
                         @if (editing()) {
-                          @if ((item.type === 'instructions' || item.type === 'insight')) {
+                          @if ((item.type === 'instructions')) {
                             <button class="btn btn-outline-secondary btn-sm btn-icon flex-shrink-0"
                                     (click)="$event.stopPropagation(); startEditItem(item)" title="Edit">
                               <i class="bi bi-pencil"></i>
@@ -390,16 +421,27 @@
 
                 @if (editing() && showParentAddPanel()) {
                   <div class="mt-2">
-                    <app-add-item-panel
+                    <app-add-item-panel [contextName]="name()"
                       [spaces]="spaces()" [repos]="repos()" [mixinPaths]="filteredMixinPaths()" [adding]="parentAdding()"
                       (addItem)="onParentAddItem($event)" (cancel)="showParentAddPanel.set(false)" />
                   </div>
                 }
+
               </div>
             </div>
           }
 
         </div>
+
+        @if (showChat()) {
+          <div class="chat-container">
+            <app-context-chat [contextName]="name()" [existingItems]="chatExistingItems()"
+                              [tags]="context()?.tags ?? []" [description]="context()?.description ?? ''"
+                              (addItem)="onChatAddItem($event)" (tagAction)="onChatTag($event)"
+                              (setDescription)="onChatDescription($event)" />
+          </div>
+        }
+        </div><!-- /detail-left -->
 
         <!-- Preview panel -->
         <app-preview-panel

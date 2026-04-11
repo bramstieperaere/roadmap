@@ -22,6 +22,7 @@ class RepositoryConfig(BaseModel):
     path: str
     tags: list[str] = []
     modules: list[ModuleConfig] = []
+    processors: list[str] = []
 
 
 class JiraProjectConfig(BaseModel):
@@ -68,6 +69,19 @@ class WhisperConfig(BaseModel):
     postprocess_model: str = ""
 
 
+class LogzioConfig(BaseModel):
+    base_url: str = "https://api.logz.io"
+    api_token: str = ""
+    default_size: int = 50
+
+
+class FileViewerConfig(BaseModel):
+    extension: str = ""       # e.g. ".puml"
+    label: str = ""           # e.g. "PlantUML"
+    renderer: str = "text"    # "text" | "plantuml"
+    server_url: str = ""      # e.g. "http://www.plantuml.com/plantuml"
+
+
 class DatabaseOverride(BaseModel):
     repo_type: str       # "JPA", "Mongo", etc.
     name: str            # "MSSQL Orders DB"
@@ -81,6 +95,9 @@ class AppConfig(BaseModel):
     ai_providers: list[AIProviderConfig] = []
     ai_tasks: list[AITaskConfig] = []
     whisper: WhisperConfig = WhisperConfig()
+    logzio: LogzioConfig = LogzioConfig()
+    scratch_base_dir: str = ""
+    file_viewers: list[FileViewerConfig] = []
     encryption_salt: Optional[str] = None
     databases: list[DatabaseOverride] = []
 

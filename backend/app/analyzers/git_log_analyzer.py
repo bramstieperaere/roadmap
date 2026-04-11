@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -87,6 +88,12 @@ MERGE (br)-[:FIRST]->(c)
 _CYPHER_INDEX_DATE = """
 CREATE INDEX tooling_commit_date IF NOT EXISTS
 FOR (c:Commit) ON (c.date)
+"""
+
+_CYPHER_SET_PROCESSOR_RESULT_TPL = """
+UNWIND $items AS item
+MATCH (c:Tooling:Commit {{hash: item.hash}})
+SET c.{prop} = item.value
 """
 
 
@@ -193,6 +200,14 @@ def _build_first_parent_map(commits: list[dict]) -> dict[str, str]:
     return fp
 
 
+def _build_all_parents_map(commits: list[dict]) -> dict[str, list[str]]:
+    """Build hash -> all parent hashes lookup from parsed commits."""
+    ap: dict[str, list[str]] = {}
+    for c in commits:
+        ap[c["hash"]] = c.get("parent_hashes", [])
+    return ap
+
+
 def _walk_first_parents(tip_hash: str,
                         first_parent: dict[str, str]) -> list[str]:
     """Walk first-parent chain from tip, return list of hashes (tip first)."""
@@ -206,20 +221,40 @@ def _walk_first_parents(tip_hash: str,
     return chain
 
 
+def _walk_all_ancestors(tip_hash: str,
+                        all_parents: dict[str, list[str]]) -> list[str]:
+    """Walk all reachable commits from tip (BFS), return list of hashes."""
+    visited: set[str] = set()
+    queue = [tip_hash]
+    result = []
+    while queue:
+        current = queue.pop(0)
+        if current in visited or current not in all_parents:
+            continue
+        visited.add(current)
+        result.append(current)
+        for parent in all_parents.get(current, []):
+            if parent not in visited:
+                queue.append(parent)
+    return result
+
+
 def _stamp_branch_on_commits(driver, branch_name: str, repo_name: str,
-                             chain: list[str], job_id: str):
-    """Set branches property on commits and create FIRST link."""
-    for i in range(0, len(chain), _BATCH_SIZE):
-        batch = chain[i:i + _BATCH_SIZE]
+                             hashes: list[str],
+                             first_hash: str | None,
+                             job_id: str):
+    """Set branches property on all reachable commits and create FIRST link."""
+    for i in range(0, len(hashes), _BATCH_SIZE):
+        batch = hashes[i:i + _BATCH_SIZE]
         run_cypher_write(driver, _CYPHER_STAMP_BRANCH,
                          {"branch_name": branch_name, "hashes": batch})
-    if chain:
+    if first_hash:
         run_cypher_write(driver, _CYPHER_BRANCH_FIRST,
                          {"branch_name": branch_name,
                           "repo_name": repo_name,
-                          "first_hash": chain[-1]})
+                          "first_hash": first_hash})
     job_store.add_log(job_id, "info",
-                      f"  {branch_name}: {len(chain)} commits")
+                      f"  {branch_name}: {len(hashes)} commits")
 
 
 def _discover_branches(repo_path: str) -> list[dict]:
@@ -248,7 +283,93 @@ def _discover_branches(repo_path: str) -> list[dict]:
     return branches
 
 
-async def run_ingest_commits(job_id: str, repos: list[dict]):
+def _run_processors(driver, processors, repo_path: str, commits: list[dict],
+                    job_id: str):
+    """Run commit processors and store results on Neo4j commit nodes."""
+    from app.analyzers.commit_processors import CommitProcessor
+
+    # Track documented files per commit across all processors
+    documented: dict[str, set[str]] = {}
+
+    for proc in processors:
+        proc: CommitProcessor
+        job_store.add_log(job_id, "info",
+                          f"  Running processor: {proc.label}")
+        batch: list[dict] = []
+        detected_count = 0
+        processed_count = 0
+
+        for commit in commits:
+            matched = proc.detect(commit.get("files_changed", []))
+            if not matched:
+                continue
+            detected_count += 1
+            job_store.add_log(
+                job_id, "info",
+                f"    {commit['hash']} - detected {len(matched)} file(s): "
+                f"{', '.join(matched[:5])}"
+                f"{'...' if len(matched) > 5 else ''}")
+
+            result = proc.process(repo_path, commit["full_hash"], matched)
+            if result:
+                processed_count += 1
+                # Track which files this processor documented
+                doc_files = result.get("files", [])
+                if doc_files:
+                    documented.setdefault(
+                        commit["hash"], set()).update(doc_files)
+                summary_parts = []
+                for ch in result.get("changes", []):
+                    op = ch.get("op", "?")
+                    table = ch.get("table", "")
+                    if table:
+                        summary_parts.append(f"{op}({table})")
+                    else:
+                        summary_parts.append(op)
+                job_store.add_log(
+                    job_id, "info",
+                    f"    {commit['hash']} - processed: "
+                    f"{', '.join(summary_parts[:10])}"
+                    f"{'...' if len(summary_parts) > 10 else ''}")
+                batch.append({
+                    "hash": commit["hash"],
+                    "value": json.dumps(result),
+                })
+
+        # Batch-write results to Neo4j
+        if batch:
+            cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
+                prop=proc.node_property)
+            for i in range(0, len(batch), _BATCH_SIZE):
+                chunk = batch[i:i + _BATCH_SIZE]
+                run_cypher_write(driver, cypher, {"items": chunk})
+
+        job_store.add_log(
+            job_id, "info",
+            f"  {proc.label}: {detected_count} commits detected, "
+            f"{processed_count} with changes")
+
+    # Write documented_files for all commits that had processor output
+    if documented:
+        doc_batch = [
+            {"hash": h, "value": sorted(files)}
+            for h, files in documented.items()
+        ]
+        cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
+            prop="documented_files")
+        for i in range(0, len(doc_batch), _BATCH_SIZE):
+            chunk = doc_batch[i:i + _BATCH_SIZE]
+            run_cypher_write(driver, cypher, {"items": chunk})
+
+        total_files = sum(len(f) for f in documented.values())
+        job_store.add_log(
+            job_id, "info",
+            f"  Documentation coverage: {len(documented)} commits, "
+            f"{total_files} files documented")
+
+
+async def run_ingest_commits(job_id: str, repos: list[dict],
+                             branch_filter: list[str] | None = None):
     """Main entry point: ingest git commits into Neo4j for given repos."""
     job_store.update_status(job_id, JobStatus.RUNNING)
     try:
@@ -275,11 +396,19 @@ async def run_ingest_commits(job_id: str, repos: list[dict]):
                 continue
 
             # Run git log
+            git_cmd = ["git", "log"]
+            if branch_filter:
+                git_cmd += branch_filter
+                job_store.add_log(job_id, "info",
+                                  f"{repo_name}: filtering by branches: "
+                                  f"{', '.join(branch_filter)}")
+            else:
+                git_cmd.append("--all")
+            git_cmd += [f"--format={_GIT_LOG_FORMAT}", "--name-only"]
             try:
                 proc = await asyncio.to_thread(
                     subprocess.run,
-                    ["git", "log", "--all", f"--format={_GIT_LOG_FORMAT}",
-                     "--name-only"],
+                    git_cmd,
                     cwd=repo_path,
                     capture_output=True,
                     text=True,
@@ -345,17 +474,25 @@ async def run_ingest_commits(job_id: str, repos: list[dict]):
             # Discover and write branches with membership
             branches = await asyncio.to_thread(
                 _discover_branches, repo_path)
+            if branch_filter:
+                branches = [b for b in branches if b["name"] in branch_filter]
             if branches:
                 await asyncio.to_thread(
                     run_cypher_write, driver, _CYPHER_BRANCHES,
                     {"repo_name": repo_name, "branches": branches})
-                # Stamp branch name on commits via first-parent walk
+                # Stamp branch name on all reachable commits
+                ap_map = _build_all_parents_map(commits)
                 fp_map = _build_first_parent_map(commits)
                 for b in branches:
-                    chain = _walk_first_parents(b["tip_hash"], fp_map)
+                    all_hashes = _walk_all_ancestors(
+                        b["tip_hash"], ap_map)
+                    first_chain = _walk_first_parents(
+                        b["tip_hash"], fp_map)
                     await asyncio.to_thread(
                         _stamp_branch_on_commits, driver,
-                        b["name"], repo_name, chain, job_id)
+                        b["name"], repo_name, all_hashes,
+                        first_chain[-1] if first_chain else None,
+                        job_id)
                 branch_names = ", ".join(b["name"] for b in branches)
                 job_store.add_log(job_id, "info",
                                   f"{repo_name}: {len(branches)} branches "
@@ -377,7 +514,19 @@ async def run_ingest_commits(job_id: str, repos: list[dict]):
                 f"{issue_count} issue refs, "
                 f"{len(unique_files)} unique files")
 
-        driver.close()
+            # Run commit processors configured for this repo
+            repo_processor_names = repo.get("processors", [])
+            if repo_processor_names:
+                from app.analyzers.commit_processors import get_processors_by_name
+                processors = get_processors_by_name(repo_processor_names)
+                if processors:
+                    job_store.add_log(
+                        job_id, "info",
+                        f"{repo_name}: running commit processors: "
+                        f"{', '.join(p.label for p in processors)}")
+                    await asyncio.to_thread(
+                        _run_processors, driver, processors,
+                        repo_path, commits, job_id)
 
         job_store.add_log(job_id, "info",
                           f"Done. {total_commits_all} commits, "

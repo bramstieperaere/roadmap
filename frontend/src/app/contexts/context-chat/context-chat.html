@@ -1,0 +1,91 @@
+<div class="chat-panel">
+  <div class="chat-header">
+    <i class="bi bi-stars me-1"></i>
+    <span class="fw-semibold">Assistant</span>
+    <span class="ms-2"><app-ai-task-status #aiStatus taskType="context_assistant" /></span>
+  </div>
+
+  @if (messages().length > 0) {
+    <div class="chat-messages">
+      @for (msg of messages(); track $index) {
+        <div class="chat-msg" [class.chat-msg-user]="msg.role === 'user'" [class.chat-msg-assistant]="msg.role === 'assistant'">
+          <div class="chat-msg-text">{{ msg.text }}</div>
+          @if (msg.proposals && msg.proposals.length > 0) {
+            <div class="chat-proposals">
+              @for (p of msg.proposals; track actionKey(p)) {
+                @if (!isDone(p)) {
+                  @if (p.action === 'add_item') {
+                    <div class="proposal-item-row">
+                      <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                        <i class="bi" [class]="actionIcon(p)"></i>
+                        <span class="item-type-badge">{{ typeLabel(p.type!) }}</span>
+                        <span class="text-truncate fw-medium">{{ p.label }}</span>
+                        @if (p.type !== 'instructions') {
+                          <span class="text-muted small flex-shrink-0">{{ p.id }}</span>
+                        }
+                      </div>
+                      <div class="proposal-buttons">
+                        <button class="btn btn-outline-primary btn-sm btn-xs" (click)="confirm(p)" title="Add">
+                          <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="dismiss(p)" title="Ignore">
+                          <i class="bi bi-x-lg"></i>
+                        </button>
+                      </div>
+                    </div>
+                  } @else {
+                    <!-- tag / description actions -->
+                    <div class="proposal-item-row proposal-meta-row">
+                      <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1">
+                        <i class="bi" [class]="actionIcon(p)"></i>
+                        <span class="fw-medium">{{ actionLabel(p) }}</span>
+                        @if (actionSublabel(p)) {
+                          <span class="text-muted small text-truncate">{{ actionSublabel(p) }}</span>
+                        }
+                      </div>
+                      <div class="proposal-buttons">
+                        <button class="btn btn-outline-primary btn-sm btn-xs" (click)="confirm(p)" title="Apply">
+                          <i class="bi bi-check-lg"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="dismiss(p)" title="Ignore">
+                          <i class="bi bi-x-lg"></i>
+                        </button>
+                      </div>
+                    </div>
+                  }
+                  @if (p.reason) {
+                    <div class="proposal-reason">{{ p.reason }}</div>
+                  }
+                }
+              }
+            </div>
+          }
+        </div>
+      }
+      @if (loading()) {
+        <div class="chat-msg chat-msg-assistant">
+          <div class="chat-msg-text text-muted">
+            <span class="spinner-border spinner-border-sm me-2"></span>Thinking...
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  @if (error()) {
+    <div class="text-danger small px-2 py-1"><i class="bi bi-exclamation-triangle me-1"></i>{{ error() }}</div>
+  }
+
+  <div class="chat-input">
+    <app-whisper-input class="flex-grow-1"
+                       [(value)]="query"
+                       inputClass="form-control form-control-sm"
+                       placeholder="e.g. I want to analyse PROJ-123"
+                       [disabled]="loading() || !aiStatus.configured()"
+                       (submit)="send()" />
+    <button class="btn btn-primary btn-sm flex-shrink-0" (click)="send()"
+            [disabled]="!query().trim() || loading() || !aiStatus.configured()">
+      <i class="bi bi-send"></i>
+    </button>
+  </div>
+</div>

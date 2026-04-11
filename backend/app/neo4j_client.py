@@ -2,11 +2,23 @@ from neo4j import GraphDatabase
 
 from app.config import load_config_decrypted
 
+_driver = None
+
 
 def get_neo4j_driver():
-    config = load_config_decrypted()
-    neo4j = config.neo4j
-    return GraphDatabase.driver(neo4j.uri, auth=(neo4j.username, neo4j.password))
+    global _driver
+    if _driver is None:
+        config = load_config_decrypted()
+        neo4j = config.neo4j
+        _driver = GraphDatabase.driver(neo4j.uri, auth=(neo4j.username, neo4j.password))
+    return _driver
+
+
+def close_neo4j_driver():
+    global _driver
+    if _driver is not None:
+        _driver.close()
+        _driver = None
 
 
 def run_cypher_write(driver, query: str, parameters: dict = None):

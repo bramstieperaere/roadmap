@@ -37,6 +37,8 @@ def load_config_decrypted() -> AppConfig:
             provider.api_key = decrypt_value(provider.api_key, key)
     if is_encrypted(config.whisper.api_key):
         config.whisper.api_key = decrypt_value(config.whisper.api_key, key)
+    if is_encrypted(config.logzio.api_token):
+        config.logzio.api_token = decrypt_value(config.logzio.api_token, key)
     return config
 
 
@@ -69,6 +71,8 @@ def save_config(config: AppConfig) -> None:
                 provider.api_key = encrypt_value(provider.api_key, key)
         if config.whisper.api_key and not is_encrypted(config.whisper.api_key):
             config.whisper.api_key = encrypt_value(config.whisper.api_key, key)
+        if config.logzio.api_token and not is_encrypted(config.logzio.api_token):
+            config.logzio.api_token = encrypt_value(config.logzio.api_token, key)
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(config.model_dump(), f, default_flow_style=False, sort_keys=False)
 

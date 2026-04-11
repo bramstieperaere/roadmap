@@ -73,7 +73,7 @@ async def _run_job(job_id: str, repo_path: str,
             job_store.update_status(job_id, JobStatus.COMPLETED,
                                     summary=summary)
         finally:
-            driver.close()
+            pass
     except Exception as e:
         job_store.add_log(job_id, "error", f"Job failed: {e}")
         job_store.update_status(job_id, JobStatus.FAILED, error=str(e))
@@ -150,7 +150,7 @@ async def _run_code_analysis(repo_path: str, repo_name: str,
         cleanup_job_id = analysis_tasks[0]["job_id"] if analysis_tasks else ""
         _cleanup_repo(driver, repo_path, repo_name, cleanup_job_id)
     finally:
-        driver.close()
+        pass
 
     await asyncio.gather(*[
         _run_job(t["job_id"], repo_path, t["module_name"],
@@ -216,7 +216,7 @@ async def _run_enrichment(repo_path: str, repo_name: str,
                         job_store.add_log(job_id, "warn",
                                           f"No enricher for technology: {tech}")
         finally:
-            driver.close()
+            pass
         job_store.update_status(job_id, JobStatus.COMPLETED,
                                 summary="Architecture enrichment complete")
     except Exception as e:
@@ -240,7 +240,7 @@ async def _run_data_flow(repo_name: str, job_id: str):
             stats = await asyncio.to_thread(enricher.enrich)
             job_store.add_log(job_id, "info", f"DataFlow: {stats}")
         finally:
-            driver.close()
+            pass
         job_store.update_status(job_id, JobStatus.COMPLETED,
                                 summary="Data flow enrichment complete")
     except Exception as e:

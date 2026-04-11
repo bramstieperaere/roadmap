@@ -287,7 +287,7 @@ def search_nodes(q: str, limit: int = 20):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {e}")
     finally:
-        driver.close()
+        pass
 
 
 @router.get("/tree")
@@ -338,7 +338,7 @@ def get_tree_children(perspective: str = "technical",
         raise HTTPException(
             status_code=500, detail=f"Tree query failed: {e}")
     finally:
-        driver.close()
+        pass
 
 
 def _get_arch_tree(parent_id: str | None) -> list[dict]:
@@ -399,7 +399,7 @@ def _get_arch_tree(parent_id: str | None) -> list[dict]:
         raise HTTPException(
             status_code=500, detail=f"Tree query failed: {e}")
     finally:
-        driver.close()
+        pass
 
 
 def _get_ms_categories(db_session, ms_id: str) -> list[dict]:
@@ -504,7 +504,7 @@ def _get_node_labels(node_id: str) -> list[str]:
         with driver.session(database=config.neo4j.database) as db_session:
             return _get_node_labels_with_session(db_session, node_id)
     finally:
-        driver.close()
+        pass
 
 
 def _get_node_labels_with_session(db_session, node_id: str) -> list[str]:

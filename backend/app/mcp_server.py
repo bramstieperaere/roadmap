@@ -42,7 +42,7 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
         elif item_type == "instructions":
             content = _render_instructions(label, item.get("text", ""))
         elif item_type == "insight":
-            content = _render_insight(label, item.get("text", ""))
+            continue  # legacy item type, skip
         elif item_type == "git_repo":
             content = _render_git_repo(item_id, label, item.get("path", ""))
         elif item_type == "repo_file":
@@ -54,6 +54,12 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
             content = _render_commits(item, config)
         elif item_type == "inquiry":
             content = _render_inquiry(item, config, cache)
+        elif item_type == "scratch_dir":
+            content = _render_scratch_dir(item_id, label)
+        elif item_type == "logzio":
+            content = _render_logzio(item, config)
+        elif item_type == "url":
+            content = _render_url(item)
         else:
             content = f"Unknown item: {item_type} / {item_id}"
 
@@ -133,12 +139,13 @@ _TYPE_LABELS = {
     "confluence_page": "Confluence",
     "jira_issue": "Jira",
     "instructions": "Instructions",
-    "insight": "Agent Insight",
     "git_repo": "Git Repo",
     "repo_file": "File",
     "bitbucket_pr": "Bitbucket",
     "commits": "Commits",
     "inquiry": "Inquiry",
+    "logzio": "Logz.io",
+    "url": "URL",
 }
 
 
@@ -264,52 +271,6 @@ def list_contexts() -> str:
     return "Available contexts:\n" + "\n".join(lines)
 
 
-@mcp.tool()
-def add_context_insight(name: str, label: str, text: str) -> str:
-    """Write an insight or analysis back to a context as an agent memory item.
-
-    Use this after reading a context to record your analysis, findings,
-    or decisions so they are preserved for future reference.
-
-    Args:
-        name: context name (e.g. 'my-context' or 'parent/child')
-        label: short descriptive title for this insight
-        text: the insight content (markdown supported)
-    """
-    parts = name.split("/", 1)
-    parent_name = parts[0]
-    child_name = parts[1] if len(parts) > 1 else None
-
-    ctx_path = CONFIG_PATH.parent / "contexts" / f"{parent_name}.json"
-    if not ctx_path.exists():
-        return f"Context '{name}' not found."
-
-    ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
-
-    import uuid
-    item = {
-        "type": "insight",
-        "id": f"insight-{uuid.uuid4().hex[:8]}",
-        "title": "Agent Insight",
-        "label": label,
-        "text": text,
-    }
-
-    if child_name:
-        child_ctx = next(
-            (c for c in ctx.get("children", []) if c["name"] == child_name),
-            None,
-        )
-        if not child_ctx:
-            return f"Sub-context '{child_name}' not found in '{parent_name}'."
-        child_ctx.setdefault("items", []).append(item)
-    else:
-        ctx.setdefault("items", []).append(item)
-
-    ctx_path.write_text(json.dumps(ctx, indent=2, ensure_ascii=False),
-                        encoding="utf-8")
-    return f"Insight '{label}' added to context '{name}'."
-
 
 def _render_confluence_page(cache: JiraCache, config, page_id: str,
                             label: str) -> str:
@@ -361,14 +322,93 @@ def _render_jira_issue(svc: JiraIssueService, issue_key: str, label: str) -> str
     return "\n".join(lines)
 
 
+def _render_scratch_dir(path: str, label: str) -> str:
+    """Render a scratch directory item."""
+    return (
+        f"## {label} (Scratch Directory)\n\n"
+        f"**Path:** `{path}`\n\n"
+        "This is a working directory for AI-generated files. "
+        "When asked to generate documentation, diagrams, or scripts, "
+        "write output files here, e.g.\n"
+        "- **Markdown** (`.md`) — documentation, analysis reports\n"
+        "- **PlantUML** (`.puml`) — sequence diagrams, class diagrams, component diagrams\n"
+        "- **Python** (`.py`) — data processing scripts, analysis tools\n"
+        "- **JSON/YAML** — configuration, data exports\n\n"
+        "Create subdirectories as needed to organize output."
+    )
+
+
+def _render_logzio(item: dict, config) -> str:
+    """Render Logz.io log search results by executing the query live."""
+    from app.logzio_client import require_logzio_configured, logzio_search
+
+    query = item.get("query", "")
+    from_time = item.get("from_time", "") or None
+    to_time = item.get("to_time", "") or None
+    size = item.get("size", config.logzio.default_size or 50)
+    label = item.get("label", f"Logz.io: {query[:60]}")
+
+    try:
+        require_logzio_configured(config.logzio)
+    except Exception:
+        return f"## {label} (Logz.io Logs)\n\n(Logz.io not configured. Set API token in Settings.)"
+
+    try:
+        data = logzio_search(config.logzio, query, from_time, to_time, size)
+    except Exception as e:
+        return f"## {label} (Logz.io Logs)\n\nSearch failed: {e}"
+
+    hits = data.get("hits", {}).get("hits", [])
+    total = data.get("hits", {}).get("total", 0)
+    if isinstance(total, dict):
+        total = total.get("value", 0)
+
+    lines = [
+        f"## {label} (Logz.io Logs)",
+        f"**Query:** `{query}`",
+    ]
+    if from_time:
+        lines.append(f"**From:** {from_time}")
+    if to_time:
+        lines.append(f"**To:** {to_time}")
+    lines.append(f"**Results:** {len(hits)} of {total} total hits\n")
+
+    for hit in hits:
+        source = hit.get("_source", {})
+        timestamp = source.get("@timestamp", "")
+        message = source.get("message", json.dumps(source, default=str))
+        if len(message) > 2000:
+            message = message[:2000] + "... (truncated)"
+        level = source.get("level", source.get("log_level", ""))
+        prefix = f"[{timestamp}]" if timestamp else ""
+        if level:
+            prefix += f" [{level}]"
+        lines.append(f"{prefix} {message}")
+
+    return "\n".join(lines)
+
+
+def _render_url(item: dict) -> str:
+    """Render a URL item with its pre-fetched content."""
+    label = item.get("label", item.get("id", "URL"))
+    url = item.get("id", "")
+    description = item.get("description", "")
+    content = item.get("content", "")
+
+    lines = [f"## {label} (URL)"]
+    if url:
+        lines.append(f"**Source:** {url}")
+    if description:
+        lines.append(f"**Description:** {description}")
+    lines.append("")
+    lines.append(content)
+    return "\n".join(lines)
+
+
 def _render_instructions(label: str, text: str) -> str:
     """Render free-text instructions."""
     return f"## {label} (Instructions)\n\n{text}"
 
-
-def _render_insight(label: str, text: str) -> str:
-    """Render an agent insight / memory item."""
-    return f"## {label} (Agent Insight)\n\n{text}"
 
 
 def _render_git_repo(repo_name: str, label: str, path: str) -> str:

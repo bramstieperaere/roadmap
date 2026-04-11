@@ -301,7 +301,7 @@ section {
 
   pre {
     margin: 0;
-    padding: 0.625rem 2.25rem 0.625rem 0.75rem;
+    padding: 0.625rem 3.25rem 0.625rem 0.75rem;
     font-size: 0.78rem;
     line-height: 1.55;
     background: #f8f9fa;
@@ -312,10 +312,15 @@ section {
   }
 }
 
-.btn-copy {
+.query-actions {
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
+  display: flex;
+  gap: 0.15rem;
+}
+
+.btn-copy {
   background: none;
   border: none;
   cursor: pointer;

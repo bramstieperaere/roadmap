@@ -21,6 +21,7 @@ export interface ContextItemEntry {
 
 export interface ChildContext {
   name: string;
+  description?: string;
   done?: boolean;
   items: ContextItemEntry[];
 }
@@ -77,6 +78,11 @@ export class ContextsService {
     return this.http.get<ContextItem>(`/api/contexts/${encodeURIComponent(name)}`);
   }
 
+  getScratchDir(contextName: string): Observable<{ path: string; configured: boolean }> {
+    return this.http.get<{ path: string; configured: boolean }>(
+      `/api/contexts/meta/scratch-dir/${encodeURIComponent(contextName)}`);
+  }
+
   add(name: string): Observable<ContextItem> {
     return this.http.post<ContextItem>('/api/contexts', { name });
   }
@@ -105,6 +111,13 @@ export class ContextsService {
   updateDescription(name: string, description: string): Observable<ContextItem> {
     return this.http.put<ContextItem>(
       `/api/contexts/${encodeURIComponent(name)}/description`,
+      { description },
+    );
+  }
+
+  updateChildDescription(name: string, child: string, description: string): Observable<ContextItem> {
+    return this.http.put<ContextItem>(
+      `/api/contexts/${encodeURIComponent(name)}/children/${encodeURIComponent(child)}/description`,
       { description },
     );
   }

@@ -124,6 +124,17 @@ WHERE any(f IN c.files_changed WHERE f CONTAINS cls.name)
 RETURN c.hash, c.date, c.author_name,
        c.message, c.files_changed
 ORDER BY c.date DESC`,
+
+    f1: `MATCH (f:Facet:Facet)-[hv:HAS_VALUE]->(v:Facet:Value)
+RETURN f, hv, v`,
+
+    f2: `MATCH (f:Facet:Facet {name: $facet})
+      -[hv:HAS_VALUE]->(root:Facet:Value)
+OPTIONAL MATCH (root)-[nr:NARROWER*]->(child:Facet:Value)
+RETURN f, hv, root, nr, child`,
+
+    f3: `MATCH (n)-[ca:CLASSIFIED_AS]->(v:Facet:Value {name: $value})
+RETURN n, ca, v LIMIT 100`,
   };
 
   copy(id: string) {
@@ -168,8 +179,8 @@ ORDER BY c.date DESC`,
     });
   }
 
-  openInBrowser() {
-    const cypher = this.generatedCypher();
+  openInBrowser(id?: string) {
+    const cypher = id ? this.queries[id] : this.generatedCypher();
     if (!cypher) return;
     const encoded = encodeURIComponent(cypher);
     window.open(`http://localhost:7474/browser/?cmd=edit&arg=${encoded}`, '_blank');

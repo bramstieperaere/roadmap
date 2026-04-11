@@ -1,0 +1,100 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 46px);
+}
+
+.facet-card {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.facet-icon { color: #e64980; }
+
+// ── Value tree ──
+
+.value-tree {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 50%, transparent);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  transition: background 0.1s;
+
+  > i {
+    font-size: 0.85rem;
+    color: #e64980;
+    flex-shrink: 0;
+  }
+
+  &:hover { background: #f8f9fa; }
+
+  &.active {
+    background: #fff0f6;
+    border-left: 3px solid #e64980;
+  }
+
+  &:last-child { border-bottom: none; }
+}
+
+.value-name { font-weight: 500; }
+
+.value-key {
+  font-size: 0.7rem;
+  color: var(--rm-text-muted);
+}
+
+.value-actions {
+  display: flex;
+  gap: 0.15rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .value-row:hover & { opacity: 1; }
+}
+
+.btn-icon {
+  padding: 0.1rem 0.3rem;
+  line-height: 1;
+  font-size: 0.8rem;
+}
+
+// ── Classified nodes ──
+
+.classified-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.classified-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--rm-border) 50%, transparent);
+  font-size: 0.8125rem;
+
+  &:last-child { border-bottom: none; }
+}
+
+.classified-labels {
+  font-size: 0.7rem;
+  background: #f1f3f5;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

@@ -241,7 +241,6 @@ async def run_import_jira_issues(job_id: str, repos: list[dict]):
             total_prs_all += prs_written
             total_missing_all += len(failed)
 
-        driver.close()
 
         job_store.add_log(job_id, "info",
                           f"Done. {total_issues_all} issues imported, "

@@ -1,0 +1,207 @@
+<div class="section-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      <a routerLink="/processing" class="breadcrumb-link">
+        <i class="bi bi-arrow-left me-1"></i>Processing
+      </a>
+      <i class="bi bi-chevron-right text-muted small"></i>
+      @if (selectedFacet()) {
+        <a class="breadcrumb-link" (click)="back()">Facets</a>
+        <i class="bi bi-chevron-right text-muted small"></i>
+        <span class="fw-semibold">{{ selectedFacet()!.name }}</span>
+      } @else {
+        <span class="fw-semibold">Facets</span>
+      }
+    </div>
+  </div>
+
+  <div class="section-content p-3">
+
+    @if (error()) {
+      <div class="alert alert-danger alert-dismissible py-2 mb-3">
+        {{ error() }}
+        <button type="button" class="btn-close btn-close-sm" (click)="dismissError()"></button>
+      </div>
+    }
+
+    @if (!selectedFacet()) {
+      <!-- ── Facet list ──────────────────────────────────────────────── -->
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 fw-semibold">Classification Facets</h6>
+        <button class="btn btn-primary btn-sm" (click)="showCreate.set(true)" [disabled]="showCreate()">
+          <i class="bi bi-plus-lg me-1"></i>New Facet
+        </button>
+      </div>
+
+      @if (showCreate()) {
+        <div class="card mb-3">
+          <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Name</label>
+                <input type="text" class="form-control form-control-sm" placeholder="e.g. Time Period"
+                       [ngModel]="newName()" (ngModelChange)="newName.set($event)">
+              </div>
+              <div class="col-md-5">
+                <label class="form-label small mb-1">Description</label>
+                <input type="text" class="form-control form-control-sm" placeholder="Optional description"
+                       [ngModel]="newDesc()" (ngModelChange)="newDesc.set($event)">
+              </div>
+              <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-primary btn-sm" (click)="createFacet()" [disabled]="!newName().trim()">
+                  <i class="bi bi-check-lg me-1"></i>Create
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="showCreate.set(false)">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (loading()) {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+      } @else if (facets().length === 0) {
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-tags d-block mb-2" style="font-size: 2rem;"></i>
+          No facets defined yet. Create one to start classifying your graph.
+        </div>
+      } @else {
+        <div class="row g-3">
+          @for (f of facets(); track f.name) {
+            <div class="col-md-6 col-lg-4">
+              <div class="card facet-card" (click)="selectFacet(f.name)">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <h6 class="mb-1 fw-semibold"><i class="bi bi-tags me-1 facet-icon"></i>{{ f.name }}</h6>
+                      @if (f.description) {
+                        <small class="text-muted">{{ f.description }}</small>
+                      }
+                    </div>
+                    <span class="badge bg-light text-dark">{{ f.value_count }} values</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+    } @else {
+      <!-- ── Facet detail ────────────────────────────────────────────── -->
+
+      @if (selectedFacet()!.description) {
+        <p class="text-muted small mb-3">{{ selectedFacet()!.description }}</p>
+      }
+
+      <div class="row g-3">
+        <!-- Left: value tree -->
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span class="fw-semibold">Values</span>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary btn-sm" (click)="startAddValue('')">
+                  <i class="bi bi-plus-lg me-1"></i>Root Value
+                </button>
+                <button class="btn btn-outline-danger btn-sm" (click)="deleteFacet(selectedFacet()!.name)">
+                  <i class="bi bi-trash me-1"></i>Delete Facet
+                </button>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              @if (loadingDetail()) {
+                <div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+              } @else if (flatValues().length === 0 && !showAddForm()) {
+                <div class="text-muted text-center py-4">No values yet. Add a root value to get started.</div>
+              } @else {
+                <div class="value-tree">
+                  @for (v of flatValues(); track v.name) {
+                    <div class="value-row" [style.padding-left.rem]="0.75 + v.depth * 1.25"
+                         [class.active]="selectedValue() === v.name"
+                         (click)="showClassified(v.name)">
+                      <i class="bi" [class.bi-folder2]="v.childCount > 0" [class.bi-tag]="v.childCount === 0"></i>
+                      <span class="value-name">{{ v.label }}</span>
+                      @if (v.label !== v.name) {
+                        <code class="value-key">{{ v.name }}</code>
+                      }
+                      <span class="value-actions ms-auto">
+                        <button class="btn btn-sm btn-icon" title="Add child value"
+                                (click)="startAddValue(v.name); $event.stopPropagation()">
+                          <i class="bi bi-plus-circle"></i>
+                        </button>
+                        <button class="btn btn-sm btn-icon text-danger" title="Delete"
+                                (click)="deleteValue(v.name); $event.stopPropagation()">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            @if (showAddForm()) {
+              <div class="card-footer">
+                <div class="small text-muted mb-1">
+                  @if (addingToParent()) {
+                    Adding child to <strong>{{ addingToParent() }}</strong>
+                  } @else {
+                    Adding root value
+                  }
+                </div>
+                <div class="d-flex gap-2">
+                  <input type="text" class="form-control form-control-sm" placeholder="Value name"
+                         [ngModel]="newValueName()" (ngModelChange)="newValueName.set($event)">
+                  <input type="text" class="form-control form-control-sm" placeholder="Label (optional)"
+                         [ngModel]="newValueLabel()" (ngModelChange)="newValueLabel.set($event)">
+                  <button class="btn btn-primary btn-sm flex-shrink-0" (click)="addValue()" [disabled]="!newValueName().trim()">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm flex-shrink-0" (click)="cancelAddValue()">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Right: classified nodes -->
+        <div class="col-lg-5">
+          @if (selectedValue()) {
+            <div class="card">
+              <div class="card-header fw-semibold">
+                Nodes classified as <code>{{ selectedValue() }}</code>
+              </div>
+              <div class="card-body p-0">
+                @if (loadingClassified()) {
+                  <div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                } @else if (classifiedNodes().length === 0) {
+                  <div class="text-muted text-center py-4 small">No nodes classified under this value.</div>
+                } @else {
+                  <div class="classified-list">
+                    @for (n of classifiedNodes(); track n.node_id) {
+                      <div class="classified-row">
+                        <code class="classified-labels">{{ labelDisplay(n.labels) }}</code>
+                        <span>{{ n.name }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          } @else {
+            <div class="card">
+              <div class="card-body text-center text-muted py-4 small">
+                Click a value to see classified nodes.
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+  </div>
+</div>
