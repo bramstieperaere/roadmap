@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
-import { GitMiningService, ProcessorInfo } from '../services/git-mining';
+import { GitMiningService, ProcessorInfo, IncubatingProcessorConfig } from '../services/git-mining';
 import { EncryptionService } from '../services/encryption';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 import { WhisperTextarea } from '../components/whisper-textarea/whisper-textarea';
@@ -43,7 +43,11 @@ export class SettingsComponent implements OnInit {
   analyzing = signal<number | null>(null);
   message = signal<{ text: string; type: 'success' | 'danger' } | null>(null);
   processors = signal<ProcessorInfo[]>([]);
-  activeTab = signal<'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors'>('general');
+  incubatingProcessors = signal<IncubatingProcessorConfig[]>([]);
+  maturedProcessors = computed(() => this.processors().filter(p => p.status === 'matured'));
+  processingProfiles = signal<{ name: string; processors: string[] }[]>([]);
+  gitProcessingConfigs = signal<{ name: string; repo_name: string; branch: string; profile: string; processors: string[] }[]>([]);
+  activeTab = signal<'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing'>('general');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
   visibleSecrets = signal<Set<string>>(new Set());
@@ -102,9 +106,12 @@ export class SettingsComponent implements OnInit {
     this.gitMiningService.getProcessors().subscribe({
       next: p => this.processors.set(p),
     });
+    this.loadIncubatingProcessors();
+    this.loadProfiles();
+    this.loadGitProcessing();
 
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab && ['general', 'viewers', 'neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper', 'logzio', 'processors'].includes(tab)) {
+    if (tab && ['general', 'viewers', 'neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper', 'logzio', 'processors', 'profiles', 'git-processing'].includes(tab)) {
       this.activeTab.set(tab as any);
     }
   }
@@ -154,7 +161,7 @@ export class SettingsComponent implements OnInit {
     this.persistConfig('Settings saved');
   }
 
-  switchTab(tab: 'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors') {
+  switchTab(tab: 'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing') {
     if (this.editingSection()) this.cancelEditing();
     this.activeTab.set(tab);
   }
@@ -583,6 +590,213 @@ export class SettingsComponent implements OnInit {
     this.settingsService.testLogzioConnection().subscribe({
       next: (result) => { this.testingLogzio.set(false); this.showMessage(result.message, 'success'); },
       error: (err) => { this.testingLogzio.set(false); this.showMessage(err.error?.detail || 'Logz.io connection failed', 'danger'); },
+    });
+  }
+
+  // Incubating processors
+  private loadIncubatingProcessors() {
+    this.settingsService.getSettings().subscribe({
+      next: cfg => this.incubatingProcessors.set(cfg.incubating_processors || []),
+    });
+  }
+
+  addIncubatingProcessor() {
+    this.incubatingProcessors.update(list => [
+      ...list,
+      { name: '', label: '', description: '', instructions: '', file_patterns: [], instance_count: 0 },
+    ]);
+    this.editingSection.set('incubating-');
+  }
+
+  updateIncubatingField(index: number, field: string, value: string) {
+    this.incubatingProcessors.update(list => {
+      const updated = [...list];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }
+
+  updateIncubatingPatterns(index: number, raw: string) {
+    const patterns = raw.split('\n').map(s => s.trim()).filter(s => s);
+    this.incubatingProcessors.update(list => {
+      const updated = [...list];
+      updated[index] = { ...updated[index], file_patterns: patterns };
+      return updated;
+    });
+  }
+
+  saveIncubatingProcessor(index: number) {
+    const inc = this.incubatingProcessors()[index];
+    if (!inc.name.trim()) {
+      this.showMessage('Name is required', 'danger');
+      return;
+    }
+    this.gitMiningService.createIncubatingProcessor(inc).subscribe({
+      next: () => {
+        this.editingSection.set(null);
+        this.showMessage('Incubating processor saved', 'success');
+        this.loadIncubatingProcessors();
+        this.gitMiningService.getProcessors().subscribe({
+          next: p => this.processors.set(p),
+        });
+      },
+      error: (err) => {
+        // If it already exists, try update
+        this.gitMiningService.updateIncubatingProcessor(inc.name, inc).subscribe({
+          next: () => {
+            this.editingSection.set(null);
+            this.showMessage('Incubating processor updated', 'success');
+            this.loadIncubatingProcessors();
+          },
+          error: (err2) => this.showMessage(err2.error?.detail || 'Failed to save', 'danger'),
+        });
+      },
+    });
+  }
+
+  deleteIncubatingProcessor(name: string) {
+    this.gitMiningService.deleteIncubatingProcessor(name).subscribe({
+      next: () => {
+        this.editingSection.set(null);
+        this.showMessage('Processor deleted', 'success');
+        this.loadIncubatingProcessors();
+        this.gitMiningService.getProcessors().subscribe({
+          next: p => this.processors.set(p),
+        });
+      },
+      error: (err) => this.showMessage(err.error?.detail || 'Failed to delete', 'danger'),
+    });
+  }
+
+  // Processing profiles
+  private loadProfiles() {
+    this.settingsService.getSettings().subscribe({
+      next: cfg => this.processingProfiles.set(cfg.processing_profiles || []),
+    });
+  }
+
+  addProfile() {
+    this.processingProfiles.update(list => [...list, { name: '', processors: [] }]);
+    this.editingSection.set('profile-' + (this.processingProfiles().length - 1));
+  }
+
+  updateProfileName(index: number, name: string) {
+    this.processingProfiles.update(list => {
+      const updated = [...list];
+      updated[index] = { ...updated[index], name };
+      return updated;
+    });
+  }
+
+  toggleProfileProcessor(index: number, procName: string) {
+    this.processingProfiles.update(list => {
+      const updated = [...list];
+      const current = updated[index].processors || [];
+      const processors = current.includes(procName)
+        ? current.filter(p => p !== procName)
+        : [...current, procName];
+      updated[index] = { ...updated[index], processors };
+      return updated;
+    });
+  }
+
+  saveProfile(index: number) {
+    const p = this.processingProfiles()[index];
+    if (!p.name.trim()) { this.showMessage('Name is required', 'danger'); return; }
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.processing_profiles = this.processingProfiles();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => { this.editingSection.set(null); this.showMessage('Profile saved', 'success'); this.loadProfiles(); },
+          error: () => this.showMessage('Failed to save', 'danger'),
+        });
+      },
+    });
+  }
+
+  removeProfile(index: number) {
+    this.processingProfiles.update(list => list.filter((_, i) => i !== index));
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.processing_profiles = this.processingProfiles();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => { this.editingSection.set(null); this.showMessage('Profile removed', 'success'); },
+          error: () => this.showMessage('Failed to remove', 'danger'),
+        });
+      },
+    });
+  }
+
+  // Git processing configs
+  private loadGitProcessing() {
+    this.settingsService.getSettings().subscribe({
+      next: cfg => this.gitProcessingConfigs.set(cfg.git_processing || []),
+    });
+  }
+
+  addGitProcessing() {
+    this.gitProcessingConfigs.update(list => [
+      ...list,
+      { name: '', repo_name: '', branch: '', profile: '', processors: [] },
+    ]);
+    this.editingSection.set('git-proc-' + (this.gitProcessingConfigs().length - 1));
+  }
+
+  updateGitProcessingField(index: number, field: string, value: string) {
+    this.gitProcessingConfigs.update(list => {
+      const updated = [...list];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }
+
+  toggleGitProcessingProcessor(index: number, procName: string) {
+    this.gitProcessingConfigs.update(list => {
+      const updated = [...list];
+      const current = updated[index].processors || [];
+      const processors = current.includes(procName)
+        ? current.filter(p => p !== procName)
+        : [...current, procName];
+      updated[index] = { ...updated[index], processors };
+      return updated;
+    });
+  }
+
+  saveGitProcessing(index: number) {
+    const gp = this.gitProcessingConfigs()[index];
+    if (!gp.name.trim() || !gp.repo_name) {
+      this.showMessage('Name and repository are required', 'danger');
+      return;
+    }
+    // Save by updating full config
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.git_processing = this.gitProcessingConfigs();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => {
+            this.editingSection.set(null);
+            this.showMessage('Git processing config saved', 'success');
+            this.loadGitProcessing();
+          },
+          error: () => this.showMessage('Failed to save', 'danger'),
+        });
+      },
+    });
+  }
+
+  removeGitProcessing(index: number) {
+    this.gitProcessingConfigs.update(list => list.filter((_, i) => i !== index));
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.git_processing = this.gitProcessingConfigs();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => {
+            this.editingSection.set(null);
+            this.showMessage('Config removed', 'success');
+          },
+          error: () => this.showMessage('Failed to remove', 'danger'),
+        });
+      },
     });
   }
 

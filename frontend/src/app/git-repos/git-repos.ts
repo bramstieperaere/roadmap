@@ -1,7 +1,8 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { GitMiningService, BranchInfo, CommitInfo, CommitTag, ProcessorInfo } from '../services/git-mining';
+import { GitMiningService, BranchInfo, CommitInfo, ProcessorInfo } from '../services/git-mining';
 import { JiraService, JiraIssue } from '../services/jira';
 import { SettingsService, RepositoryConfig } from '../services/settings';
 
@@ -13,7 +14,8 @@ import { SettingsService, RepositoryConfig } from '../services/settings';
   styleUrl: './git-repos.scss',
 })
 export class GitRepos implements OnInit {
-  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private gitService = inject(GitMiningService);
   private settingsService = inject(SettingsService);
 
@@ -28,6 +30,9 @@ export class GitRepos implements OnInit {
   // Processor filters
   processors = signal<ProcessorInfo[]>([]);
   activeProcessorFilters = signal<Set<string>>(new Set());
+  filterPopupOpen = signal(false);
+  detailFilterPopupOpen = signal(false);
+  detailFilterActive = signal(false);
 
   filteredCommits = computed(() => {
     const all = this.commits();
@@ -36,7 +41,7 @@ export class GitRepos implements OnInit {
     const props = this.processors()
       .filter(p => filters.has(p.name))
       .map(p => p.node_property);
-    return all.filter(c => props.some(prop => (c as any)[prop]));
+    return all.filter(c => props.some(prop => this.hasProcessorChanges(c, prop)));
   });
 
   // Repo picker
@@ -65,11 +70,53 @@ export class GitRepos implements OnInit {
 
   ngOnInit() {
     this.settingsService.getSettings().subscribe({
-      next: (cfg) => this.repos.set(cfg.repositories),
+      next: (cfg) => {
+        this.repos.set(cfg.repositories);
+        // Restore from route params (deep-link support)
+        const params = this.route.snapshot.paramMap;
+        const repo = params.get('repo');
+        const branch = params.get('branch');
+        if (repo) {
+          this.selectRepo(repo);
+          if (branch) {
+            // selectRepo loads branches; once loaded, auto-select branch
+            const sub = this.gitService.getNeo4jBranches(repo).subscribe({
+              next: (b) => {
+                this.branches.set(b);
+                this.loadingBranches.set(false);
+                if (b.some(br => br.name === branch)) {
+                  this.selectedBranch.set(branch);
+                  this.branchQuery.set(branch);
+                  this.loadCommits(repo, branch);
+                }
+              },
+            });
+          }
+        }
+      },
     });
     this.gitService.getProcessors().subscribe({
       next: (p) => this.processors.set(p),
     });
+  }
+
+  isDetailCardVisible(processorName: string): boolean {
+    if (!this.detailFilterActive()) return true;
+    if (this.activeProcessorFilters().size === 0) return true;
+    // Map processor names to their node_property for matching
+    const proc = this.processors().find(p => p.name === processorName);
+    return proc ? this.activeProcessorFilters().has(proc.name) : true;
+  }
+
+  isDetailCardVisibleByProp(nodeProperty: string): boolean {
+    if (!this.detailFilterActive()) return true;
+    if (this.activeProcessorFilters().size === 0) return true;
+    const proc = this.processors().find(p => p.node_property === nodeProperty);
+    return proc ? this.activeProcessorFilters().has(proc.name) : true;
+  }
+
+  getProcessorLabel(name: string): string {
+    return this.processors().find(p => p.name === name)?.label || name;
   }
 
   toggleProcessorFilter(name: string) {
@@ -78,6 +125,7 @@ export class GitRepos implements OnInit {
       if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
+    // Close popup if removing from badge click (not from popup)
   }
 
   // ── Repo selection ──
@@ -147,7 +195,7 @@ export class GitRepos implements OnInit {
     this.branchQuery.set(name);
     this.branchOpen.set(false);
     this.loadCommits(this.selectedRepo(), name);
-    this.router.navigate(['/git-repos', this.selectedRepo(), name], { replaceUrl: true });
+    this.location.replaceState(`/git-repos/${encodeURIComponent(this.selectedRepo())}/${encodeURIComponent(name)}`);
   }
 
   clearBranch() {
@@ -179,28 +227,63 @@ export class GitRepos implements OnInit {
   mergeSourceCommits = signal<CommitInfo[]>([]);
   loadingMergeSource = signal(false);
 
-  // Tags
-  commitTags = signal<Map<string, CommitTag[]>>(new Map());
-  loadingTags = signal(false);
-  classifying = signal(false);
-  classifyMessage = signal('');
+  // Source viewer (third column)
+  sourceFile = signal<{ path: string; content: string; addedLines: Set<number>; removedLines: Set<number> } | null>(null);
+  loadingSource = signal(false);
+
+  // Merge rollup
+  mergeRollup = signal<Record<string, any> | null>(null);
+  loadingRollup = signal(false);
+
+  @HostListener('window:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent) {
+    if (!this.selectedCommit()) return;
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    // Don't intercept if user is typing in an input
+    const tag = (event.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    event.preventDefault();
+    const commits = this.filteredCommits();
+    const idx = commits.findIndex(c => c.hash === this.selectedCommit()?.hash);
+    if (idx < 0) return;
+    const next = event.key === 'ArrowDown' ? idx + 1 : idx - 1;
+    if (next >= 0 && next < commits.length) {
+      this.selectCommit(commits[next]);
+      // Scroll into view
+      setTimeout(() => {
+        document.querySelector('.timeline-card.active')
+          ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    }
+  }
 
   selectCommit(commit: CommitInfo) {
     if (this.selectedCommit()?.hash === commit.hash) {
       this.selectedCommit.set(null);
       this.mergeSourceCommits.set([]);
+      this.mergeRollup.set(null);
+      this.sourceFile.set(null);
       return;
     }
     this.selectedCommit.set(commit);
     this.mergeSourceCommits.set([]);
-    this.classifyMessage.set('');
+    this.mergeRollup.set(null);
+    this.sourceFile.set(null);
     if (commit.issue_keys.length > 0) {
       this.loadIssues(commit.issue_keys);
     }
     if (this.isMergeCommit(commit)) {
       this.loadMergeSource(commit.hash);
+      this.loadMergeRollup(commit.hash);
     }
-    this.loadTags(commit.hash);
+  }
+
+  private loadMergeRollup(hash: string) {
+    this.loadingRollup.set(true);
+    this.gitService.getMergeRollup(hash, this.selectedRepo()).subscribe({
+      next: (data) => { this.mergeRollup.set(data); this.loadingRollup.set(false); },
+      error: () => { this.mergeRollup.set(null); this.loadingRollup.set(false); },
+    });
   }
 
   isMergeCommit(commit: CommitInfo): boolean {
@@ -210,7 +293,7 @@ export class GitRepos implements OnInit {
 
   private loadMergeSource(hash: string) {
     this.loadingMergeSource.set(true);
-    this.gitService.getMergeSourceCommits(hash, this.selectedBranch()).subscribe({
+    this.gitService.getMergeSourceCommits(hash, this.selectedRepo(), this.selectedBranch()).subscribe({
       next: (commits) => { this.mergeSourceCommits.set(commits); this.loadingMergeSource.set(false); },
       error: () => { this.mergeSourceCommits.set([]); this.loadingMergeSource.set(false); },
     });
@@ -244,51 +327,60 @@ export class GitRepos implements OnInit {
     return 'status-todo';
   }
 
-  // ── Tags ──
-
-  private loadTags(hash: string) {
-    if (this.commitTags().has(hash)) return;
-    this.loadingTags.set(true);
-    this.gitService.getCommitTags(hash).subscribe({
-      next: (tags) => {
-        this.commitTags.update(m => { const n = new Map(m); n.set(hash, tags); return n; });
-        this.loadingTags.set(false);
-      },
-      error: () => this.loadingTags.set(false),
-    });
-  }
-
-  getTagsFor(hash: string): CommitTag[] {
-    return this.commitTags().get(hash) || [];
-  }
-
-  classifyCommit(hash: string) {
-    this.classifying.set(true);
-    this.classifyMessage.set('');
-    this.gitService.classifyCommits([hash]).subscribe({
+  viewSource(filePath: string) {
+    const commit = this.selectedCommit();
+    const repo = this.selectedRepo();
+    if (!commit || !repo || !filePath) return;
+    this.loadingSource.set(true);
+    this.gitService.getFileAtCommit(repo, commit.hash, filePath).subscribe({
       next: (res) => {
-        this.classifying.set(false);
-        this.classifyMessage.set(`Job started (${res.job_id}). Tags will appear after the job completes.`);
-        // Poll for tags after a short delay
-        setTimeout(() => this.refreshTags(hash), 5000);
-        setTimeout(() => this.refreshTags(hash), 12000);
+        this.sourceFile.set({
+          path: res.path,
+          content: res.content,
+          addedLines: new Set(res.added_lines || []),
+          removedLines: new Set(res.removed_lines || []),
+        });
+        this.loadingSource.set(false);
       },
-      error: (err) => {
-        this.classifying.set(false);
-        this.classifyMessage.set(err.error?.detail || 'Failed to start classification');
-      },
+      error: () => { this.sourceFile.set(null); this.loadingSource.set(false); },
     });
   }
 
-  private refreshTags(hash: string) {
-    this.gitService.getCommitTags(hash).subscribe({
-      next: (tags) => {
-        this.commitTags.update(m => { const n = new Map(m); n.set(hash, tags); return n; });
-        if (tags.length > 0 && this.selectedCommit()?.hash === hash) {
-          this.classifyMessage.set('');
-        }
-      },
+  sourceLines(): { num: number; text: string; type: 'added' | 'removed' | '' }[] {
+    const file = this.sourceFile();
+    if (!file) return [];
+    return file.content.split('\n').map((text, i) => {
+      const num = i + 1;
+      let type: 'added' | 'removed' | '' = '';
+      if (file.addedLines.has(num)) type = 'added';
+      else if (file.removedLines.has(num)) type = 'removed';
+      return { num, text, type };
     });
+  }
+
+  sourceFileName(): string {
+    const path = this.sourceFile()?.path || '';
+    return path.split('/').pop() || path;
+  }
+
+  hasProcessorChanges(commit: CommitInfo, field: string): boolean {
+    const data = this.parseProcessorData(commit, field);
+    if (!data) return false;
+    if (!data.diff) return true; // no diff = initial commit, show it
+    const d = data.diff;
+    return !!(d.added_entities?.length || d.modified_entities?.length || d.removed_entities?.length
+      || d.added_endpoints?.length || d.removed_endpoints?.length);
+  }
+
+  findEntityFile(entities: any[], className: string): string {
+    const e = entities?.find((e: any) => e.class === className);
+    return e?.file || '';
+  }
+
+  parseProcessorData(commit: CommitInfo, field: string): any | null {
+    const raw = (commit as any)[field];
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
   }
 
   parseDbChanges(commit: CommitInfo): { files: string[]; changes: any[] } | null {
@@ -355,16 +447,6 @@ export class GitRepos implements OnInit {
   coveragePercent(commit: CommitInfo): number | null {
     if (!commit.documented_files?.length || !commit.files_count) return null;
     return Math.round((commit.documented_files.length / commit.files_count) * 100);
-  }
-
-  tagColorClass(name: string): string {
-    const map: Record<string, string> = {
-      'business-logic': 'tag-blue', 'bugfix': 'tag-red', 'config-change': 'tag-yellow',
-      'architectural-change': 'tag-purple', 'db-change': 'tag-orange', 'test': 'tag-green',
-      'documentation': 'tag-gray', 'dependency-update': 'tag-teal', 'refactoring': 'tag-indigo',
-      'devops': 'tag-dark',
-    };
-    return map[name] || 'tag-gray';
   }
 
   // ── Helpers ──

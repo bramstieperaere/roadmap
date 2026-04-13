@@ -88,6 +88,28 @@ class DatabaseOverride(BaseModel):
     technology: str      # "mssql", "mongo"
 
 
+class IncubatingProcessorConfig(BaseModel):
+    name: str = ""
+    label: str = ""
+    description: str = ""
+    instructions: str = ""
+    file_patterns: list[str] = []
+    instance_count: int = 0
+
+
+class ProcessingProfileConfig(BaseModel):
+    name: str = ""
+    processors: list[str] = []
+
+
+class GitProcessingConfig(BaseModel):
+    name: str = ""
+    repo_name: str = ""
+    branch: str = ""
+    profile: str = ""
+    processors: list[str] = []
+
+
 class AppConfig(BaseModel):
     neo4j: Neo4jConfig = Neo4jConfig()
     atlassian: AtlassianConfig = AtlassianConfig()
@@ -100,6 +122,9 @@ class AppConfig(BaseModel):
     file_viewers: list[FileViewerConfig] = []
     encryption_salt: Optional[str] = None
     databases: list[DatabaseOverride] = []
+    processing_profiles: list[ProcessingProfileConfig] = []
+    git_processing: list[GitProcessingConfig] = []
+    incubating_processors: list[IncubatingProcessorConfig] = []
 
 
 class UnlockRequest(BaseModel):

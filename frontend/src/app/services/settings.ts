@@ -113,6 +113,22 @@ export interface AppConfig {
   scratch_base_dir: string;
   file_viewers: FileViewerConfig[];
   encryption_salt?: string | null;
+  incubating_processors?: { name: string; label: string; description: string; instructions: string; file_patterns: string[]; instance_count: number }[];
+  processing_profiles?: ProcessingProfileConfig[];
+  git_processing?: GitProcessingConfig[];
+}
+
+export interface ProcessingProfileConfig {
+  name: string;
+  processors: string[];
+}
+
+export interface GitProcessingConfig {
+  name: string;
+  repo_name: string;
+  branch: string;
+  profile: string;
+  processors: string[];
 }
 
 export interface TestConnectionResult {

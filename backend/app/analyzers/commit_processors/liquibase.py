@@ -206,7 +206,8 @@ class LiquibaseProcessor(CommitProcessor):
         return matched
 
     def process(self, repo_path: str, full_hash: str,
-                matched_files: list[str]) -> dict | None:
+                matched_files: list[str],
+                parent_full_hash: str | None = None) -> dict | None:
         all_changes = []
         processed_files = []
 

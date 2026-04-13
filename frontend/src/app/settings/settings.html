@@ -41,6 +41,12 @@
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'processors'" (click)="switchTab('processors')">
         <i class="bi bi-gear"></i> Commit Processors
       </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'profiles'" (click)="switchTab('profiles')">
+        <i class="bi bi-collection"></i> Processing Profiles
+      </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'git-processing'" (click)="switchTab('git-processing')">
+        <i class="bi bi-git"></i> Git Processing
+      </button>
       <div class="nav-group-label">AI</div>
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'providers'" (click)="switchTab('providers')">
         <i class="bi bi-cpu"></i> Providers
@@ -1096,7 +1102,6 @@
                       <option value="repository_analysis">Repository Analysis</option>
                       <option value="functional_doc">Functional Doc Processing</option>
                       <option value="cypher_generation">Cypher Generation</option>
-                      <option value="commit_classification">Commit Classification</option>
                       <option value="context_assistant">Context Assistant</option>
                     </select>
                   </div>
@@ -1346,29 +1351,306 @@
         </div>
       }
 
+      <!-- ═══════════════════ Processing Profiles ═══════════════════ -->
+      @if (activeTab() === 'profiles') {
+        <div data-testid="profiles-tab">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="section-title mb-0"><i class="bi bi-collection me-2"></i>Processing Profiles</h6>
+            <button class="btn btn-outline-primary btn-sm" (click)="addProfile()" [disabled]="editingSection() !== null">
+              <i class="bi bi-plus me-1"></i>Add Profile
+            </button>
+          </div>
+          <p class="text-muted small mb-3">
+            Group processors into reusable profiles. Assign a profile to a Git Processing config instead of selecting processors individually.
+          </p>
+          @for (prof of processingProfiles(); track $index) {
+            @let profIdx = $index;
+            <div class="section-card mb-2">
+              @if (editingSection() === 'profile-' + profIdx) {
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-semibold">{{ prof.name || 'New profile' }}</span>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" (click)="saveProfile(profIdx)"><i class="bi bi-check-lg me-1"></i>Save</button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                    <button class="btn btn-outline-danger btn-sm" (click)="removeProfile(profIdx)"><i class="bi bi-trash"></i></button>
+                  </div>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">Name</label>
+                  <input type="text" class="form-control form-control-sm" placeholder="e.g. Java Spring"
+                         [value]="prof.name" (input)="updateProfileName(profIdx, $any($event.target).value)">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">Processors</label>
+                  <div class="d-flex flex-wrap gap-2">
+                    @for (proc of processors(); track proc.name) {
+                      <label class="form-check form-check-inline mb-0">
+                        <input type="checkbox" class="form-check-input"
+                               [checked]="(prof.processors || []).includes(proc.name)"
+                               (change)="toggleProfileProcessor(profIdx, proc.name)">
+                        <span class="form-check-label small">{{ proc.label }}</span>
+                      </label>
+                    }
+                  </div>
+                </div>
+              } @else {
+                <div class="d-flex align-items-start gap-3">
+                  <i class="bi bi-collection fs-4 text-primary mt-1"></i>
+                  <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="fw-semibold">{{ prof.name }}</span>
+                      <span class="badge text-bg-secondary">{{ prof.processors.length }} processors</span>
+                      <button class="btn btn-outline-secondary btn-sm btn-xs ms-auto"
+                              (click)="startEditing('profile-' + profIdx)" [disabled]="editingSection() !== null">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                    </div>
+                    @if (prof.processors.length > 0) {
+                      <div class="mt-1 d-flex flex-wrap gap-1">
+                        @for (p of prof.processors; track p) {
+                          <span class="badge text-bg-secondary">{{ p }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          } @empty {
+            <div class="text-muted small">No profiles yet. Click "Add Profile" to create one.</div>
+          }
+        </div>
+      }
+
+      <!-- ═══════════════════ Git Processing ═══════════════════ -->
+      @if (activeTab() === 'git-processing') {
+        <div data-testid="git-processing-tab">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="section-title mb-0"><i class="bi bi-git me-2"></i>Git Processing Configs</h6>
+            <button class="btn btn-outline-primary btn-sm" (click)="addGitProcessing()" [disabled]="editingSection() !== null">
+              <i class="bi bi-plus me-1"></i>Add Config
+            </button>
+          </div>
+          <p class="text-muted small mb-3">
+            Define repo + branch + processor combinations. Use these in the Processing page to ingest commits.
+          </p>
+          @for (gp of gitProcessingConfigs(); track $index) {
+            @let gpIdx = $index;
+            <div class="section-card mb-2">
+              @if (editingSection() === 'git-proc-' + gpIdx) {
+                <!-- Edit mode -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-semibold">{{ gp.name || 'New config' }}</span>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" (click)="saveGitProcessing(gpIdx)">
+                      <i class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                    <button class="btn btn-outline-danger btn-sm" (click)="removeGitProcessing(gpIdx)">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-md-4">
+                    <label class="form-label small">Name</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="e.g. country-service-develop"
+                           [value]="gp.name" (input)="updateGitProcessingField(gpIdx, 'name', $any($event.target).value)">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small">Repository</label>
+                    <select class="form-select form-select-sm"
+                            [value]="gp.repo_name"
+                            (change)="updateGitProcessingField(gpIdx, 'repo_name', $any($event.target).value)">
+                      <option value="">-- Select --</option>
+                      @for (repo of config().repositories; track repo.name) {
+                        <option [value]="repo.name">{{ repo.name }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small">Branch</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="e.g. develop"
+                           [value]="gp.branch" (input)="updateGitProcessingField(gpIdx, 'branch', $any($event.target).value)">
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-md-6">
+                    <label class="form-label small">Profile</label>
+                    <select class="form-select form-select-sm"
+                            [value]="gp.profile"
+                            (change)="updateGitProcessingField(gpIdx, 'profile', $any($event.target).value)">
+                      <option value="">-- None --</option>
+                      @for (prof of processingProfiles(); track prof.name) {
+                        <option [value]="prof.name">{{ prof.name }} ({{ prof.processors.length }})</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small">Extra Processors</label>
+                    <div class="d-flex flex-wrap gap-2">
+                      @for (proc of processors(); track proc.name) {
+                        <label class="form-check form-check-inline mb-0">
+                          <input type="checkbox" class="form-check-input"
+                                 [checked]="(gp.processors || []).includes(proc.name)"
+                                 (change)="toggleGitProcessingProcessor(gpIdx, proc.name)">
+                          <span class="form-check-label small">{{ proc.label }}</span>
+                        </label>
+                      }
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <!-- Read mode -->
+                <div class="d-flex align-items-start gap-3">
+                  <i class="bi bi-git fs-4 text-primary mt-1"></i>
+                  <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="fw-semibold">{{ gp.name }}</span>
+                      <button class="btn btn-outline-secondary btn-sm btn-xs ms-auto"
+                              (click)="startEditing('git-proc-' + gpIdx)" [disabled]="editingSection() !== null">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                    </div>
+                    <div class="small text-muted mt-1">
+                      <i class="bi bi-folder2-open me-1"></i>{{ gp.repo_name }}
+                      @if (gp.branch) {
+                        <i class="bi bi-signpost-split ms-2 me-1"></i>{{ gp.branch }}
+                      }
+                      @if (gp.profile) {
+                        <i class="bi bi-collection ms-2 me-1"></i>{{ gp.profile }}
+                      }
+                    </div>
+                    @if (gp.processors.length > 0) {
+                      <div class="mt-1 d-flex flex-wrap gap-1">
+                        @for (p of gp.processors; track p) {
+                          <span class="badge text-bg-secondary">{{ p }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          } @empty {
+            <div class="text-muted small">No git processing configs. Click "Add Config" to create one.</div>
+          }
+        </div>
+      }
+
       <!-- ═══════════════════ Commit Processors ═══════════════════ -->
       @if (activeTab() === 'processors') {
         <div data-testid="processors-tab">
           <h6 class="section-title mb-3"><i class="bi bi-gear me-2"></i>Commit Processors</h6>
           <p class="text-muted small mb-3">
             Commit processors run during git ingestion and extract structured data from commits.
-            Enable them in the <strong>Git Mining</strong> page when ingesting commits.
+            Enable them per-repo in <strong>Settings &gt; Git Repos</strong>.
           </p>
-          @if (processors().length === 0) {
-            <div class="text-muted text-center py-4">No processors available.</div>
-          } @else {
-            @for (proc of processors(); track proc.name) {
-              <div class="section-card mb-2">
-                <div class="d-flex align-items-start gap-3">
-                  <i class="bi bi-gear fs-4 text-primary mt-1"></i>
-                  <div>
-                    <div class="fw-semibold">{{ proc.label }}</div>
-                    <div class="text-muted small">{{ proc.description }}</div>
-                    <div class="mt-1"><code class="small">{{ proc.name }}</code></div>
+
+          <!-- Matured processors -->
+          <small class="text-muted fw-semibold text-uppercase d-block mb-2">Matured</small>
+          @for (proc of maturedProcessors(); track proc.name) {
+            <div class="section-card mb-2">
+              <div class="d-flex align-items-start gap-3">
+                <i class="bi bi-gear fs-4 text-primary mt-1"></i>
+                <div class="flex-grow-1">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="fw-semibold">{{ proc.label }}</span>
+                    <span class="badge text-bg-success">matured</span>
                   </div>
+                  <div class="text-muted small">{{ proc.description }}</div>
+                  <div class="mt-1"><code class="small">{{ proc.name }}</code></div>
                 </div>
               </div>
-            }
+            </div>
+          } @empty {
+            <div class="text-muted small mb-3">No matured processors.</div>
+          }
+
+          <!-- Incubating processors -->
+          <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+            <small class="text-muted fw-semibold text-uppercase">Incubating</small>
+            <button class="btn btn-outline-primary btn-sm" (click)="addIncubatingProcessor()">
+              <i class="bi bi-plus me-1"></i>Add Incubating
+            </button>
+          </div>
+          @for (inc of incubatingProcessors(); track inc.name) {
+            @let incIdx = $index;
+            <div class="section-card mb-2">
+              @if (editingSection() === 'incubating-' + inc.name) {
+                <!-- Edit mode -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-semibold">{{ inc.label || inc.name }}</span>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" (click)="saveIncubatingProcessor(incIdx)">
+                      <i class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
+                    <button class="btn btn-outline-danger btn-sm" (click)="deleteIncubatingProcessor(inc.name)">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-md-4">
+                    <label class="form-label small">Name</label>
+                    <input type="text" class="form-control form-control-sm" [value]="inc.name"
+                           (input)="updateIncubatingField(incIdx, 'name', $any($event.target).value)">
+                  </div>
+                  <div class="col-md-8">
+                    <label class="form-label small">Label</label>
+                    <input type="text" class="form-control form-control-sm" [value]="inc.label"
+                           (input)="updateIncubatingField(incIdx, 'label', $any($event.target).value)">
+                  </div>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">Description</label>
+                  <input type="text" class="form-control form-control-sm" [value]="inc.description"
+                         (input)="updateIncubatingField(incIdx, 'description', $any($event.target).value)">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">File Patterns (one regex per line)</label>
+                  <textarea class="form-control form-control-sm font-monospace" rows="3"
+                            [value]="inc.file_patterns.join('\n')"
+                            (input)="updateIncubatingPatterns(incIdx, $any($event.target).value)"></textarea>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">AI Instructions</label>
+                  <textarea class="form-control form-control-sm" rows="4"
+                            [value]="inc.instructions"
+                            (input)="updateIncubatingField(incIdx, 'instructions', $any($event.target).value)"></textarea>
+                </div>
+              } @else {
+                <!-- Read mode -->
+                <div class="d-flex align-items-start gap-3">
+                  <i class="bi bi-stars fs-4 text-warning mt-1"></i>
+                  <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="fw-semibold">{{ inc.label || inc.name }}</span>
+                      <span class="badge text-bg-warning">incubating</span>
+                      @if (inc.instance_count > 0) {
+                        <span class="badge text-bg-secondary">{{ inc.instance_count }} instances</span>
+                      }
+                      <button class="btn btn-outline-secondary btn-sm btn-xs ms-auto"
+                              (click)="startEditing('incubating-' + inc.name)">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                    </div>
+                    <div class="text-muted small">{{ inc.description }}</div>
+                    @if (inc.file_patterns.length > 0) {
+                      <div class="mt-1">
+                        @for (pat of inc.file_patterns; track pat) {
+                          <code class="small me-1 d-inline-block" style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">{{ pat }}</code>
+                        }
+                      </div>
+                    }
+                    <div class="mt-1"><code class="small">{{ inc.name }}</code></div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @empty {
+            <div class="text-muted small">No incubating processors. They are created from AI suggestions after git ingestion.</div>
           }
         </div>
       }

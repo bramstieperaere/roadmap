@@ -283,23 +283,108 @@ def _discover_branches(repo_path: str) -> list[dict]:
     return branches
 
 
+def _merge_accumulated(accumulated: dict[str, dict], result: dict) -> dict:
+    """Merge a processor delta into the accumulated model.
+
+    The accumulated model is keyed by file path. Each file's processor
+    output replaces the previous version (latest wins per file).
+    Returns the new accumulated state as a flat dict.
+    """
+    for f in result.get("files", []):
+        # Store the full result keyed by file — this captures the latest
+        # state of each file as seen by the processor
+        accumulated[f] = result
+    return accumulated
+
+
+def _build_accumulated_snapshot(accumulated: dict[str, dict]) -> dict:
+    """Build a snapshot of the accumulated model across all files."""
+    # Merge all per-file results into a combined view
+    all_files = sorted(accumulated.keys())
+    if not all_files:
+        return {}
+
+    # Collect items from all unique results
+    seen_results: list[dict] = []
+    seen_ids: set[int] = set()
+    for result in accumulated.values():
+        rid = id(result)
+        if rid not in seen_ids:
+            seen_ids.add(rid)
+            seen_results.append(result)
+
+    # Merge known list fields across all results
+    merged: dict = {"files": all_files}
+    list_keys = {
+        "changes", "entities", "controllers", "components", "datasources",
+        "details", "incoming", "outgoing", "endpoints",
+    }
+    for result in seen_results:
+        for key, value in result.items():
+            if key == "files":
+                continue
+            if key in list_keys and isinstance(value, list):
+                merged.setdefault(key, []).extend(value)
+            elif key not in merged:
+                merged[key] = value
+
+    # Dedup entities by class name (keep latest)
+    if "entities" in merged:
+        by_class: dict[str, dict] = {}
+        for e in merged["entities"]:
+            by_class[e.get("class", "")] = e
+        merged["entities"] = list(by_class.values())
+
+    # Dedup controllers by name (keep latest)
+    if "controllers" in merged:
+        by_name: dict[str, dict] = {}
+        for c in merged["controllers"]:
+            by_name[c.get("controller", "")] = c
+        merged["controllers"] = list(by_name.values())
+
+    # Dedup messaging components by class
+    if "components" in merged:
+        by_class2: dict[str, dict] = {}
+        for c in merged["components"]:
+            by_class2[c.get("class", "")] = c
+        merged["components"] = list(by_class2.values())
+
+    return merged
+
+
 def _run_processors(driver, processors, repo_path: str, commits: list[dict],
-                    job_id: str):
-    """Run commit processors and store results on Neo4j commit nodes."""
+                    job_id: str,
+                    documented: dict[str, set[str]] | None = None,
+                    ) -> dict[str, set[str]]:
+    """Run commit processors and store results on Neo4j commit nodes.
+
+    Processes commits in chronological order (oldest first) to build
+    accumulated models. Stores both delta and accumulated state.
+
+    Returns the documented files mapping (hash -> set of file paths).
+    """
     from app.analyzers.commit_processors import CommitProcessor
 
     # Track documented files per commit across all processors
-    documented: dict[str, set[str]] = {}
+    if documented is None:
+        documented = {}
+
+    # Sort commits oldest-first for accumulation
+    sorted_commits = sorted(commits, key=lambda c: c.get("date", ""))
 
     for proc in processors:
         proc: CommitProcessor
         job_store.add_log(job_id, "info",
                           f"  Running processor: {proc.label}")
-        batch: list[dict] = []
+        delta_batch: list[dict] = []
+        acc_batch: list[dict] = []
         detected_count = 0
         processed_count = 0
 
-        for commit in commits:
+        # Per-file accumulation for this processor
+        accumulated: dict[str, dict] = {}
+
+        for commit in sorted_commits:
             matched = proc.detect(commit.get("files_changed", []))
             if not matched:
                 continue
@@ -310,7 +395,17 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
                 f"{', '.join(matched[:5])}"
                 f"{'...' if len(matched) > 5 else ''}")
 
-            result = proc.process(repo_path, commit["full_hash"], matched)
+            parent_hashes = commit.get("parent_hashes", [])
+            parent_full = None
+            if parent_hashes:
+                # Look up full hash of first parent from commits list
+                ph = parent_hashes[0]
+                for c2 in sorted_commits:
+                    if c2["hash"] == ph:
+                        parent_full = c2["full_hash"]
+                        break
+            result = proc.process(repo_path, commit["full_hash"], matched,
+                                  parent_full)
             if result:
                 processed_count += 1
                 # Track which files this processor documented
@@ -326,28 +421,60 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
                         summary_parts.append(f"{op}({table})")
                     else:
                         summary_parts.append(op)
-                job_store.add_log(
-                    job_id, "info",
-                    f"    {commit['hash']} - processed: "
-                    f"{', '.join(summary_parts[:10])}"
-                    f"{'...' if len(summary_parts) > 10 else ''}")
-                batch.append({
+                if summary_parts:
+                    job_store.add_log(
+                        job_id, "info",
+                        f"    {commit['hash']} - processed: "
+                        f"{', '.join(summary_parts[:10])}"
+                        f"{'...' if len(summary_parts) > 10 else ''}")
+
+                # Store delta
+                delta_batch.append({
                     "hash": commit["hash"],
                     "value": json.dumps(result),
                 })
 
-        # Batch-write results to Neo4j
-        if batch:
+                # Update and store accumulated model
+                _merge_accumulated(accumulated, result)
+                acc_snapshot = _build_accumulated_snapshot(accumulated)
+                acc_batch.append({
+                    "hash": commit["hash"],
+                    "value": json.dumps(acc_snapshot),
+                })
+
+        # Batch-write deltas to Neo4j
+        if delta_batch:
             cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
                 prop=proc.node_property)
-            for i in range(0, len(batch), _BATCH_SIZE):
-                chunk = batch[i:i + _BATCH_SIZE]
+            for i in range(0, len(delta_batch), _BATCH_SIZE):
+                chunk = delta_batch[i:i + _BATCH_SIZE]
+                run_cypher_write(driver, cypher, {"items": chunk})
+
+        # Batch-write accumulated models
+        if acc_batch:
+            cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
+                prop=f"{proc.node_property}_acc")
+            for i in range(0, len(acc_batch), _BATCH_SIZE):
+                chunk = acc_batch[i:i + _BATCH_SIZE]
                 run_cypher_write(driver, cypher, {"items": chunk})
 
         job_store.add_log(
             job_id, "info",
             f"  {proc.label}: {detected_count} commits detected, "
             f"{processed_count} with changes")
+
+        # Update instance_count for incubating processors
+        if proc.status == "incubating" and processed_count > 0:
+            try:
+                from app.config import load_config, save_config
+                cfg = load_config()
+                for inc in cfg.incubating_processors:
+                    if inc.name == proc.name:
+                        inc.instance_count += processed_count
+                        save_config(cfg)
+                        break
+            except Exception:
+                pass  # non-critical
 
     # Write documented_files for all commits that had processor output
     if documented:
@@ -366,6 +493,8 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
             job_id, "info",
             f"  Documentation coverage: {len(documented)} commits, "
             f"{total_files} files documented")
+
+    return documented
 
 
 async def run_ingest_commits(job_id: str, repos: list[dict],
@@ -514,19 +643,73 @@ async def run_ingest_commits(job_id: str, repos: list[dict],
                 f"{issue_count} issue refs, "
                 f"{len(unique_files)} unique files")
 
-            # Run commit processors configured for this repo
+            # ── Run commit processors ──
+            documented: dict[str, set[str]] = {}
+
+            # 1. Matured processors (configured per-repo)
             repo_processor_names = repo.get("processors", [])
             if repo_processor_names:
                 from app.analyzers.commit_processors import get_processors_by_name
-                processors = get_processors_by_name(repo_processor_names)
-                if processors:
+                matured = get_processors_by_name(repo_processor_names)
+                if matured:
                     job_store.add_log(
                         job_id, "info",
-                        f"{repo_name}: running commit processors: "
-                        f"{', '.join(p.label for p in processors)}")
-                    await asyncio.to_thread(
-                        _run_processors, driver, processors,
+                        f"{repo_name}: running matured processors: "
+                        f"{', '.join(p.label for p in matured)}")
+                    documented = await asyncio.to_thread(
+                        _run_processors, driver, matured,
                         repo_path, commits, job_id)
+
+            # 2. Incubating processors (global, from config)
+            from app.config import load_config_decrypted
+            from app.analyzers.commit_processors import get_incubating_processors
+            app_config = load_config_decrypted()
+            incubating = get_incubating_processors(app_config)
+            if incubating:
+                job_store.add_log(
+                    job_id, "info",
+                    f"{repo_name}: running incubating processors: "
+                    f"{', '.join(p.label for p in incubating)}")
+                documented = await asyncio.to_thread(
+                    _run_processors, driver, incubating,
+                    repo_path, commits, job_id, documented)
+
+            # 3. Coverage checker (always last)
+            from app.analyzers.commit_processors.coverage_checker import (
+                run_coverage_check, suggest_new_processors)
+            job_store.add_log(job_id, "info",
+                              f"{repo_name}: running coverage check...")
+            uncovered_map = run_coverage_check(
+                commits, documented, job_id)
+            if uncovered_map:
+                # Store uncovered_files on commit nodes
+                uncov_batch = [
+                    {"hash": h, "value": files}
+                    for h, files in uncovered_map.items()
+                ]
+                cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
+                    prop="uncovered_files")
+                for i in range(0, len(uncov_batch), _BATCH_SIZE):
+                    chunk = uncov_batch[i:i + _BATCH_SIZE]
+                    await asyncio.to_thread(
+                        run_cypher_write, driver, cypher,
+                        {"items": chunk})
+
+                # AI suggestions for new processors
+                suggestions = await asyncio.to_thread(
+                    suggest_new_processors, uncovered_map, job_id)
+                if suggestions:
+                    # Store suggestions on the job for review
+                    job_store.add_log(
+                        job_id, "info",
+                        f"{repo_name}: processor suggestions stored "
+                        f"in job params")
+                    job = job_store.get_job(job_id)
+                    if job:
+                        existing = job.params.get(
+                            "processor_suggestions", {})
+                        existing[repo_name] = suggestions
+                        job.params["processor_suggestions"] = existing
 
         job_store.add_log(job_id, "info",
                           f"Done. {total_commits_all} commits, "

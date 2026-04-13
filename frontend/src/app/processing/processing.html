@@ -80,84 +80,117 @@
         <button class="btn-close" style="font-size: 0.75rem;" (click)="closeModal()"></button>
       </div>
 
-      <!-- Step 1: Repositories -->
-      <div class="modal-panel-toolbar">
-        <span class="panel-label">Repositories</span>
-        <div class="d-flex gap-2">
-          <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectAll()" data-testid="modal-select-all">All</button>
-          <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectNone()" data-testid="modal-select-none">None</button>
-        </div>
-      </div>
-      <div class="modal-panel-body">
-        @for (repo of repos(); track $index) {
-          @let i = $index;
-          <label class="repo-row" [class.selected]="isSelected(i)" [attr.data-testid]="'modal-repo-row-' + i">
-            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
-                   [checked]="isSelected(i)"
-                   (change)="toggle(i)">
-            <i class="bi bi-folder2 flex-shrink-0 text-muted"></i>
-            <span class="repo-row-name">{{ repo.name }}</span>
-            @if (repo.modules.length) {
-              <span class="repo-row-badge">{{ repo.modules.length }}</span>
-            } @else {
-              <span class="repo-row-warn" title="No modules configured">!</span>
-            }
-          </label>
-        }
-        @empty {
-          <p class="text-muted small px-3 py-2 mb-0">
-            No repositories configured. Add them in
-            <a routerLink="/settings" [queryParams]="{tab: 'repos'}">Settings</a>.
-          </p>
-        }
-      </div>
-
-      <!-- Step 2: Traversal (only for git mining actions) -->
-      @if (supportsTraversal && hasSelection) {
+      @if (usesProcessingConfig) {
+        <!-- Ingest commits: select processing config -->
         <div class="modal-panel-toolbar">
-          <span class="panel-label">Traversal</span>
+          <span class="panel-label">Processing Config</span>
+          <a class="btn btn-link btn-sm p-0 text-muted" routerLink="/settings" [queryParams]="{tab: 'git-processing'}" (click)="closeModal()">
+            <i class="bi bi-gear me-1"></i>Manage
+          </a>
         </div>
-        <div class="modal-traversal">
-          <label class="traversal-option">
-            <input type="radio" name="traversal" class="form-check-input mt-0"
-                   [checked]="traversalMode() === 'all'"
-                   (change)="setTraversalMode('all')">
-            <span>All commits</span>
-          </label>
-          <label class="traversal-option">
-            <input type="radio" name="traversal" class="form-check-input mt-0"
-                   [checked]="traversalMode() === 'branches'"
-                   (change)="setTraversalMode('branches')">
-            <span>Filter by branch</span>
-          </label>
-          @if (traversalMode() === 'branches') {
-            <div class="branch-picker">
-              @if (loadingBranches()) {
-                <div class="text-center py-2"><span class="spinner-border spinner-border-sm text-primary"></span></div>
-              } @else if (selected().size !== 1) {
-                <div class="text-muted small px-2 py-1">Select exactly one repository to pick branches.</div>
-              } @else if (branches().length === 0) {
-                <div class="text-muted small px-2 py-1">No branches found.</div>
-              } @else {
-                @for (b of branches(); track b) {
-                  <label class="branch-row">
-                    <input type="checkbox" class="form-check-input mt-0"
-                           [checked]="selectedBranches().has(b)"
-                           (change)="toggleBranch(b)">
-                    <i class="bi bi-git text-muted" style="font-size: 0.8rem;"></i>
-                    <span>{{ b }}</span>
-                  </label>
-                }
-              }
-            </div>
+        <div class="modal-panel-body">
+          @for (pc of processingConfigs(); track pc.name) {
+            <label class="repo-row" [class.selected]="selectedProcessingConfig() === pc.name">
+              <input type="radio" name="processing-config" class="form-check-input mt-0 flex-shrink-0"
+                     [checked]="selectedProcessingConfig() === pc.name"
+                     (change)="selectedProcessingConfig.set(pc.name)">
+              <div class="d-flex flex-column">
+                <span class="repo-row-name">{{ pc.name }}</span>
+                <span class="text-muted" style="font-size: 0.7rem;">
+                  <i class="bi bi-folder2-open me-1"></i>{{ pc.repo_name }}
+                  @if (pc.branch) { <i class="bi bi-signpost-split ms-1 me-1"></i>{{ pc.branch }} }
+                  @if (pc.processors.length) { <span class="ms-1">({{ pc.processors.length }} processors)</span> }
+                </span>
+              </div>
+            </label>
+          }
+          @empty {
+            <p class="text-muted small px-3 py-2 mb-0">
+              No processing configs.
+              <a routerLink="/settings" [queryParams]="{tab: 'git-processing'}" (click)="closeModal()">Create one in Settings</a>.
+            </p>
           }
         </div>
+      } @else {
+        <!-- Other actions: select repositories -->
+        <div class="modal-panel-toolbar">
+          <span class="panel-label">Repositories</span>
+          <div class="d-flex gap-2">
+            <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectAll()" data-testid="modal-select-all">All</button>
+            <button class="btn btn-link btn-sm p-0 text-muted" (click)="selectNone()" data-testid="modal-select-none">None</button>
+          </div>
+        </div>
+        <div class="modal-panel-body">
+          @for (repo of repos(); track $index) {
+            @let i = $index;
+            <label class="repo-row" [class.selected]="isSelected(i)" [attr.data-testid]="'modal-repo-row-' + i">
+              <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                     [checked]="isSelected(i)"
+                     (change)="toggle(i)">
+              <i class="bi bi-folder2 flex-shrink-0 text-muted"></i>
+              <span class="repo-row-name">{{ repo.name }}</span>
+              @if (repo.modules.length) {
+                <span class="repo-row-badge">{{ repo.modules.length }}</span>
+              } @else {
+                <span class="repo-row-warn" title="No modules configured">!</span>
+              }
+            </label>
+          }
+          @empty {
+            <p class="text-muted small px-3 py-2 mb-0">
+              No repositories configured. Add them in
+              <a routerLink="/settings" [queryParams]="{tab: 'repos'}">Settings</a>.
+            </p>
+          }
+        </div>
+
+        <!-- Traversal (only for link-jira-tickets) -->
+        @if (supportsTraversal && hasSelection) {
+          <div class="modal-panel-toolbar">
+            <span class="panel-label">Traversal</span>
+          </div>
+          <div class="modal-traversal">
+            <label class="traversal-option">
+              <input type="radio" name="traversal" class="form-check-input mt-0"
+                     [checked]="traversalMode() === 'all'"
+                     (change)="setTraversalMode('all')">
+              <span>All commits</span>
+            </label>
+            <label class="traversal-option">
+              <input type="radio" name="traversal" class="form-check-input mt-0"
+                     [checked]="traversalMode() === 'branches'"
+                     (change)="setTraversalMode('branches')">
+              <span>Filter by branch</span>
+            </label>
+            @if (traversalMode() === 'branches') {
+              <div class="branch-picker">
+                @if (loadingBranches()) {
+                  <div class="text-center py-2"><span class="spinner-border spinner-border-sm text-primary"></span></div>
+                } @else if (selected().size !== 1) {
+                  <div class="text-muted small px-2 py-1">Select exactly one repository to pick branches.</div>
+                } @else if (branches().length === 0) {
+                  <div class="text-muted small px-2 py-1">No branches found.</div>
+                } @else {
+                  @for (b of branches(); track b) {
+                    <label class="branch-row">
+                      <input type="checkbox" class="form-check-input mt-0"
+                             [checked]="selectedBranches().has(b)"
+                             (change)="toggleBranch(b)">
+                      <i class="bi bi-git text-muted" style="font-size: 0.8rem;"></i>
+                      <span>{{ b }}</span>
+                    </label>
+                  }
+                }
+              </div>
+            }
+          </div>
+        }
       }
 
       <div class="modal-panel-footer">
         <button class="btn btn-outline-secondary btn-sm" (click)="closeModal()">Cancel</button>
         <button class="btn btn-primary btn-sm"
-                [disabled]="!hasSelection || starting()"
+                [disabled]="!canStart || starting()"
                 (click)="confirmStart()"
                 data-testid="modal-confirm-start">
           @if (starting()) {

@@ -11,107 +11,136 @@
   </div>
 
   <div class="section-content p-3">
-
-    <!-- ── Pickers ─────────────────────────────────────────────────── -->
-    <div class="picker-row mb-3">
-      <div class="picker">
-        <label class="picker-label">Repository</label>
-        <div class="autocomplete-wrap">
-          <input type="text" class="form-control form-control-sm ac-input"
-                 placeholder="Search repositories..."
-                 [ngModel]="repoQuery()" (ngModelChange)="onRepoInput($event)"
-                 (focus)="onRepoFocus()" (blur)="onRepoBlur()">
-          @if (repoQuery()) {
-            <button class="ac-clear" type="button" (mousedown)="clearRepo()" title="Clear"><i class="bi bi-x-lg"></i></button>
-          }
-          @if (repoOpen() && filteredRepos().length > 0) {
-            <div class="autocomplete-list">
-              @for (r of filteredRepos(); track r.name) {
-                <div class="autocomplete-item" [class.active]="selectedRepo() === r.name"
-                     (mousedown)="selectRepo(r.name)">
-                  <i class="bi bi-git text-muted"></i>
-                  <span>{{ r.name }}</span>
-                </div>
+    <div class="commits-layout">
+      <!-- ── Column 1: pickers + filters + timeline ──────────────── -->
+      <div class="timeline-column">
+        <div class="controls-card mb-2">
+        <div class="picker-row">
+          <div class="picker">
+            <label class="picker-label">Repository</label>
+            <div class="autocomplete-wrap">
+              <input type="text" class="form-control form-control-sm ac-input"
+                     placeholder="Search repositories..."
+                     [ngModel]="repoQuery()" (ngModelChange)="onRepoInput($event)"
+                     (focus)="onRepoFocus()" (blur)="onRepoBlur()">
+              @if (repoQuery()) {
+                <button class="ac-clear" type="button" (mousedown)="clearRepo()" title="Clear"><i class="bi bi-x-lg"></i></button>
               }
-            </div>
-          }
-        </div>
-      </div>
-
-      <div class="picker">
-        <label class="picker-label">Branch</label>
-        <div class="autocomplete-wrap">
-          <input type="text" class="form-control form-control-sm ac-input"
-                 placeholder="Search branches..."
-                 [disabled]="!selectedRepo() || noBranches()"
-                 [ngModel]="branchQuery()" (ngModelChange)="onBranchInput($event)"
-                 (focus)="onBranchFocus()" (blur)="onBranchBlur()">
-          @if (branchQuery()) {
-            <button class="ac-clear" type="button" (mousedown)="clearBranch()" title="Clear"><i class="bi bi-x-lg"></i></button>
-          }
-          @if (loadingBranches()) {
-            <div class="autocomplete-list">
-              <div class="autocomplete-item text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>
-            </div>
-          } @else if (branchOpen() && filteredBranches().length > 0) {
-            <div class="autocomplete-list">
-              @for (b of filteredBranches(); track b.name) {
-                <div class="autocomplete-item" [class.active]="selectedBranch() === b.name"
-                     (mousedown)="selectBranch(b.name)">
-                  <i class="bi bi-signpost-split text-muted"></i>
-                  <span>{{ b.name }}</span>
-                  @if (b.tip_hash) {
-                    <code class="tip-hash ms-auto">{{ b.tip_hash }}</code>
+              @if (repoOpen() && filteredRepos().length > 0) {
+                <div class="autocomplete-list">
+                  @for (r of filteredRepos(); track r.name) {
+                    <div class="autocomplete-item" [class.active]="selectedRepo() === r.name"
+                         (mousedown)="selectRepo(r.name)">
+                      <i class="bi bi-git text-muted"></i>
+                      <span>{{ r.name }}</span>
+                    </div>
                   }
                 </div>
               }
             </div>
-          }
-        </div>
-        @if (noBranches() && !loadingBranches()) {
-          <div class="picker-hint text-warning small mt-1">
-            <i class="bi bi-exclamation-triangle me-1"></i>No branches ingested for this repository.
-            Run <a routerLink="/processing">Ingest Git Commits</a> first.
           </div>
-        }
-      </div>
-    </div>
 
-    @if (error()) {
-      <div class="alert alert-danger py-2">{{ error() }}</div>
-    }
+          <div class="picker">
+            <label class="picker-label">Branch</label>
+            <div class="autocomplete-wrap">
+              <input type="text" class="form-control form-control-sm ac-input"
+                     placeholder="Search branches..."
+                     [disabled]="!selectedRepo() || noBranches()"
+                     [ngModel]="branchQuery()" (ngModelChange)="onBranchInput($event)"
+                     (focus)="onBranchFocus()" (blur)="onBranchBlur()">
+              @if (branchQuery()) {
+                <button class="ac-clear" type="button" (mousedown)="clearBranch()" title="Clear"><i class="bi bi-x-lg"></i></button>
+              }
+              @if (loadingBranches()) {
+                <div class="autocomplete-list">
+                  <div class="autocomplete-item text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>
+                </div>
+              } @else if (branchOpen() && filteredBranches().length > 0) {
+                <div class="autocomplete-list">
+                  @for (b of filteredBranches(); track b.name) {
+                    <div class="autocomplete-item" [class.active]="selectedBranch() === b.name"
+                         (mousedown)="selectBranch(b.name)">
+                      <i class="bi bi-signpost-split text-muted"></i>
+                      <span>{{ b.name }}</span>
+                      @if (b.tip_hash) {
+                        <code class="tip-hash ms-auto">{{ b.tip_hash }}</code>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+            @if (noBranches() && !loadingBranches()) {
+              <div class="picker-hint text-warning small mt-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>No branches ingested.
+                <a routerLink="/processing">Ingest Git Commits</a> first.
+              </div>
+            }
+          </div>
+        </div>
 
-    <!-- ── Processor filters ───────────────────────────────────────── -->
-    @if (commits().length > 0 && processors().length > 0) {
-      <div class="filter-bar mb-3">
-        <span class="text-muted small me-2"><i class="bi bi-funnel me-1"></i>Filter:</span>
-        @for (proc of processors(); track proc.name) {
-          <button class="btn btn-sm filter-toggle"
-                  [class.active]="activeProcessorFilters().has(proc.name)"
-                  (click)="toggleProcessorFilter(proc.name)">
-            <i class="bi bi-database me-1"></i>{{ proc.label }}
-          </button>
+        @if (error()) {
+          <div class="alert alert-danger py-2">{{ error() }}</div>
         }
-        @if (activeProcessorFilters().size > 0) {
-          <span class="text-muted small ms-2">
-            {{ filteredCommits().length }} of {{ commits().length }} commits
-          </span>
-        }
-      </div>
-    }
 
-    <!-- ── Timeline ────────────────────────────────────────────────── -->
-    @if (loadingCommits()) {
-      <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
-    } @else if (selectedBranch() && commits().length === 0) {
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-clock-history d-block mb-2" style="font-size: 2rem;"></i>
-        No commits found on this branch.
-      </div>
-    } @else if (filteredCommits().length > 0) {
-      <div class="commit-count text-muted small mb-3">{{ filteredCommits().length }} commits on <strong>{{ selectedBranch() }}</strong></div>
-      <div class="commits-layout">
-        <div class="timeline">
+        </div><!-- /controls-card -->
+
+        <div class="timeline-card-wrap">
+        @if (loadingCommits()) {
+          <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+        } @else if (selectedBranch() && commits().length === 0) {
+          <div class="text-center text-muted py-5">
+            <i class="bi bi-clock-history d-block mb-2" style="font-size: 2rem;"></i>
+            No commits found on this branch.
+          </div>
+        } @else if (commits().length > 0) {
+          <div class="commit-count-bar">
+            <span class="text-muted small">
+              @if (activeProcessorFilters().size > 0) {
+                {{ filteredCommits().length }} of {{ commits().length }}
+              } @else {
+                {{ filteredCommits().length }}
+              }
+              commits on <strong>{{ selectedBranch() }}</strong>
+            </span>
+            @for (name of activeProcessorFilters(); track name) {
+              <span class="filter-badge" (click)="toggleProcessorFilter(name)" title="Remove filter">
+                {{ getProcessorLabel(name) }} <i class="bi bi-x-lg"></i>
+              </span>
+            }
+            @if (processors().length > 0) {
+              <button class="btn btn-sm filter-icon-btn ms-auto"
+                      [class.active]="filterPopupOpen() || activeProcessorFilters().size > 0"
+                      (click)="filterPopupOpen.set(!filterPopupOpen())"
+                      title="Filter commits">
+                <i class="bi" [class.bi-funnel-fill]="activeProcessorFilters().size > 0" [class.bi-funnel]="activeProcessorFilters().size === 0"></i>
+              </button>
+            }
+          </div>
+          @if (filterPopupOpen()) {
+            <div class="filter-panel">
+              <div class="filter-panel-header">
+                <span class="small fw-semibold">Filter by Processor</span>
+                <button class="btn btn-sm filter-icon-btn" (click)="filterPopupOpen.set(false)"><i class="bi bi-x-lg"></i></button>
+              </div>
+              @for (proc of processors(); track proc.name) {
+                <label class="filter-popup-item">
+                  <input type="checkbox" class="form-check-input me-2"
+                         [checked]="activeProcessorFilters().has(proc.name)"
+                         (change)="toggleProcessorFilter(proc.name)">
+                  <i class="bi me-1" [class.bi-gear]="proc.status === 'matured'" [class.bi-stars]="proc.status === 'incubating'"></i>
+                  <span>{{ proc.label }}</span>
+                </label>
+              }
+            </div>
+          }
+          @if (filteredCommits().length === 0) {
+            <div class="text-center text-muted py-4">
+              <i class="bi bi-funnel d-block mb-2" style="font-size: 1.5rem;"></i>
+              <div class="small">No commits match the active filter.</div>
+            </div>
+          } @else {
+          <div class="timeline">
           @for (group of commitsByDate(); track group.date) {
             <div class="timeline-date">
               <span class="timeline-date-label">{{ group.date }}</span>
@@ -137,116 +166,197 @@
                     @if (c.db_changes) {
                       <span class="issue-badge" style="background: #e8f4e8; color: #2d6a2d;" title="Database changes"><i class="bi bi-database me-1"></i>DB</span>
                     }
+                    @if (hasProcessorChanges(c, 'jpa_entities')) {
+                      <span class="issue-badge" style="background: #e8e4f4; color: #4a2d8c;" title="JPA entities"><i class="bi bi-diagram-3 me-1"></i>JPA</span>
+                    }
+                    @if (hasProcessorChanges(c, 'spring_endpoints')) {
+                      <span class="issue-badge" style="background: #e4f0f8; color: #1a5276;" title="REST endpoints"><i class="bi bi-signpost-2 me-1"></i>API</span>
+                    }
+                    @if (c.spring_messaging) {
+                      <span class="issue-badge" style="background: #f8f0e4; color: #7d5a1a;" title="Messaging"><i class="bi bi-envelope me-1"></i>MSG</span>
+                    }
+                    @if (c.spring_datasource) {
+                      <span class="issue-badge" style="background: #e4f8f0; color: #1a7d5a;" title="DataSource config"><i class="bi bi-hdd-network me-1"></i>DS</span>
+                    }
                     @if (coveragePercent(c) !== null) {
                       <span class="coverage-badge" [title]="(c.documented_files?.length || 0) + '/' + c.files_count + ' files documented'">
                         <i class="bi bi-file-check me-1"></i>{{ coveragePercent(c) }}%
                       </span>
-                    }
-                    @for (tag of getTagsFor(c.hash); track tag.name) {
-                      <span class="commit-tag commit-tag-sm" [class]="tagColorClass(tag.name)">{{ tag.label }}</span>
                     }
                   </div>
                 </div>
               </div>
             }
           }
-        </div>
+          </div>
+          }
+        } @else if (!selectedRepo()) {
+          <div class="text-center text-muted py-5">
+            <i class="bi bi-git d-block mb-2" style="font-size: 2rem;"></i>
+            Select a repository and branch to view commits.
+          </div>
+        } @else if (!selectedBranch()) {
+          <div class="text-center text-muted py-5">
+            <i class="bi bi-signpost-split d-block mb-2" style="font-size: 2rem;"></i>
+            Select a branch to view commits.
+          </div>
+        }
+        </div><!-- /timeline-card-wrap -->
+      </div><!-- /timeline-column -->
 
-        <!-- ── Detail panel ──────────────────────────────────────── -->
+        <!-- ── Detail column ──────────────────────────────────────── -->
         @if (selectedCommit(); as commit) {
-          <div class="detail-panel">
-            <div class="detail-header">
-              <code class="commit-hash">{{ commit.hash }}</code>
-              <span class="text-muted small">{{ formatDate(commit.date) }} {{ formatTime(commit.date) }}</span>
-            </div>
-            <div class="detail-body">
-              <div class="detail-field">
-                <div class="detail-label">Message</div>
-                <div class="detail-value">{{ commit.message }}</div>
-              </div>
-              <div class="detail-field">
-                <div class="detail-label">Author</div>
-                <div class="detail-value">{{ commit.author_name }} <span class="text-muted">&lt;{{ commit.author_email }}&gt;</span></div>
-              </div>
-              @if (commit.files_count) {
-                <div class="detail-field">
-                  <div class="detail-label">Files changed</div>
-                  <div class="detail-value">{{ commit.files_count }}</div>
-                </div>
-              }
-              <div class="detail-field">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="detail-label">Tags</div>
-                  <button class="btn btn-outline-primary btn-sm btn-xs" (click)="classifyCommit(commit.hash)"
-                          [disabled]="classifying()" title="Classify with AI">
-                    @if (classifying()) {
-                      <span class="spinner-border spinner-border-sm"></span>
-                    } @else {
-                      <i class="bi bi-stars me-1"></i>Classify
-                    }
+          <div class="detail-column">
+
+            <!-- Detail filter card -->
+            @if (activeProcessorFilters().size > 0) {
+              <div class="detail-card detail-filter-card">
+                <div class="detail-card-body py-2 px-3">
+                  <button class="btn btn-sm detail-filter-toggle w-100"
+                          [class.active]="detailFilterActive()"
+                          (click)="detailFilterActive.set(!detailFilterActive())">
+                    <i class="bi me-1" [class.bi-funnel-fill]="detailFilterActive()" [class.bi-funnel]="!detailFilterActive()"></i>
+                    Show only selected processor cards
                   </button>
                 </div>
-                @if (loadingTags()) {
-                  <div class="py-1"><span class="spinner-border spinner-border-sm text-muted"></span></div>
-                } @else if (getTagsFor(commit.hash).length > 0) {
-                  <div class="tag-list">
-                    @for (tag of getTagsFor(commit.hash); track tag.name) {
-                      <span class="commit-tag" [class]="tagColorClass(tag.name)">{{ tag.label }}</span>
-                    }
+              </div>
+            }
+
+            <!-- Commit info card -->
+            @if (!detailFilterActive() || activeProcessorFilters().size === 0) {
+            <div class="detail-card">
+              <div class="detail-card-header">
+                <code class="commit-hash">{{ commit.hash }}</code>
+                <span class="text-muted small">{{ formatDate(commit.date) }} {{ formatTime(commit.date) }}</span>
+              </div>
+              <div class="detail-card-body">
+                <div class="detail-field">
+                  <div class="detail-label">Message</div>
+                  <div class="detail-value">{{ commit.message }}</div>
+                </div>
+                <div class="detail-field">
+                  <div class="detail-label">Author</div>
+                  <div class="detail-value">{{ commit.author_name }} <span class="text-muted">&lt;{{ commit.author_email }}&gt;</span></div>
+                </div>
+                @if (commit.files_count) {
+                  <div class="detail-field">
+                    <div class="detail-label">Files changed</div>
+                    <div class="detail-value">{{ commit.files_count }}</div>
                   </div>
-                } @else {
-                  <div class="text-muted small">No tags yet</div>
                 }
-                @if (classifyMessage()) {
-                  <div class="text-muted small mt-1">{{ classifyMessage() }}</div>
+                @if (commit.documented_files?.length) {
+                  <div class="detail-field">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="detail-label mb-0"><i class="bi bi-file-check me-1"></i>Coverage</div>
+                      <div class="coverage-bar-track">
+                        <div class="coverage-bar-fill" [style.width.%]="coveragePercent(commit) || 0"></div>
+                      </div>
+                      <span class="small fw-medium">{{ coveragePercent(commit) }}%</span>
+                    </div>
+                  </div>
                 }
               </div>
+            </div>
+            }
 
-              @if (parseDbChanges(commit); as db) {
-                <div class="detail-field">
-                  <div class="detail-label">
-                    <i class="bi bi-database me-1"></i>Database Changes
-                  </div>
-                  @if (db.files.length > 0) {
-                    <div class="mb-2">
-                      @for (f of db.files; track f) {
-                        <div class="text-muted small"><i class="bi bi-file-earmark-code me-1"></i>{{ f }}</div>
+            <!-- PR Rollup card (for merge commits) -->
+            @if (!detailFilterActive() || activeProcessorFilters().size === 0) {
+            @if (isMergeCommit(commit) && mergeRollup(); as rollup) {
+              <div class="detail-card rollup-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-git me-1"></i><span class="fw-semibold small">Pull Request Summary</span>
+                  <span class="badge text-bg-primary ms-auto">{{ rollup['commit_count'] }} commits</span>
+                </div>
+                <div class="detail-card-body">
+                  @if (rollup['jpa_entities']; as jpa) {
+                    <div class="rollup-section">
+                      <div class="rollup-label"><i class="bi bi-diagram-3 me-1"></i>JPA Entities</div>
+                      @for (entity of jpa.entities; track entity.class) {
+                        <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === entity.file" (click)="viewSource(entity.file)">
+                          <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-table text-primary"></i>
+                            <strong class="small">{{ entity.class }}</strong>
+                            <code class="small text-muted">{{ entity.table }}</code>
+                          </div>
+                        </div>
                       }
                     </div>
                   }
-                  <div class="db-changes-list">
-                    @for (change of db.changes; track $index) {
-                      <div class="db-change-row">
-                        <i class="bi me-2" [class]="dbChangeIcon(change.op)"></i>
-                        <code class="small">{{ dbChangeLabel(change) }}</code>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
-
-              @if (commit.documented_files?.length) {
-                <div class="detail-field">
-                  <div class="detail-label">
-                    <i class="bi bi-file-check me-1"></i>Processor Coverage
-                  </div>
-                  <div class="d-flex align-items-center gap-2 mb-2">
-                    <div class="coverage-bar-track">
-                      <div class="coverage-bar-fill" [style.width.%]="coveragePercent(commit) || 0"></div>
+                  @if (rollup['spring_endpoints']; as ep) {
+                    <div class="rollup-section">
+                      <div class="rollup-label"><i class="bi bi-signpost-2 me-1"></i>REST Endpoints <span class="badge text-bg-secondary">{{ ep.endpoint_count }}</span></div>
+                      @for (ctrl of ep.controllers; track ctrl.controller) {
+                        <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === ctrl.file" (click)="viewSource(ctrl.file)">
+                          <div class="small fw-semibold mb-1">{{ ctrl.controller }}</div>
+                          @for (e of ctrl.endpoints; track e.path + e.method) {
+                            <div class="small d-flex align-items-center gap-2">
+                              <span class="http-method http-{{ e.method.toLowerCase() }}">{{ e.method }}</span>
+                              <code>{{ e.path }}</code>
+                            </div>
+                          }
+                        </div>
+                      }
                     </div>
-                    <span class="small fw-medium">{{ commit.documented_files!.length }}/{{ commit.files_count }} files ({{ coveragePercent(commit) }}%)</span>
-                  </div>
-                  <div class="documented-files-list">
-                    @for (f of commit.documented_files; track f) {
-                      <div class="text-muted small"><i class="bi bi-check2 text-success me-1"></i>{{ f }}</div>
-                    }
-                  </div>
+                  }
+                  @if (rollup['spring_messaging']; as msg) {
+                    <div class="rollup-section">
+                      <div class="rollup-label"><i class="bi bi-envelope me-1"></i>Messaging</div>
+                      @for (comp of msg.components; track comp.class) {
+                        <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === comp.file" (click)="viewSource(comp.file)">
+                          <div class="small fw-semibold mb-1">{{ comp.class }}</div>
+                          @for (inc of comp.incoming; track inc.destination) {
+                            <div class="small"><i class="bi bi-arrow-right-circle text-success me-1"></i><span class="badge text-bg-secondary me-1">{{ inc.type }}</span>{{ inc.destination }}</div>
+                          }
+                          @for (out of comp.outgoing; track out.destination) {
+                            <div class="small"><i class="bi bi-arrow-left-circle text-warning me-1"></i><span class="badge text-bg-secondary me-1">{{ out.type }}</span>{{ out.destination }}</div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (rollup['spring_datasource']; as ds) {
+                    <div class="rollup-section">
+                      <div class="rollup-label"><i class="bi bi-hdd-network me-1"></i>DataSource</div>
+                      @for (d of ds.datasources; track d.url || d.driver) {
+                        <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === d.file" (click)="viewSource(d.file)">
+                          @if (d.technology) { <span class="badge text-bg-primary me-1">{{ d.technology }}</span> }
+                          @if (d.url) { <code class="small d-block text-truncate">{{ d.url }}</code> }
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (rollup['db_changes']; as db) {
+                    <div class="rollup-section">
+                      <div class="rollup-label"><i class="bi bi-database me-1"></i>Database Changes</div>
+                      @for (change of db.changes; track $index) {
+                        <div class="db-change-row">
+                          <i class="bi me-2" [class]="dbChangeIcon(change.op)"></i>
+                          <code class="small">{{ dbChangeLabel(change) }}</code>
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
-              }
+              </div>
+            } @else if (isMergeCommit(commit) && loadingRollup()) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-git me-1"></i><span class="fw-semibold small">Pull Request Summary</span>
+                </div>
+                <div class="detail-card-body text-center py-3">
+                  <span class="spinner-border spinner-border-sm"></span>
+                </div>
+              </div>
+            }
+            }
 
-              @if (commit.issue_keys.length > 0) {
-                <div class="detail-field">
-                  <div class="detail-label">Jira Tickets</div>
+            <!-- Jira tickets card -->
+            @if ((!detailFilterActive() || activeProcessorFilters().size === 0) && commit.issue_keys.length > 0) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-bug me-1"></i><span class="fw-semibold small">Jira Tickets</span>
+                </div>
+                <div class="detail-card-body">
                   @if (loadingIssues()) {
                     <div class="py-1"><span class="spinner-border spinner-border-sm text-primary"></span></div>
                   }
@@ -259,15 +369,9 @@
                         </div>
                         <div class="jira-summary">{{ issue.summary }}</div>
                         <div class="jira-meta">
-                          @if (issue.issuetype) {
-                            <span><i class="bi bi-bookmark me-1"></i>{{ issue.issuetype }}</span>
-                          }
-                          @if (issue.priority) {
-                            <span><i class="bi bi-flag me-1"></i>{{ issue.priority }}</span>
-                          }
-                          @if (issue.assignee) {
-                            <span><i class="bi bi-person me-1"></i>{{ issue.assignee }}</span>
-                          }
+                          @if (issue.issuetype) { <span><i class="bi bi-bookmark me-1"></i>{{ issue.issuetype }}</span> }
+                          @if (issue.priority) { <span><i class="bi bi-flag me-1"></i>{{ issue.priority }}</span> }
+                          @if (issue.assignee) { <span><i class="bi bi-person me-1"></i>{{ issue.assignee }}</span> }
                         </div>
                       </div>
                     } @else if (!loadingIssues()) {
@@ -278,12 +382,203 @@
                     }
                   }
                 </div>
-              }
+              </div>
+            }
 
-              <!-- Merge source commits -->
-              @if (isMergeCommit(commit)) {
-                <div class="detail-field">
-                  <div class="detail-label">Merged Commits</div>
+            <!-- DB Changes card -->
+            @if (isDetailCardVisibleByProp('db_changes')) {
+            @if (parseDbChanges(commit); as db) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-database me-1"></i><span class="fw-semibold small">Database Changes</span>
+                </div>
+                <div class="detail-card-body">
+                  @if (db.files.length > 0) {
+                    <div class="mb-2">
+                      @for (f of db.files; track f) {
+                        <a class="source-link small" (click)="viewSource(f)" [class.active]="sourceFile()?.path === f"><i class="bi bi-file-earmark-code me-1"></i>{{ f }}</a>
+                      }
+                    </div>
+                  }
+                  <div class="db-changes-list">
+                    @for (change of db.changes; track $index) {
+                      <div class="db-change-row">
+                        <i class="bi me-2" [class]="dbChangeIcon(change.op)"></i>
+                        <code class="small">{{ dbChangeLabel(change) }}</code>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+            }
+
+            <!-- JPA Entities card (only if there are structural changes or no diff available) -->
+            @if (isDetailCardVisibleByProp('jpa_entities')) {
+            @if (parseProcessorData(commit, 'jpa_entities'); as jpa) {
+              @if (!jpa.diff || jpa.diff.added_entities?.length || jpa.diff.modified_entities?.length || jpa.diff.removed_entities?.length) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-diagram-3 me-1"></i><span class="fw-semibold small">JPA Entities</span>
+                </div>
+                <div class="detail-card-body">
+                  @if (jpa.diff) {
+                    <!-- Diff view -->
+                    @for (e of jpa.diff.added_entities; track e.class) {
+                      <div class="processor-card mb-1 diff-added clickable-card" [class.active]="sourceFile()?.path === findEntityFile(jpa.entities, e.class)" (click)="viewSource(findEntityFile(jpa.entities, e.class))">
+                        <div class="d-flex align-items-center gap-2">
+                          <i class="bi bi-plus-circle text-success"></i>
+                          <strong class="small">{{ e.class }}</strong>
+                          <code class="small text-muted">{{ e.table }}</code>
+                        </div>
+                        @for (f of e.fields; track f.name) {
+                          <div class="small text-muted ps-4">{{ f.name }} <span class="text-muted">{{ f.type }}</span></div>
+                        }
+                      </div>
+                    }
+                    @for (e of jpa.diff.modified_entities; track e.class) {
+                      <div class="processor-card mb-1 diff-modified clickable-card" [class.active]="sourceFile()?.path === findEntityFile(jpa.entities, e.class)" (click)="viewSource(findEntityFile(jpa.entities, e.class))">
+                        <div class="d-flex align-items-center gap-2">
+                          <i class="bi bi-pencil text-warning"></i>
+                          <strong class="small">{{ e.class }}</strong>
+                          <code class="small text-muted">{{ e.table }}</code>
+                        </div>
+                        @for (f of e.added_fields; track f.name) {
+                          <div class="small ps-4"><i class="bi bi-plus text-success me-1"></i>{{ f.name }} <span class="text-muted">{{ f.type }}</span></div>
+                        }
+                        @for (f of e.removed_fields; track f.name) {
+                          <div class="small ps-4"><i class="bi bi-dash text-danger me-1"></i>{{ f.name }} <span class="text-muted">{{ f.type }}</span></div>
+                        }
+                        @for (f of e.changed_fields; track f.name) {
+                          <div class="small ps-4"><i class="bi bi-arrow-repeat text-info me-1"></i>{{ f.name }} <span class="text-muted">{{ f.type }}</span></div>
+                        }
+                      </div>
+                    }
+                    @for (e of jpa.diff.removed_entities; track e.class) {
+                      <div class="processor-card mb-1 diff-removed">
+                        <div class="d-flex align-items-center gap-2">
+                          <i class="bi bi-dash-circle text-danger"></i>
+                          <strong class="small">{{ e.class }}</strong>
+                          <code class="small text-muted">{{ e.table }}</code>
+                        </div>
+                      </div>
+                    }
+                  } @else {
+                    <!-- Full state (no parent to diff against) -->
+                    @for (entity of jpa.entities; track entity.class) {
+                      <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === entity.file" (click)="viewSource(entity.file)">
+                        <div class="d-flex align-items-center gap-2">
+                          <i class="bi bi-table text-primary"></i>
+                          <strong class="small">{{ entity.class }}</strong>
+                          <code class="small text-muted">{{ entity.table }}</code>
+                        </div>
+                        @for (f of entity.fields; track f.name) {
+                          <div class="small text-muted ps-4">{{ f.name }} <span class="text-muted">{{ f.type }}</span></div>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+              }
+            }
+            }
+
+            <!-- REST Endpoints card -->
+            @if (isDetailCardVisibleByProp('spring_endpoints')) {
+            @if (parseProcessorData(commit, 'spring_endpoints'); as ep) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-signpost-2 me-1"></i><span class="fw-semibold small">REST Endpoints</span>
+                  <span class="badge text-bg-secondary ms-1">{{ ep.endpoint_count }}</span>
+                </div>
+                <div class="detail-card-body">
+                  @for (ctrl of ep.controllers; track ctrl.controller) {
+                    <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === ctrl.file" (click)="viewSource(ctrl.file)">
+                      <div class="small fw-semibold mb-1">{{ ctrl.controller }} <code class="text-muted">{{ ctrl.basePath }}</code></div>
+                      @for (e of ctrl.endpoints; track e.path + e.method) {
+                        <div class="small d-flex align-items-center gap-2">
+                          <span class="http-method http-{{ e.method.toLowerCase() }}">{{ e.method }}</span>
+                          <code>{{ e.path }}</code>
+                          <span class="text-muted">{{ e.handler }}()</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            }
+
+            <!-- Messaging card -->
+            @if (isDetailCardVisibleByProp('spring_messaging')) {
+            @if (parseProcessorData(commit, 'spring_messaging'); as msg) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-envelope me-1"></i><span class="fw-semibold small">Messaging</span>
+                </div>
+                <div class="detail-card-body">
+                  @for (comp of msg.components; track comp.class) {
+                    <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === comp.file" (click)="viewSource(comp.file)">
+                      <div class="small fw-semibold mb-1">{{ comp.class }}</div>
+                      @for (inc of comp.incoming; track inc.destination) {
+                        <div class="small"><i class="bi bi-arrow-right-circle text-success me-1"></i><span class="badge text-bg-secondary me-1">{{ inc.type }}</span>{{ inc.destination }} <span class="text-muted">→ {{ inc.handler }}()</span></div>
+                      }
+                      @for (out of comp.outgoing; track out.destination) {
+                        <div class="small"><i class="bi bi-arrow-left-circle text-warning me-1"></i><span class="badge text-bg-secondary me-1">{{ out.type }}</span>{{ out.destination }}</div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            }
+
+            <!-- DataSource card -->
+            @if (isDetailCardVisibleByProp('spring_datasource')) {
+            @if (parseProcessorData(commit, 'spring_datasource'); as ds) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-hdd-network me-1"></i><span class="fw-semibold small">DataSource Configuration</span>
+                </div>
+                <div class="detail-card-body">
+                  @for (d of ds.datasources; track d.url || d.driver) {
+                    <div class="processor-card mb-1 clickable-card" [class.active]="sourceFile()?.path === d.file" (click)="viewSource(d.file)">
+                      @if (d.technology) { <span class="badge text-bg-primary me-1">{{ d.technology }}</span> }
+                      @if (d.url) { <code class="small d-block text-truncate">{{ d.url }}</code> }
+                      @if (d.driver) { <div class="small text-muted">Driver: {{ d.driver }}</div> }
+                      @if (d.dialect) { <div class="small text-muted">Dialect: {{ d.dialect }}</div> }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            }
+
+            <!-- Uncovered files card -->
+            @if ((!detailFilterActive() || activeProcessorFilters().size === 0) && commit.uncovered_files?.length) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-file-earmark-x me-1"></i><span class="fw-semibold small">Uncovered Files</span>
+                  <span class="badge text-bg-secondary ms-1">{{ commit.uncovered_files!.length }}</span>
+                </div>
+                <div class="detail-card-body">
+                  <div class="uncovered-files-list">
+                    @for (f of commit.uncovered_files; track f) {
+                      <a class="source-link small" (click)="viewSource(f)" [class.active]="sourceFile()?.path === f"><i class="bi bi-dash text-danger me-1"></i>{{ f }}</a>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            <!-- Merge source commits card -->
+            @if ((!detailFilterActive() || activeProcessorFilters().size === 0) && isMergeCommit(commit)) {
+              <div class="detail-card">
+                <div class="detail-card-header">
+                  <i class="bi bi-git me-1"></i><span class="fw-semibold small">Merged Commits</span>
+                </div>
+                <div class="detail-card-body">
                   @if (loadingMergeSource()) {
                     <div class="py-1"><span class="spinner-border spinner-border-sm text-primary"></span></div>
                   } @else if (mergeSourceCommits().length === 0) {
@@ -308,27 +603,39 @@
                     </div>
                   }
                 </div>
-              }
-            </div>
+              </div>
+            }
+
           </div>
         }
-      </div>
-    } @else if (selectedBranch() && commits().length > 0 && filteredCommits().length === 0) {
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-funnel d-block mb-2" style="font-size: 2rem;"></i>
-        No commits match the active filter.
-      </div>
-    } @else if (!selectedRepo()) {
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-git d-block mb-2" style="font-size: 2rem;"></i>
-        Select a repository and branch to view commits.
-      </div>
-    } @else if (!selectedBranch()) {
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-signpost-split d-block mb-2" style="font-size: 2rem;"></i>
-        Select a branch to view commits.
-      </div>
-    }
 
-  </div>
-</div>
+        <!-- ── Source viewer (third column) ──────────────────── -->
+        @if (sourceFile()) {
+          <div class="source-panel">
+            <div class="source-header">
+              <i class="bi bi-file-code me-1"></i>
+              <span class="source-filename" [title]="sourceFile()!.path">{{ sourceFileName() }}</span>
+              <button class="btn btn-outline-secondary btn-sm btn-xs ms-auto" (click)="sourceFile.set(null)" title="Close">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div class="source-path text-muted small px-2 py-1">{{ sourceFile()!.path }}</div>
+            @if (loadingSource()) {
+              <div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>
+            } @else {
+              <div class="source-content">
+                <table class="source-table">
+                  @for (line of sourceLines(); track line.num) {
+                    <tr [class.line-added]="line.type === 'added'" [class.line-removed]="line.type === 'removed'">
+                      <td class="line-num">{{ line.num }}</td>
+                      <td class="line-text">{{ line.text }}</td>
+                    </tr>
+                  }
+                </table>
+              </div>
+            }
+          </div>
+        }
+    </div><!-- /commits-layout -->
+  </div><!-- /section-content -->
+</div><!-- /section-page -->

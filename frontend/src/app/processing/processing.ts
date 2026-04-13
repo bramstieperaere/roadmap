@@ -45,6 +45,10 @@ export class Processing implements OnInit {
   selectedBranches = signal<Set<string>>(new Set());
   loadingBranches = signal(false);
 
+  // Processing configs
+  processingConfigs = signal<{ name: string; repo_name: string; branch: string; processors: string[] }[]>([]);
+  selectedProcessingConfig = signal<string>('');
+
   readonly actions: ActionDefinition[] = [
     { type: 'analysis', title: 'Code Analysis', description: 'Parse source code and build the class and method metamodel in Neo4j.', icon: 'bi-diagram-3', iconBg: '#e7f5ff', iconColor: '#1971c2' },
     { type: 'enrichment', title: 'Architecture Enrichment', description: 'Detect technologies and enrich the graph with architecture patterns.', icon: 'bi-layers', iconBg: '#f3f0ff', iconColor: '#6741d9' },
@@ -63,6 +67,9 @@ export class Processing implements OnInit {
     this.settingsService.getSettings().subscribe({
       next: (config) => this.repos.set(config.repositories),
     });
+    this.gitMiningService.getProcessingConfigs().subscribe({
+      next: (configs) => this.processingConfigs.set(configs),
+    });
   }
 
   switchSource(source: SourceType) { this.activeSource.set(source); }
@@ -74,7 +81,12 @@ export class Processing implements OnInit {
     this.traversalMode.set('all');
     this.branches.set([]);
     this.selectedBranches.set(new Set());
+    this.selectedProcessingConfig.set('');
     this.activeJob.set({ action });
+  }
+
+  get usesProcessingConfig(): boolean {
+    return this.activeJob()?.action.type === 'ingest-commits';
   }
 
   closeModal() { this.activeJob.set(null); }
@@ -135,19 +147,32 @@ export class Processing implements OnInit {
 
   // ── Start job ──
 
+  get canStart(): boolean {
+    if (this.usesProcessingConfig) {
+      return !!this.selectedProcessingConfig();
+    }
+    return this.hasSelection;
+  }
+
   confirmStart() {
     const job = this.activeJob();
-    if (!job || !this.hasSelection) return;
+    if (!job) return;
 
     this.starting.set(true);
     const type = job.action.type;
 
-    if (type === 'ingest-commits' || type === 'link-jira-tickets') {
+    if (type === 'ingest-commits') {
+      const pcName = this.selectedProcessingConfig();
+      if (!pcName) return;
+      this.gitMiningService.start('ingest_commits', [], undefined, pcName).subscribe({
+        next: () => { this.starting.set(false); this.activeJob.set(null); this.router.navigate(['/jobs']); },
+        error: (err) => { this.starting.set(false); this.showMessage(err.error?.detail || 'Failed to start job', 'danger'); },
+      });
+    } else if (type === 'link-jira-tickets') {
       const repoNames = [...this.selected()].sort((a, b) => a - b)
         .map(i => this.repos()[i].name);
-      const action = type === 'ingest-commits' ? 'ingest_commits' : 'link_jira_tickets';
       const branchFilter = this.traversalMode() === 'branches' ? [...this.selectedBranches()] : undefined;
-      this.gitMiningService.start(action, repoNames, branchFilter).subscribe({
+      this.gitMiningService.start('link_jira_tickets', repoNames, branchFilter).subscribe({
         next: () => { this.starting.set(false); this.activeJob.set(null); this.router.navigate(['/jobs']); },
         error: (err) => { this.starting.set(false); this.showMessage(err.error?.detail || 'Failed to start job', 'danger'); },
       });
