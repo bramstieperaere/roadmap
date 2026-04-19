@@ -74,6 +74,7 @@ export interface AIProviderConfig {
   base_url: string;
   api_key: string;
   default_model: string;
+  privacy_level: string;
 }
 
 export interface AITaskConfig {
@@ -116,6 +117,7 @@ export interface AppConfig {
   incubating_processors?: { name: string; label: string; description: string; instructions: string; file_patterns: string[]; instance_count: number }[];
   processing_profiles?: ProcessingProfileConfig[];
   git_processing?: GitProcessingConfig[];
+  scheduling?: SchedulingConfig;
 }
 
 export interface ProcessingProfileConfig {
@@ -131,9 +133,23 @@ export interface GitProcessingConfig {
   processors: string[];
 }
 
+export interface SchedulingConfig {
+  enabled: boolean;
+  policy: string;
+  polling_schedule: string;
+}
+
 export interface TestConnectionResult {
   status: string;
   message: string;
+}
+
+export interface TestAIProviderResult {
+  status: string;
+  response: string;
+  model: string;
+  elapsed_seconds: number;
+  usage: { prompt_tokens: number | null; completion_tokens: number | null };
 }
 
 export interface AnalyzeResponse {
@@ -183,6 +199,10 @@ export class SettingsService {
 
   testLogzioConnection(): Observable<TestConnectionResult> {
     return this.http.post<TestConnectionResult>('/api/settings/test-logzio', {});
+  }
+
+  testAIProvider(providerName: string, message: string): Observable<TestAIProviderResult> {
+    return this.http.post<TestAIProviderResult>('/api/settings/test-ai-provider', { provider_name: providerName, message });
   }
 
   lookupJiraProject(key: string): Observable<JiraProjectLookup> {

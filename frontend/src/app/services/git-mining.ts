@@ -156,4 +156,27 @@ export class GitMiningService {
   deleteIncubatingProcessor(name: string): Observable<{ status: string; name: string }> {
     return this.http.delete<{ status: string; name: string }>(`/api/git-mining/incubating-processors/${encodeURIComponent(name)}`);
   }
+
+  checkRemotes(ingest = false): Observable<CheckRemotesResult> {
+    return this.http.post<CheckRemotesResult>(
+      `/api/git-mining/check-remotes?ingest=${ingest}`, {});
+  }
+}
+
+export interface CheckRemotesResult {
+  checked: number;
+  changed: number;
+  jobs_started: string[];
+  results: CheckRemoteEntry[];
+}
+
+export interface CheckRemoteEntry {
+  name: string;
+  repo_name: string;
+  branch: string;
+  remote_tip: string;
+  stored_tip: string | null;
+  has_changes: boolean;
+  status: string;
+  job_id?: string;
 }

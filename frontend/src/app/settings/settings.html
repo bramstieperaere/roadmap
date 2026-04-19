@@ -47,6 +47,9 @@
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'git-processing'" (click)="switchTab('git-processing')">
         <i class="bi bi-git"></i> Git Processing
       </button>
+      <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'scheduling'" (click)="switchTab('scheduling')">
+        <i class="bi bi-clock-history"></i> Scheduling
+      </button>
       <div class="nav-group-label">AI</div>
       <button class="nav-tab nav-tab-sub" [class.active]="activeTab() === 'providers'" (click)="switchTab('providers')">
         <i class="bi bi-cpu"></i> Providers
@@ -1027,6 +1030,16 @@
                            [value]="provider.default_model" (input)="updateAIProvider(providerIndex, 'default_model', $any($event.target).value)"
                            [attr.data-testid]="'ai-provider-model-' + providerIndex">
                   </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Privacy Level</label>
+                    <select class="form-select" [value]="provider.privacy_level || 'private'"
+                            (change)="updateAIProvider(providerIndex, 'privacy_level', $any($event.target).value)"
+                            [attr.data-testid]="'ai-provider-privacy-' + providerIndex">
+                      <option value="risk">Risk</option>
+                      <option value="medium">Medium</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
                   <div class="col-md-2 d-flex align-items-end">
                     <button class="btn btn-outline-danger btn-sm w-100" (click)="removeAIProvider(providerIndex)" title="Remove provider"
                             [attr.data-testid]="'remove-ai-provider-' + providerIndex">
@@ -1040,10 +1053,17 @@
               <div class="section-card" [attr.data-testid]="'ai-provider-' + providerIndex">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <span class="fw-semibold">{{ provider.name }}</span>
-                  <button class="btn btn-outline-primary btn-sm" (click)="startEditing('provider-' + providerIndex)" [disabled]="editingSection() !== null"
-                          [attr.data-testid]="'edit-ai-provider-' + providerIndex">
-                    <i class="bi bi-pencil me-1"></i>Edit
-                  </button>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" (click)="startEditing('provider-' + providerIndex)" [disabled]="editingSection() !== null"
+                            [attr.data-testid]="'edit-ai-provider-' + providerIndex">
+                      <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="toggleTestSection(provider.name)"
+                            [disabled]="editingSection() !== null"
+                            [attr.data-testid]="'test-ai-provider-' + providerIndex">
+                      <i class="bi bi-play me-1"></i>{{ testingSection() === provider.name ? 'Close Test' : 'Test' }}
+                    </button>
+                  </div>
                 </div>
                 <div class="d-flex gap-4 flex-wrap">
                   <div>
@@ -1052,13 +1072,67 @@
                   </div>
                   <div>
                     <label class="form-label">API Key</label>
-                    <div class="field-value">••••••••</div>
+                    <div class="field-value">
+                      @if (provider.api_key) {
+                        ••••••••
+                      } @else {
+                        <span class="fst-italic text-muted">none</span>
+                      }
+                    </div>
                   </div>
                   <div>
                     <label class="form-label">Default Model</label>
                     <div class="field-value">{{ provider.default_model }}</div>
                   </div>
+                  <div>
+                    <label class="form-label">Privacy</label>
+                    <div>
+                      <span class="badge" [class.bg-danger]="(provider.privacy_level || 'private') === 'risk'"
+                            [class.bg-warning]="(provider.privacy_level || 'private') === 'medium'"
+                            [class.text-dark]="(provider.privacy_level || 'private') === 'medium'"
+                            [class.bg-success]="(provider.privacy_level || 'private') === 'private'">{{ provider.privacy_level || 'private' }}</span>
+                    </div>
+                  </div>
                 </div>
+                @if (testingSection() === provider.name) {
+                  <div class="mt-3 pt-3 border-top">
+                    <div class="d-flex gap-2">
+                      <input type="text" class="form-control form-control-sm" placeholder="Type a test message..."
+                             [value]="providerTestMessage()[provider.name] ?? ''"
+                             (input)="updateProviderTestMessage(provider.name, $any($event.target).value)"
+                             (keydown.enter)="testAIProvider(provider.name)"
+                             [attr.data-testid]="'ai-provider-test-input-' + providerIndex">
+                      <button class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                              (click)="testAIProvider(provider.name)"
+                              [disabled]="providerTestLoading()[provider.name] || !providerTestMessage()[provider.name]?.trim()"
+                              [attr.data-testid]="'ai-provider-test-btn-' + providerIndex">
+                        @if (providerTestLoading()[provider.name]) {
+                          <span class="spinner-border spinner-border-sm me-1"></span>Sending...
+                        } @else {
+                          <i class="bi bi-send me-1"></i>Send
+                        }
+                      </button>
+                    </div>
+                    @if (providerTestResult()[provider.name]; as res) {
+                      @if (res.status === 'ok' && res.result) {
+                        <div class="alert alert-success py-2 mt-2 mb-0 small">
+                          <div class="fw-semibold mb-1">
+                            Model: {{ res.result.model }}
+                            <span class="text-muted fw-normal ms-2">{{ res.result.elapsed_seconds }}s</span>
+                            @if (res.result.usage.prompt_tokens != null) {
+                              <span class="text-muted fw-normal ms-2">{{ res.result.usage.prompt_tokens }}+{{ res.result.usage.completion_tokens }} tokens</span>
+                            }
+                          </div>
+                          <div style="white-space: pre-wrap;">{{ res.result.response }}</div>
+                        </div>
+                      } @else {
+                        <div class="alert alert-danger py-2 mt-2 mb-0 small">
+                          <i class="bi bi-exclamation-triangle me-1"></i>{{ res.error }}
+                        </div>
+                      }
+                    }
+                  </div>
+                }
               </div>
             }
           }
@@ -1073,76 +1147,49 @@
         <div data-testid="ai-tasks-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="section-title mb-0"><i class="bi bi-list-task me-2"></i>AI Tasks</h6>
-            <button class="btn btn-outline-primary btn-sm" (click)="addAITask()" [disabled]="editingSection() !== null" data-testid="add-ai-task">
-              <i class="bi bi-plus-lg me-1"></i>Add Task
-            </button>
-          </div>
-
-          @for (task of config().ai_tasks; track $index) {
-            @let taskIndex = $index;
-
-            @if (editingSection() === 'task-' + taskIndex) {
-              <!-- EDIT MODE -->
-              <div class="section-card editing" [attr.data-testid]="'ai-task-' + taskIndex">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <span class="fw-semibold">{{ task.task_type || 'New task' }}</span>
-                  <div class="d-flex gap-2">
-                    <button class="btn btn-primary btn-sm" (click)="saveSection()">
-                      <i class="bi bi-check-lg me-1"></i>Save
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
-                  </div>
-                </div>
-                <div class="row g-3 mb-2">
-                  <div class="col-md-4">
-                    <label class="form-label">Task Type</label>
-                    <select class="form-select" [value]="task.task_type"
-                            (change)="updateAITask(taskIndex, 'task_type', $any($event.target).value)"
-                            [attr.data-testid]="'ai-task-type-' + taskIndex">
-                      <option value="repository_analysis">Repository Analysis</option>
-                      <option value="functional_doc">Functional Doc Processing</option>
-                      <option value="cypher_generation">Cypher Generation</option>
-                      <option value="context_assistant">Context Assistant</option>
-                    </select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">Provider</label>
-                    <select class="form-select"
-                            (change)="updateAITask(taskIndex, 'provider_name', $any($event.target).value)"
-                            [attr.data-testid]="'ai-task-provider-' + taskIndex">
-                      <option value="" [selected]="!task.provider_name">-- Select Provider --</option>
-                      @for (p of config().ai_providers; track p.name) {
-                        <option [value]="p.name" [selected]="p.name === task.provider_name">{{ p.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  <div class="col-md-2 d-flex align-items-end">
-                    <button class="btn btn-outline-danger btn-sm w-100" (click)="removeAITask(taskIndex)" title="Remove task"
-                            [attr.data-testid]="'remove-ai-task-' + taskIndex">
-                      <i class="bi bi-trash me-1"></i>Remove
-                    </button>
-                  </div>
-                </div>
+            @if (editingSection() === 'tasks') {
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" (click)="saveAITasks()">
+                  <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditing()">Cancel</button>
               </div>
             } @else {
-              <!-- READONLY MODE -->
-              <div class="section-card" [attr.data-testid]="'ai-task-' + taskIndex">
-                <div class="d-flex justify-content-between align-items-center">
+              <button class="btn btn-outline-primary btn-sm" (click)="startEditingTasks()" [disabled]="editingSection() !== null" data-testid="edit-ai-tasks">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </button>
+            }
+          </div>
+
+          @for (tt of allTaskTypes; track tt.type) {
+            <div class="section-card" [class.editing]="editingSection() === 'tasks'" [attr.data-testid]="'ai-task-' + tt.type">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="flex-grow-1">
                   <div class="d-flex gap-3 align-items-center">
-                    <span class="fw-semibold">{{ task.task_type }}</span>
-                    <i class="bi bi-arrow-right text-muted"></i>
-                    <span class="text-muted">{{ task.provider_name || '(no provider)' }}</span>
+                    <span class="fw-semibold">{{ tt.label }}</span>
+                    @if (editingSection() === 'tasks') {
+                      <select class="form-select form-select-sm" style="width: auto; min-width: 180px;"
+                              [value]="taskProviders()[tt.type]"
+                              (change)="updateTaskProvider(tt.type, $any($event.target).value)"
+                              [attr.data-testid]="'ai-task-provider-' + tt.type">
+                        <option value="">-- No provider --</option>
+                        @for (p of config().ai_providers; track p.name) {
+                          <option [value]="p.name" [selected]="p.name === taskProviders()[tt.type]">{{ p.name }}</option>
+                        }
+                      </select>
+                    } @else {
+                      @if (getTaskProvider(tt.type); as prov) {
+                        <i class="bi bi-arrow-right text-muted"></i>
+                        <span class="text-muted">{{ prov }}</span>
+                      } @else {
+                        <span class="text-muted fst-italic">not configured</span>
+                      }
+                    }
                   </div>
-                  <button class="btn btn-outline-primary btn-sm" (click)="startEditing('task-' + taskIndex)" [disabled]="editingSection() !== null"
-                          [attr.data-testid]="'edit-ai-task-' + taskIndex">
-                    <i class="bi bi-pencil me-1"></i>Edit
-                  </button>
+                  <small class="form-text text-muted">{{ taskTypeDescription(tt.type) }}</small>
                 </div>
               </div>
-            }
-          }
-          @empty {
-            <p class="text-muted" data-testid="no-tasks-message">No AI tasks configured. Click "Add Task" to map a task type to an AI provider.</p>
+            </div>
           }
         </div>
       }
@@ -1216,10 +1263,19 @@
             <div class="section-card">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-semibold">Configuration</span>
-                <button class="btn btn-outline-primary btn-sm" (click)="startEditing('whisper')" [disabled]="editingSection() !== null"
-                        data-testid="edit-whisper">
-                  <i class="bi bi-pencil me-1"></i>Edit
-                </button>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" (click)="startEditing('whisper')" [disabled]="editingSection() !== null"
+                          data-testid="edit-whisper">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                  </button>
+                  @if (config().whisper.api_key) {
+                    <button class="btn btn-outline-secondary btn-sm" (click)="toggleTestSection('whisper')"
+                            [disabled]="editingSection() !== null"
+                            data-testid="test-whisper">
+                      <i class="bi bi-play me-1"></i>{{ testingSection() === 'whisper' ? 'Close Test' : 'Test' }}
+                    </button>
+                  }
+                </div>
               </div>
               @if (config().whisper.api_key) {
                 <div class="d-flex gap-4 flex-wrap">
@@ -1245,18 +1301,13 @@
               } @else {
                 <p class="text-muted mb-0" data-testid="no-whisper-message">Not configured. Click "Edit" to set up an OpenAI-compatible Whisper endpoint for voice-to-text.</p>
               }
-            </div>
-          }
-
-          <!-- Test Whisper -->
-          @if (config().whisper.api_key && editingSection() !== 'whisper') {
-            <div class="section-card mt-3" data-testid="whisper-test">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-semibold">Test</span>
-              </div>
-              <app-whisper-textarea [(value)]="whisperTestText"
-                                    placeholder="Click the microphone, speak, then check the transcription here..."
-                                    [rows]="3" />
+              @if (testingSection() === 'whisper') {
+                <div class="mt-3 pt-3 border-top" data-testid="whisper-test">
+                  <app-whisper-textarea [(value)]="whisperTestText"
+                                        placeholder="Click the microphone, speak, then check the transcription here..."
+                                        [rows]="3" />
+                </div>
+              }
             </div>
           }
         </div>
@@ -1427,20 +1478,26 @@
         <div data-testid="git-processing-tab">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="section-title mb-0"><i class="bi bi-git me-2"></i>Git Processing Configs</h6>
-            <button class="btn btn-outline-primary btn-sm" (click)="addGitProcessing()" [disabled]="editingSection() !== null">
-              <i class="bi bi-plus me-1"></i>Add Config
-            </button>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-primary btn-sm" (click)="addGitProcessing()" [disabled]="editingSection() !== null || bulkAddOpen()">
+                <i class="bi bi-plus me-1"></i>Add Config
+              </button>
+              <button class="btn btn-outline-primary btn-sm" (click)="openBulkAdd()" [disabled]="editingSection() !== null || bulkAddOpen()">
+                <i class="bi bi-collection me-1"></i>Add Multiple
+              </button>
+            </div>
           </div>
           <p class="text-muted small mb-3">
             Define repo + branch + processor combinations. Use these in the Processing page to ingest commits.
           </p>
+
           @for (gp of gitProcessingConfigs(); track $index) {
             @let gpIdx = $index;
-            <div class="section-card mb-2">
+            <div class="section-card mb-2" [attr.data-gp-index]="gpIdx">
               @if (editingSection() === 'git-proc-' + gpIdx) {
                 <!-- Edit mode -->
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                  <span class="fw-semibold">{{ gp.name || 'New config' }}</span>
+                  <span class="fw-semibold">{{ gp.repo_name && gp.branch ? gp.repo_name + ' ' + gp.branch : 'New config' }}</span>
                   <div class="d-flex gap-2">
                     <button class="btn btn-primary btn-sm" (click)="saveGitProcessing(gpIdx)">
                       <i class="bi bi-check-lg me-1"></i>Save
@@ -1452,12 +1509,7 @@
                   </div>
                 </div>
                 <div class="row g-2 mb-2">
-                  <div class="col-md-4">
-                    <label class="form-label small">Name</label>
-                    <input type="text" class="form-control form-control-sm" placeholder="e.g. country-service-develop"
-                           [value]="gp.name" (input)="updateGitProcessingField(gpIdx, 'name', $any($event.target).value)">
-                  </div>
-                  <div class="col-md-4">
+                  <div class="col-md-6">
                     <label class="form-label small">Repository</label>
                     <select class="form-select form-select-sm"
                             [value]="gp.repo_name"
@@ -1468,7 +1520,7 @@
                       }
                     </select>
                   </div>
-                  <div class="col-md-4">
+                  <div class="col-md-6">
                     <label class="form-label small">Branch</label>
                     <input type="text" class="form-control form-control-sm" placeholder="e.g. develop"
                            [value]="gp.branch" (input)="updateGitProcessingField(gpIdx, 'branch', $any($event.target).value)">
@@ -1485,19 +1537,6 @@
                         <option [value]="prof.name">{{ prof.name }} ({{ prof.processors.length }})</option>
                       }
                     </select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label small">Extra Processors</label>
-                    <div class="d-flex flex-wrap gap-2">
-                      @for (proc of processors(); track proc.name) {
-                        <label class="form-check form-check-inline mb-0">
-                          <input type="checkbox" class="form-check-input"
-                                 [checked]="(gp.processors || []).includes(proc.name)"
-                                 (change)="toggleGitProcessingProcessor(gpIdx, proc.name)">
-                          <span class="form-check-label small">{{ proc.label }}</span>
-                        </label>
-                      }
-                    </div>
                   </div>
                 </div>
               } @else {
@@ -1533,8 +1572,240 @@
               }
             </div>
           } @empty {
-            <div class="text-muted small">No git processing configs. Click "Add Config" to create one.</div>
+            <div class="text-muted small mb-3">No git processing configs yet.</div>
           }
+
+          <!-- Add multiple panel -->
+          @if (bulkAddOpen()) {
+            <div class="section-card mb-3" #bulkAddPanel>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Add Multiple Configs</span>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-primary btn-sm" (click)="saveBulkGitProcessing()"
+                          [disabled]="bulkSelectedRepos().size === 0 || !bulkBranch()">
+                    <i class="bi bi-check-lg me-1"></i>Add {{ bulkSelectedRepos().size }} Config(s)
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="bulkAddOpen.set(false)">Cancel</button>
+                </div>
+              </div>
+
+              <label class="form-label small">Repositories</label>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <div class="filter-bar-search" style="flex: 1">
+                  <i class="bi bi-search"></i>
+                  <input type="text" placeholder="Search..."
+                         [ngModel]="bulkSearch()" (ngModelChange)="bulkSearch.set($event)">
+                </div>
+                @for (tag of allTags(); track tag) {
+                  <button class="tag-chip"
+                          [class.active]="bulkTagFilter().includes(tag)"
+                          (click)="toggleBulkTag(tag)">
+                    {{ tag }}
+                  </button>
+                }
+              </div>
+
+              <div class="border rounded mb-3" style="max-height: 240px; overflow-y: auto">
+                <div class="d-flex align-items-center px-2 py-1 border-bottom bg-light">
+                  <input type="checkbox" class="form-check-input me-2"
+                         [checked]="bulkAllSelected()"
+                         (change)="toggleBulkAll()">
+                  <small class="text-muted">Select all ({{ bulkFilteredRepos().length }})</small>
+                </div>
+                @for (repo of bulkFilteredRepos(); track repo.name) {
+                  <div class="d-flex align-items-center px-2 py-1 border-bottom"
+                       style="cursor: pointer"
+                       (click)="toggleBulkRepo(repo.name)">
+                    <input type="checkbox" class="form-check-input me-2"
+                           [checked]="bulkSelectedRepos().has(repo.name)"
+                           (click)="$event.stopPropagation(); toggleBulkRepo(repo.name)">
+                    <span class="small">{{ repo.name }}</span>
+                    @for (tag of repo.tags || []; track tag) {
+                      <span class="badge text-bg-secondary ms-1" style="font-size: 0.65rem">{{ tag }}</span>
+                    }
+                  </div>
+                } @empty {
+                  <div class="text-muted small p-2">No repositories match the filter.</div>
+                }
+              </div>
+
+              <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                  <label class="form-label small">Branch</label>
+                  <input type="text" class="form-control form-control-sm" placeholder="e.g. develop"
+                         [ngModel]="bulkBranch()" (ngModelChange)="bulkBranch.set($event)">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Profile</label>
+                  <select class="form-select form-select-sm"
+                          [ngModel]="bulkProfile()" (ngModelChange)="bulkProfile.set($event)">
+                    <option value="">-- None --</option>
+                    @for (prof of processingProfiles(); track prof.name) {
+                      <option [value]="prof.name">{{ prof.name }} ({{ prof.processors.length }})</option>
+                    }
+                  </select>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ═══════════════════ Scheduling ═══════════════════ -->
+      @if (activeTab() === 'scheduling') {
+        <div data-testid="scheduling-tab">
+          <h6 class="section-title mb-3"><i class="bi bi-clock-history me-2"></i>Scheduling</h6>
+          <p class="text-muted small mb-3">
+            Configure automatic polling of git repositories for new commits. When enabled, all git processing configs will be checked on the defined schedule.
+          </p>
+
+          <div class="section-card">
+            @if (editingSection() === 'scheduling') {
+              <!-- Edit mode -->
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="fw-semibold">Polling Configuration</span>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-primary btn-sm" (click)="saveScheduling()">
+                    <i class="bi bi-check-lg me-1"></i>Save
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditingScheduling()">Cancel</button>
+                </div>
+              </div>
+
+              <div class="d-flex align-items-center mb-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="scheduling-enabled"
+                         [checked]="scheduling().enabled"
+                         (change)="toggleSchedulingEnabled()">
+                  <label class="form-check-label fw-semibold" for="scheduling-enabled">
+                    Enable scheduled polling
+                  </label>
+                </div>
+              </div>
+
+              @if (scheduling().enabled) {
+                <div class="row g-3">
+                  <div class="col-md-5">
+                    <label class="form-label small">Polling Schedule (cron)</label>
+                    <input type="text" class="form-control form-control-sm"
+                           placeholder="e.g. 0 9-17 * * 1-5"
+                           [ngModel]="scheduling().polling_schedule"
+                           (ngModelChange)="setPollingSchedule($event)">
+                    <div class="form-text small">
+                      Format: minute hour day-of-month month day-of-week
+                    </div>
+                  </div>
+                  <div class="col-md-7 d-flex align-items-start pt-4">
+                    @if (scheduling().polling_schedule) {
+                      <span class="text-muted"><i class="bi bi-info-circle me-1"></i>{{ describeCron(scheduling().polling_schedule) }}</span>
+                    }
+                  </div>
+                </div>
+
+                <div class="mt-3 mb-2">
+                  <label class="form-label small">Common Presets</label>
+                  <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-secondary btn-sm"
+                            (click)="setPollingSchedule('0 9-17 * * 1-5')">
+                      Hourly, workdays 9-17
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            (click)="setPollingSchedule('*/30 9-17 * * 1-5')">
+                      Every 30 min, workdays 9-17
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            (click)="setPollingSchedule('0 * * * *')">
+                      Every hour, 24/7
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            (click)="setPollingSchedule('0 8 * * 1-5')">
+                      Daily at 8:00, workdays
+                    </button>
+                  </div>
+                </div>
+              }
+            } @else {
+              <!-- View mode -->
+              <div class="d-flex align-items-start gap-3">
+                <i class="bi bi-clock-history fs-4 text-primary mt-1"></i>
+                <div class="flex-grow-1">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="fw-semibold">Polling</span>
+                    @if (scheduling().enabled) {
+                      <span class="badge text-bg-success">Enabled</span>
+                    } @else {
+                      <span class="badge text-bg-secondary">Disabled</span>
+                    }
+                    <button class="btn btn-outline-secondary btn-sm btn-xs ms-auto"
+                            (click)="startEditing('scheduling')" [disabled]="editingSection() !== null">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                  </div>
+                  @if (scheduling().enabled && scheduling().polling_schedule) {
+                    <div class="small text-muted mt-1">
+                      <i class="bi bi-arrow-repeat me-1"></i>{{ describeCron(scheduling().polling_schedule) || scheduling().polling_schedule }}
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Trigger now -->
+          <div class="section-card mt-3">
+            <div class="d-flex align-items-center gap-3">
+              <div>
+                <span class="fw-semibold">Check Remotes</span>
+                <div class="small text-muted">Query all git processing configs for new remote commits</div>
+              </div>
+              <div class="d-flex gap-2 ms-auto">
+                <button class="btn btn-outline-primary btn-sm"
+                        (click)="triggerCheckRemotes(false)" [disabled]="checkingRemotes()">
+                  @if (checkingRemotes()) {
+                    <span class="spinner-border spinner-border-sm me-1"></span>Checking...
+                  } @else {
+                    <i class="bi bi-search me-1"></i>Check Only
+                  }
+                </button>
+                <button class="btn btn-primary btn-sm"
+                        (click)="triggerCheckRemotes(true)" [disabled]="checkingRemotes()">
+                  <i class="bi bi-play-fill me-1"></i>Check &amp; Ingest
+                </button>
+              </div>
+            </div>
+
+            @if (checkRemotesResult()) {
+              <div class="mt-3">
+                <div class="small mb-2">
+                  Checked {{ checkRemotesResult()!.checked }} config(s),
+                  <strong>{{ checkRemotesResult()!.changed }}</strong> with new commits
+                  @if (checkRemotesResult()!.jobs_started.length > 0) {
+                    — {{ checkRemotesResult()!.jobs_started.length }} ingestion job(s) started
+                  }
+                </div>
+                @for (entry of checkRemotesResult()!.results; track entry.name) {
+                  <div class="d-flex align-items-center gap-2 py-1 border-top">
+                    @if (entry.status === 'ingestion_started') {
+                      <i class="bi bi-arrow-repeat text-primary"></i>
+                    } @else if (entry.has_changes) {
+                      <i class="bi bi-arrow-down-circle-fill text-warning"></i>
+                    } @else {
+                      <i class="bi bi-check-circle-fill text-success"></i>
+                    }
+                    <span class="small fw-semibold">{{ entry.name }}</span>
+                    @if (entry.status === 'ingestion_started') {
+                      <a class="badge text-bg-primary text-decoration-none" routerLink="/jobs/{{ entry.job_id }}">ingesting</a>
+                    } @else if (entry.has_changes) {
+                      <span class="badge text-bg-warning">new commits</span>
+                    } @else {
+                      <span class="badge text-bg-success">up to date</span>
+                    }
+                    <span class="small text-muted ms-auto font-monospace">{{ entry.remote_tip }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
         </div>
       }
 

@@ -1,9 +1,9 @@
-import { Component, computed, effect, inject, OnInit, signal, DestroyRef } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, OnInit, signal, DestroyRef, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
-import { GitMiningService, ProcessorInfo, IncubatingProcessorConfig } from '../services/git-mining';
+import { SettingsService, AppConfig, ModuleConfig, AIProviderConfig, TestAIProviderResult, GitProcessingConfig, SchedulingConfig, JiraBoardOption, KNOWN_TECHNOLOGIES } from '../services/settings';
+import { GitMiningService, ProcessorInfo, IncubatingProcessorConfig, CheckRemotesResult } from '../services/git-mining';
 import { EncryptionService } from '../services/encryption';
 import { ConfirmDialogService } from '../components/confirm-dialog/confirm-dialog.service';
 import { WhisperTextarea } from '../components/whisper-textarea/whisper-textarea';
@@ -46,8 +46,35 @@ export class SettingsComponent implements OnInit {
   incubatingProcessors = signal<IncubatingProcessorConfig[]>([]);
   maturedProcessors = computed(() => this.processors().filter(p => p.status === 'matured'));
   processingProfiles = signal<{ name: string; processors: string[] }[]>([]);
-  gitProcessingConfigs = signal<{ name: string; repo_name: string; branch: string; profile: string; processors: string[] }[]>([]);
-  activeTab = signal<'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing'>('general');
+  gitProcessingConfigs = signal<GitProcessingConfig[]>([]);
+  bulkAddPanel = viewChild<ElementRef>('bulkAddPanel');
+  bulkAddOpen = signal(false);
+  bulkTagFilter = signal<string[]>([]);
+  bulkSearch = signal('');
+  bulkSelectedRepos = signal<Set<string>>(new Set());
+  bulkBranch = signal('');
+  bulkProfile = signal('');
+  bulkFilteredRepos = computed(() => {
+    const tags = this.bulkTagFilter();
+    const search = this.bulkSearch().toLowerCase().trim();
+    let repos = this.config().repositories;
+    if (tags.length > 0) {
+      repos = repos.filter(r => tags.every(t => (r.tags || []).includes(t)));
+    }
+    if (search) {
+      repos = repos.filter(r => (r.name || '').toLowerCase().includes(search));
+    }
+    return repos;
+  });
+  bulkAllSelected = computed(() => {
+    const visible = this.bulkFilteredRepos();
+    const selected = this.bulkSelectedRepos();
+    return visible.length > 0 && visible.every(r => selected.has(r.name));
+  });
+  scheduling = signal<SchedulingConfig>({ enabled: false, policy: 'polling', polling_schedule: '' });
+  checkingRemotes = signal(false);
+  checkRemotesResult = signal<CheckRemotesResult | null>(null);
+  activeTab = signal<'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing' | 'scheduling'>('general');
   selectedRepoIndex = signal<number | null>(null);
   editingSection = signal<string | null>(null);
   visibleSecrets = signal<Set<string>>(new Set());
@@ -109,9 +136,10 @@ export class SettingsComponent implements OnInit {
     this.loadIncubatingProcessors();
     this.loadProfiles();
     this.loadGitProcessing();
+    this.loadScheduling();
 
     const tab = this.route.snapshot.queryParamMap.get('tab');
-    if (tab && ['general', 'viewers', 'neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper', 'logzio', 'processors', 'profiles', 'git-processing'].includes(tab)) {
+    if (tab && ['general', 'viewers', 'neo4j', 'atlassian', 'bitbucket', 'repos', 'providers', 'tasks', 'whisper', 'logzio', 'processors', 'profiles', 'git-processing', 'scheduling'].includes(tab)) {
       this.activeTab.set(tab as any);
     }
   }
@@ -139,9 +167,9 @@ export class SettingsComponent implements OnInit {
   }
 
   cancelEditing() {
+    const section = this.editingSection();
     if (this.configBackup) {
       this.config.set(this.configBackup);
-      const section = this.editingSection();
       if (section?.startsWith('repo-')) {
         const idx = parseInt(section.split('-')[1]);
         if (idx >= this.config().repositories.length) {
@@ -150,6 +178,12 @@ export class SettingsComponent implements OnInit {
           );
         }
       }
+    }
+    // Reload separate signals that may have unsaved additions
+    if (section?.startsWith('git-proc-')) {
+      this.loadGitProcessing();
+    } else if (section?.startsWith('profile-')) {
+      this.loadProfiles();
     }
     this.editingSection.set(null);
     this.configBackup = null;
@@ -161,7 +195,7 @@ export class SettingsComponent implements OnInit {
     this.persistConfig('Settings saved');
   }
 
-  switchTab(tab: 'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing') {
+  switchTab(tab: 'general' | 'viewers' | 'neo4j' | 'atlassian' | 'bitbucket' | 'repos' | 'providers' | 'tasks' | 'whisper' | 'logzio' | 'processors' | 'profiles' | 'git-processing' | 'scheduling') {
     if (this.editingSection()) this.cancelEditing();
     this.activeTab.set(tab);
   }
@@ -511,7 +545,7 @@ export class SettingsComponent implements OnInit {
       ...c,
       ai_providers: [
         ...c.ai_providers,
-        { name: '', base_url: 'https://api.openai.com/v1', api_key: '', default_model: 'gpt-4o' },
+        { name: '', base_url: 'https://api.openai.com/v1', api_key: '', default_model: 'gpt-4o', privacy_level: 'private' },
       ],
     }));
     this.editingSection.set('provider-' + (this.config().ai_providers.length - 1));
@@ -538,35 +572,105 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  // AI Tasks
-  addAITask() {
-    this.configBackup = structuredClone(this.config());
-    this.config.update((c) => ({
-      ...c,
-      ai_tasks: [...c.ai_tasks, { task_type: 'repository_analysis', provider_name: '' }],
-    }));
-    this.editingSection.set('task-' + (this.config().ai_tasks.length - 1));
+  // AI Provider / Whisper test
+  testingSection = signal<string | null>(null);
+  providerTestMessage = signal<Record<string, string>>({});
+  providerTestLoading = signal<Record<string, boolean>>({});
+  providerTestResult = signal<Record<string, { status: 'ok' | 'error'; result?: TestAIProviderResult; error?: string }>>({});
+
+  toggleTestSection(key: string) {
+    if (this.testingSection() === key) {
+      this.closeTestSection();
+    } else {
+      this.testingSection.set(key);
+    }
   }
 
-  async removeAITask(index: number) {
-    const type = this.config().ai_tasks[index]?.task_type || 'this task';
-    const ok = await this.confirmDialog.open({ title: 'Remove AI task', message: `Remove "${type}"?` });
-    if (!ok) return;
-    this.config.update((c) => ({
-      ...c,
-      ai_tasks: c.ai_tasks.filter((_, i) => i !== index),
-    }));
+  closeTestSection() {
+    const key = this.testingSection();
+    if (key) {
+      this.providerTestMessage.update(s => { const n = { ...s }; delete n[key]; return n; });
+      this.providerTestLoading.update(s => { const n = { ...s }; delete n[key]; return n; });
+      this.providerTestResult.update(s => { const n = { ...s }; delete n[key]; return n; });
+      if (key === 'whisper') this.whisperTestText.set('');
+    }
+    this.testingSection.set(null);
+  }
+
+  testAIProvider(providerName: string) {
+    const message = this.providerTestMessage()[providerName]?.trim();
+    if (!message) return;
+    this.providerTestLoading.update(s => ({ ...s, [providerName]: true }));
+    this.providerTestResult.update(s => { const n = { ...s }; delete n[providerName]; return n; });
+    this.settingsService.testAIProvider(providerName, message).subscribe({
+      next: r => {
+        this.providerTestLoading.update(s => ({ ...s, [providerName]: false }));
+        this.providerTestResult.update(s => ({ ...s, [providerName]: { status: 'ok', result: r } }));
+      },
+      error: e => {
+        this.providerTestLoading.update(s => ({ ...s, [providerName]: false }));
+        this.providerTestResult.update(s => ({ ...s, [providerName]: { status: 'error', error: e.error?.detail ?? e.message ?? 'Unknown error' } }));
+      },
+    });
+  }
+
+  updateProviderTestMessage(providerName: string, value: string) {
+    this.providerTestMessage.update(s => ({ ...s, [providerName]: value }));
+  }
+
+  // AI Tasks
+  readonly allTaskTypes = [
+    { type: 'repository_analysis', label: 'Repository Analysis' },
+    { type: 'functional_doc', label: 'Functional Doc Processing' },
+    { type: 'cypher_generation', label: 'Cypher Generation' },
+    { type: 'context_assistant', label: 'Context Assistant' },
+  ] as const;
+
+  taskProviders = signal<Record<string, string>>({});
+
+  startEditingTasks() {
+    this.configBackup = structuredClone(this.config());
+    const providers: Record<string, string> = {};
+    for (const t of this.allTaskTypes) {
+      const task = this.config().ai_tasks.find(a => a.task_type === t.type);
+      providers[t.type] = task?.provider_name ?? '';
+    }
+    this.taskProviders.set(providers);
+    this.editingSection.set('tasks');
+  }
+
+  updateTaskProvider(taskType: string, providerName: string) {
+    this.taskProviders.update(p => ({ ...p, [taskType]: providerName }));
+  }
+
+  saveAITasks() {
+    const providers = this.taskProviders();
+    const tasks = Object.entries(providers)
+      .filter(([, name]) => !!name)
+      .map(([type, name]) => ({ task_type: type, provider_name: name }));
+    this.config.update(c => ({ ...c, ai_tasks: tasks }));
     this.editingSection.set(null);
     this.configBackup = null;
-    this.persistConfig('Task removed');
+    this.persistConfig('AI tasks saved');
   }
 
-  updateAITask(index: number, field: string, value: string) {
-    this.config.update((c) => {
-      const tasks = [...c.ai_tasks];
-      tasks[index] = { ...tasks[index], [field]: value };
-      return { ...c, ai_tasks: tasks };
-    });
+  getTaskProvider(taskType: string): string {
+    return this.config().ai_tasks.find(t => t.task_type === taskType)?.provider_name ?? '';
+  }
+
+  taskTypeDescription(taskType: string): string {
+    switch (taskType) {
+      case 'repository_analysis':
+        return 'On the Repository page, analyzes code structure and generates summaries when running analysis jobs.';
+      case 'functional_doc':
+        return 'On the Confluence page, processes Confluence pages into functional documentation nodes in the graph.';
+      case 'cypher_generation':
+        return 'On the Graph Schema page, generates Cypher queries from natural language in the Query Generator panel.';
+      case 'context_assistant':
+        return 'On the Context detail page, powers the Assistant chat to answer questions about context items.';
+      default:
+        return '';
+    }
   }
 
   // Whisper
@@ -739,7 +843,9 @@ export class SettingsComponent implements OnInit {
       ...list,
       { name: '', repo_name: '', branch: '', profile: '', processors: [] },
     ]);
-    this.editingSection.set('git-proc-' + (this.gitProcessingConfigs().length - 1));
+    const idx = this.gitProcessingConfigs().length - 1;
+    this.editingSection.set('git-proc-' + idx);
+    setTimeout(() => document.querySelector(`[data-gp-index="${idx}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   updateGitProcessingField(index: number, field: string, value: string) {
@@ -764,10 +870,12 @@ export class SettingsComponent implements OnInit {
 
   saveGitProcessing(index: number) {
     const gp = this.gitProcessingConfigs()[index];
-    if (!gp.name.trim() || !gp.repo_name) {
-      this.showMessage('Name and repository are required', 'danger');
+    if (!gp.repo_name || !gp.branch.trim()) {
+      this.showMessage('Repository and branch are required', 'danger');
       return;
     }
+    // Derive name from repo + branch
+    gp.name = `${gp.repo_name} ${gp.branch}`.trim();
     // Save by updating full config
     this.settingsService.getSettings().subscribe({
       next: cfg => {
@@ -795,6 +903,172 @@ export class SettingsComponent implements OnInit {
             this.showMessage('Config removed', 'success');
           },
           error: () => this.showMessage('Failed to remove', 'danger'),
+        });
+      },
+    });
+  }
+
+  // Scheduling
+  private loadScheduling() {
+    this.settingsService.getSettings().subscribe({
+      next: cfg => this.scheduling.set(cfg.scheduling || { enabled: false, policy: 'polling', polling_schedule: '' }),
+    });
+  }
+
+  toggleSchedulingEnabled() {
+    this.scheduling.update(s => ({ ...s, enabled: !s.enabled }));
+  }
+
+  setPollingSchedule(value: string) {
+    this.scheduling.update(s => ({ ...s, polling_schedule: value }));
+  }
+
+  saveScheduling() {
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.scheduling = this.scheduling();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => {
+            this.editingSection.set(null);
+            this.showMessage('Scheduling saved', 'success');
+          },
+          error: () => this.showMessage('Failed to save', 'danger'),
+        });
+      },
+    });
+  }
+
+  cancelEditingScheduling() {
+    this.loadScheduling();
+    this.editingSection.set(null);
+  }
+
+  triggerCheckRemotes(ingest = false) {
+    this.checkingRemotes.set(true);
+    this.checkRemotesResult.set(null);
+    this.gitMiningService.checkRemotes(ingest).subscribe({
+      next: result => {
+        this.checkRemotesResult.set(result);
+        this.checkingRemotes.set(false);
+        if (ingest && result.jobs_started.length > 0) {
+          this.showMessage(`Started ${result.jobs_started.length} ingestion job(s)`, 'success');
+        }
+      },
+      error: () => {
+        this.showMessage('Failed to check remotes', 'danger');
+        this.checkingRemotes.set(false);
+      },
+    });
+  }
+
+  describeCron(expr: string): string {
+    if (!expr?.trim()) return '';
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length !== 5) return '';
+    const [minute, hour, , , dow] = parts;
+    const dayMap: Record<string, string> = {
+      '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat', '7': 'Sun',
+      '1-5': 'weekdays', '0-6': 'every day', '*': 'every day',
+    };
+    const days = dayMap[dow] || `days ${dow}`;
+    let time = '';
+    if (hour.includes('-')) {
+      const [from, to] = hour.split('-');
+      time = `${from}:00\u2013${to}:00`;
+    } else if (hour === '*') {
+      time = 'every hour';
+    } else {
+      time = `${hour}:${minute.padStart(2, '0')}`;
+    }
+    const freq = hour.includes('-') || hour === '*'
+      ? (minute === '0' ? 'Every hour' : `At :${minute.padStart(2, '0')} every hour`)
+      : 'At';
+    return `${freq} ${time}, ${days}`;
+  }
+
+  // Bulk add git processing configs
+  openBulkAdd() {
+    this.bulkAddOpen.set(true);
+    this.bulkTagFilter.set([]);
+    this.bulkSearch.set('');
+    this.bulkSelectedRepos.set(new Set());
+    this.bulkBranch.set('');
+    this.bulkProfile.set('');
+    setTimeout(() => this.bulkAddPanel()?.nativeElement?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  toggleBulkTag(tag: string) {
+    this.bulkTagFilter.update(tags =>
+      tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]);
+  }
+
+  toggleBulkRepo(name: string) {
+    this.bulkSelectedRepos.update(set => {
+      const next = new Set(set);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+  }
+
+  toggleBulkAll() {
+    const visible = this.bulkFilteredRepos().map(r => r.name);
+    const selected = this.bulkSelectedRepos();
+    const allSelected = visible.every(n => selected.has(n));
+    if (allSelected) {
+      this.bulkSelectedRepos.update(set => {
+        const next = new Set(set);
+        visible.forEach(n => next.delete(n));
+        return next;
+      });
+    } else {
+      this.bulkSelectedRepos.update(set => {
+        const next = new Set(set);
+        visible.forEach(n => next.add(n));
+        return next;
+      });
+    }
+  }
+
+  saveBulkGitProcessing() {
+    const branch = this.bulkBranch().trim();
+    if (!branch) {
+      this.showMessage('Branch is required', 'danger');
+      return;
+    }
+    const repos = [...this.bulkSelectedRepos()];
+    if (repos.length === 0) {
+      this.showMessage('Select at least one repository', 'danger');
+      return;
+    }
+    const profile = this.bulkProfile();
+    const existing = this.gitProcessingConfigs();
+    const existingNames = new Set(existing.map(g => g.name));
+    const newConfigs = repos
+      .map(repo => ({
+        name: `${repo} ${branch}`,
+        repo_name: repo,
+        branch,
+        profile,
+        processors: [] as string[],
+      }))
+      .filter(c => !existingNames.has(c.name));
+
+    if (newConfigs.length === 0) {
+      this.showMessage('All selected configs already exist', 'danger');
+      return;
+    }
+
+    this.gitProcessingConfigs.update(list => [...list, ...newConfigs]);
+    this.settingsService.getSettings().subscribe({
+      next: cfg => {
+        cfg.git_processing = this.gitProcessingConfigs();
+        this.settingsService.updateSettings(cfg).subscribe({
+          next: () => {
+            this.bulkAddOpen.set(false);
+            this.showMessage(`Added ${newConfigs.length} git processing config(s)`, 'success');
+            this.loadGitProcessing();
+          },
+          error: () => this.showMessage('Failed to save', 'danger'),
         });
       },
     });

@@ -157,6 +157,32 @@
   }
 }
 
+.item-action-btn {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .item-row:hover & {
+    opacity: 1;
+  }
+
+  button {
+    padding: 0.1rem 0.3rem;
+    line-height: 1;
+  }
+
+  .dropdown-menu {
+    position: fixed;
+    font-size: 0.8125rem;
+  }
+
+  .copied-badge {
+    font-size: 0.7rem;
+    color: var(--bs-success);
+    opacity: 1;
+  }
+}
+
 .drag-handle {
   cursor: grab;
   color: var(--rm-text-muted, #6c757d);

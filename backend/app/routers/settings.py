@@ -125,6 +125,58 @@ def lookup_confluence_space(key: str):
     return {"key": data["key"], "name": data["name"]}
 
 
+class TestAIProviderRequest(BaseModel):
+    provider_name: str
+    message: str
+
+
+@router.post("/test-ai-provider")
+def test_ai_provider(req: TestAIProviderRequest):
+    require_unlocked()
+    config = load_config_decrypted()
+    provider = next((p for p in config.ai_providers if p.name == req.provider_name), None)
+    if not provider:
+        raise HTTPException(status_code=400, detail=f"AI provider '{req.provider_name}' not found")
+
+    import time
+    from openai import OpenAI, APIError, APIConnectionError, AuthenticationError, APITimeoutError
+
+    start = time.time()
+    try:
+        client = OpenAI(api_key=provider.api_key or "unused", base_url=provider.base_url, timeout=30.0)
+        response = client.chat.completions.create(
+            model=provider.default_model,
+            messages=[{"role": "user", "content": req.message}],
+            max_tokens=500,
+        )
+        elapsed = round(time.time() - start, 2)
+        content = response.choices[0].message.content if response.choices else "(empty response)"
+        model_used = response.model or provider.default_model
+        usage = response.usage
+        return {
+            "status": "ok",
+            "response": content,
+            "model": model_used,
+            "elapsed_seconds": elapsed,
+            "usage": {
+                "prompt_tokens": usage.prompt_tokens if usage else None,
+                "completion_tokens": usage.completion_tokens if usage else None,
+            },
+        }
+    except AuthenticationError as e:
+        raise HTTPException(status_code=400, detail=f"Authentication failed: {e.message}")
+    except APITimeoutError:
+        elapsed = round(time.time() - start, 2)
+        raise HTTPException(status_code=400, detail=f"Request timed out after {elapsed}s")
+    except APIConnectionError as e:
+        raise HTTPException(status_code=400, detail=f"Connection error: {e.message}")
+    except APIError as e:
+        code = getattr(e, "status_code", "unknown")
+        raise HTTPException(status_code=400, detail=f"API error ({code}): {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 class BrowseFolderRequest(BaseModel):
     initial_dir: str = ""
 

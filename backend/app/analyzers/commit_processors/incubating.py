@@ -96,6 +96,7 @@ class IncubatingProcessor(CommitProcessor):
         self.description = proc_description
         self.instructions = instructions
         self.node_property = f"proc_{proc_name}"
+        self.version = 1
         self._patterns = [re.compile(p, re.IGNORECASE) for p in file_patterns]
 
     def detect(self, files_changed: list[str]) -> list[str]:

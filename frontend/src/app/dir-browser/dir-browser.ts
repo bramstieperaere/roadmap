@@ -1,8 +1,9 @@
-import { Component, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml, SafeUrl } from '@angular/platform-browser';
 import { marked } from 'marked';
+import { parseReturnTo } from '../shared/return-to';
 
 interface DirEntry {
   name: string;
@@ -44,6 +45,7 @@ export class DirBrowser implements OnInit {
   currentPath = signal('');
   parentPath = signal<string | null>(null);
   returnTo = signal('');
+  backLink = computed(() => parseReturnTo(this.returnTo()));
   entries = signal<DirEntry[]>([]);
   loading = signal(true);
   error = signal('');
@@ -176,6 +178,10 @@ export class DirBrowser implements OnInit {
     this.viewingFile.set(null); this.pumlSvgUrl.set(null); this.pumlError.set('');
     this.zoom.set(100); this.showSource.set(false); this.showMinimap.set(false);
     this.markdownHtml.set(null); this.revokeHtmlBlob();
+  }
+
+  openHtmlInNewTab() {
+    if (this.htmlBlobRef) window.open(this.htmlBlobRef, '_blank');
   }
 
   zoomIn() { this.zoom.update(z => Math.min(z + 25, 400)); this.updateMinimap(); }

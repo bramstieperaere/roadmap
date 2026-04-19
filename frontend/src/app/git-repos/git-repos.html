@@ -134,6 +134,7 @@
               }
             </div>
           }
+          <div class="timeline-scroll">
           @if (filteredCommits().length === 0) {
             <div class="text-center text-muted py-4">
               <i class="bi bi-funnel d-block mb-2" style="font-size: 1.5rem;"></i>
@@ -190,6 +191,7 @@
           }
           </div>
           }
+          </div><!-- /timeline-scroll -->
         } @else if (!selectedRepo()) {
           <div class="text-center text-muted py-5">
             <i class="bi bi-git d-block mb-2" style="font-size: 2rem;"></i>

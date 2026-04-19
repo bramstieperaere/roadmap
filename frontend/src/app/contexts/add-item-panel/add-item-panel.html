@@ -68,19 +68,19 @@
             }
           </select>
         </div>
-        @if (loadingPages()) {
-          <div class="d-flex justify-content-center py-2"><span class="spinner-border spinner-border-sm"></span></div>
-        } @else if (pageTree().length > 0) {
+        @if (selectedSpaceKey()) {
           <div class="mb-2">
-            <input type="text" class="form-control form-control-sm"
-                   placeholder="Filter by title or page ID..."
-                   [ngModel]="pageFilter()" (ngModelChange)="pageFilter.set($event)">
+            <div class="d-flex gap-2 align-items-center">
+              <input type="text" class="form-control form-control-sm flex-grow-1"
+                     placeholder="Filter by title or page ID..."
+                     [ngModel]="pageFilter()" (ngModelChange)="pageFilter.set($event)">
+              @if (loadingPages()) {
+                <span class="spinner-border spinner-border-sm text-muted flex-shrink-0"></span>
+              }
+            </div>
           </div>
           @if (pageFilter().trim()) {
             <div class="page-tree-box mb-1">
-              @if (filteredPageResults().length === 0) {
-                <div class="px-2 py-2 text-muted small">No pages match.</div>
-              }
               @for (page of filteredPageResults(); track page.id) {
                 <div class="tree-node" style="padding-left: 0.5rem">
                   <a class="tree-link" (click)="selectConfluencePage(page.id, page.title)"
@@ -91,8 +91,19 @@
                   </a>
                 </div>
               }
+              @if (filteredPageResults().length === 0 && pageFilter().trim().match('^[0-9]+$')) {
+                <div class="tree-node" style="padding-left: 0.5rem">
+                  <a class="tree-link" (click)="selectConfluencePage(pageFilter().trim(), 'Page ' + pageFilter().trim())"
+                     [class.selected]="selectedPage()?.id === pageFilter().trim()">
+                    <i class="bi bi-link-45deg"></i>
+                    Use page ID <span class="page-id-badge">{{ pageFilter().trim() }}</span>
+                  </a>
+                </div>
+              } @else if (filteredPageResults().length === 0) {
+                <div class="px-2 py-2 text-muted small">No pages match.</div>
+              }
             </div>
-          } @else {
+          } @else if (pageTree().length > 0) {
             <div class="page-tree-box">
               <ng-container *ngTemplateOutlet="pageTreeTpl; context: { pages: pageTree(), depth: 0 }"></ng-container>
             </div>

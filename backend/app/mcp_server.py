@@ -63,12 +63,16 @@ def _render_items(items: list[dict], config, cache) -> list[dict]:
         else:
             content = f"Unknown item: {item_type} / {item_id}"
 
-        sections.append({
+        section = {
             "type": item_type,
             "id": item_id,
             "label": label,
             "content": content,
-        })
+        }
+        if item_type == "git_repo":
+            repo = next((r for r in config.repositories if r.name == item_id), None)
+            section["path"] = repo.path if repo else item.get("path", "")
+        sections.append(section)
     return sections
 
 

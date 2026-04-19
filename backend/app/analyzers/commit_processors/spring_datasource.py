@@ -127,6 +127,7 @@ class SpringDataSourceProcessor(CommitProcessor):
     label = "Spring DataSource"
     description = "Extracts database connection configuration (JDBC URLs, drivers, dialects)"
     node_property = "spring_datasource"
+    version = 1
 
     def detect(self, files_changed: list[str]) -> list[str]:
         matched = []

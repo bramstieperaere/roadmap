@@ -1,0 +1,135 @@
+<div class="section-page">
+
+  <div class="section-topbar">
+    <div class="d-flex align-items-center gap-2">
+      @if (backLink(); as back) {
+        <a [routerLink]="back.path" [queryParams]="back.queryParams" class="breadcrumb-link">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+        <i class="bi bi-chevron-right text-muted small"></i>
+      }
+      <span class="fw-semibold"><i class="bi bi-git me-1"></i>{{ repoName() }}</span>
+      @if (data(); as d) {
+        <span class="badge bg-secondary">{{ d.branch }}</span>
+        <a class="dir-link" [routerLink]="['/browse-dir']" [queryParams]="browseDirParams()" title="Browse directory">
+          <i class="bi bi-folder2-open me-1"></i>{{ d.path }}
+        </a>
+      }
+    </div>
+    <div class="d-flex gap-1">
+      <button class="btn btn-outline-secondary btn-sm btn-icon" (click)="loadDiff()" title="Refresh">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="section-content">
+
+    @if (error()) {
+      <div class="alert alert-danger py-2 m-3">{{ error() }}</div>
+    }
+
+    @if (loading()) {
+      <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    } @else if (data(); as d) {
+
+      @if (!d.diff) {
+        <div class="text-muted p-4 text-center">
+          <i class="bi bi-check-circle me-1"></i>Working directory is clean — no changes.
+        </div>
+      } @else {
+        <div class="diff-layout">
+
+          <!-- Left panel: file list -->
+          <div class="file-list-panel" [class.collapsed]="fileListCollapsed()">
+            @if (!fileListCollapsed()) {
+              <div class="file-list-header">
+                <span class="fw-semibold">Changed files</span>
+                <div class="d-flex align-items-center gap-2 ms-auto">
+                  <span class="stat-added">+{{ totalAdded() }}</span>
+                  <span class="stat-removed">-{{ totalRemoved() }}</span>
+                  <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="fileListCollapsed.set(true)" title="Hide file list">
+                    <i class="bi bi-chevron-bar-left"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="filter-bar">
+                <i class="bi bi-funnel"></i>
+                <input type="text" class="filter-input" placeholder="Filter files..."
+                       [value]="filterText()" (input)="filterText.set($any($event.target).value)">
+              </div>
+              <div class="file-tree">
+                @for (group of filteredTree(); track group.dir) {
+                  @if (group.dir) {
+                    <div class="tree-dir" (click)="group.collapsed = !group.collapsed">
+                      <i class="bi" [class.bi-chevron-down]="!group.collapsed" [class.bi-chevron-right]="group.collapsed"></i>
+                      <i class="bi bi-folder-fill folder-icon"></i>
+                      <span class="dir-name">{{ group.dir }}</span>
+                    </div>
+                  }
+                  @if (!group.collapsed) {
+                    @for (file of group.files; track file.path) {
+                      <div class="tree-file" [class.active]="activeFile() === file.path"
+                           [class.indent]="!!group.dir"
+                           (click)="scrollToFile(file.path)">
+                        <i class="bi" [class.bi-file-earmark-plus]="file.untracked"
+                           [class.bi-file-earmark-diff]="!file.untracked"></i>
+                        <span class="tree-file-name">{{ file.name }}</span>
+                        @if (!file.untracked) {
+                          <span class="tree-stat">
+                            @if (file.added) { <span class="stat-added">+{{ file.added }}</span> }
+                            @if (file.removed) { <span class="stat-removed">-{{ file.removed }}</span> }
+                          </span>
+                        } @else {
+                          <span class="tree-stat"><span class="stat-untracked">new</span></span>
+                        }
+                      </div>
+                    }
+                  }
+                }
+              </div>
+            } @else {
+              <button class="btn btn-outline-secondary btn-sm btn-xs collapse-show-btn" (click)="fileListCollapsed.set(false)" title="Show file list">
+                <i class="bi bi-chevron-bar-right"></i>
+              </button>
+            }
+          </div>
+
+          <!-- Right panel: diff content -->
+          <div class="diff-viewer-panel" #diffPanel>
+
+            @for (file of parsedFiles(); track file.path) {
+              <div class="diff-file" [id]="fileAnchor(file.path)" [class.active]="activeFile() === file.path">
+                <div class="diff-file-header">
+                  <i class="bi bi-file-earmark-diff"></i>
+                  <span class="diff-file-path">{{ file.path }}</span>
+                  <span class="diff-file-stats ms-auto">
+                    @if (file.added) { <span class="stat-added">+{{ file.added }}</span> }
+                    @if (file.removed) { <span class="stat-removed">-{{ file.removed }}</span> }
+                  </span>
+                </div>
+                <div class="diff-file-body">
+                  @for (hunk of file.hunks; track $index) {
+                    <div class="diff-hunk-header">{{ hunk.header }}</div>
+                    <table class="diff-table">
+                      <tbody>
+                        @for (line of hunk.lines; track $index) {
+                          <tr [class]="'line-' + line.type">
+                            <td class="line-num">{{ line.oldLine ?? '' }}</td>
+                            <td class="line-num">{{ line.newLine ?? '' }}</td>
+                            <td class="line-content">{{ line.content }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </div>
+              </div>
+            }
+
+          </div>
+        </div>
+      }
+    }
+  </div>
+</div>

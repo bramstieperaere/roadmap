@@ -2,8 +2,8 @@
 
   <div class="section-topbar">
     <div class="d-flex align-items-center gap-2">
-      @if (returnTo()) {
-        <a [routerLink]="returnTo()" class="breadcrumb-link">
+      @if (backLink(); as back) {
+        <a [routerLink]="back.path" [queryParams]="back.queryParams" class="breadcrumb-link">
           <i class="bi bi-arrow-left me-1"></i>Back
         </a>
         <i class="bi bi-chevron-right text-muted small"></i>
@@ -95,6 +95,11 @@
                           (click)="showSource.set(!showSource())" title="Toggle source">
                     <i class="bi bi-code-slash"></i>
                   </button>
+                  @if (htmlBlobUrl()) {
+                    <button class="btn btn-outline-secondary btn-sm btn-xs" (click)="openHtmlInNewTab()" title="Open in new tab">
+                      <i class="bi bi-box-arrow-up-right"></i>
+                    </button>
+                  }
                 }
               </div>
             </div>

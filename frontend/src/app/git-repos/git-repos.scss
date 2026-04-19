@@ -134,8 +134,16 @@
   background: var(--rm-surface);
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   padding: 0.75rem;
+  overflow: hidden;
+}
+
+.timeline-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .timeline {

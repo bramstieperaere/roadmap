@@ -51,6 +51,7 @@ export interface PreviewSection {
   id: string;
   label: string;
   content: string;
+  path?: string;
 }
 
 export interface ContributingContext {

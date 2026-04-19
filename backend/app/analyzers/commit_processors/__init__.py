@@ -16,6 +16,7 @@ class CommitProcessor(ABC):
     description: str   # short description for the UI
     node_property: str  # Neo4j property name to store results, e.g. "db_changes"
     status: Literal["matured", "incubating"] = "matured"
+    version: int = 1       # bump when processor logic changes
 
     @abstractmethod
     def detect(self, files_changed: list[str]) -> list[str]:

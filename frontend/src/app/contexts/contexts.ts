@@ -152,6 +152,8 @@ export class ContextsComponent implements OnInit {
   showAddChild(parentName: string, event: Event) {
     event.preventDefault();
     event.stopPropagation();
+    this.openMenu.set(null);
+    if (this.collapsed()) this.collapsed.set(false);
     this.addingChildFor.set(parentName);
     this.newChildName.set('');
   }

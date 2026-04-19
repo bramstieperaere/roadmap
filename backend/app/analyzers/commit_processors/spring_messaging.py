@@ -127,6 +127,7 @@ class SpringMessagingProcessor(CommitProcessor):
     label = "Spring Messaging"
     description = "Extracts JMS, Kafka, and RabbitMQ listeners (incoming) and senders (outgoing)"
     node_property = "spring_messaging"
+    version = 1
 
     def detect(self, files_changed: list[str]) -> list[str]:
         matched = []

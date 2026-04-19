@@ -105,6 +105,7 @@ class SpringEndpointProcessor(CommitProcessor):
     label = "Spring REST Endpoints"
     description = "Extracts REST controller endpoints, HTTP methods, and paths"
     node_property = "spring_endpoints"
+    version = 1
 
     def detect(self, files_changed: list[str]) -> list[str]:
         matched = []

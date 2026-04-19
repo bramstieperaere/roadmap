@@ -182,6 +182,7 @@ class JpaEntityProcessor(CommitProcessor):
     label = "JPA Entities"
     description = "Extracts JPA entity classes, table mappings, columns, and relationships"
     node_property = "jpa_entities"
+    version = 1
 
     def detect(self, files_changed: list[str]) -> list[str]:
         matched = []

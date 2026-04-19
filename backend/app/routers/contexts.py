@@ -296,6 +296,69 @@ def get_repo_branches(repo_name: str):
     return sorted(names)
 
 
+@router.get("/meta/repo-diff/{repo_name}")
+def get_repo_diff(repo_name: str):
+    """Return the current working-directory diff for a repository."""
+    config = load_config_decrypted()
+    repo = next((r for r in config.repositories if r.name == repo_name), None)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    # Current branch
+    branch_proc = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=repo.path, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=10,
+    )
+    branch = (branch_proc.stdout or "").strip() if branch_proc.returncode == 0 else "unknown"
+
+    # Staged + unstaged diff
+    diff_proc = subprocess.run(
+        ["git", "diff", "HEAD"],
+        cwd=repo.path, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=30,
+    )
+    diff = (diff_proc.stdout or "") if diff_proc.returncode == 0 else ""
+
+    # Untracked files — generate diffs and append to main diff
+    untracked_proc = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=repo.path, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=10,
+    )
+    untracked = [f for f in (untracked_proc.stdout or "").strip().splitlines() if f.strip()] \
+        if untracked_proc.returncode == 0 else []
+
+    for ufile in untracked:
+        udiff_proc = subprocess.run(
+            ["git", "diff", "--no-index", "/dev/null", ufile],
+            cwd=repo.path, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=10,
+        )
+        udiff = udiff_proc.stdout or ""
+        if udiff:
+            # Rewrite header to use a/file b/file format for consistent parsing
+            udiff = udiff.replace(f"a/dev/null", f"a/{ufile}")
+            diff += udiff
+
+    # Status summary
+    status_proc = subprocess.run(
+        ["git", "diff", "--stat", "HEAD"],
+        cwd=repo.path, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=10,
+    )
+    stat = (status_proc.stdout or "").strip() if status_proc.returncode == 0 else ""
+
+    return {
+        "repo_name": repo_name,
+        "path": repo.path,
+        "branch": branch,
+        "diff": diff,
+        "stat": stat,
+        "untracked": untracked,
+    }
+
+
 _HIDDEN_DIRS = {".git", "node_modules", "__pycache__", ".idea", ".vscode", ".gradle", "target", "build", "dist", ".angular"}
 
 

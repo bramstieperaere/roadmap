@@ -210,15 +210,21 @@ export class AddItemPanel {
   selectSpace(spaceKey: string) {
     if (spaceKey === this.selectedSpaceKey()) return;
     this.selectedSpaceKey.set(spaceKey);
-    this.pageTree.set([]);
-    this.expandedNodes.set(new Set());
     this.selectedPage.set(null);
-    this.pageFilter.set('');
     this.itemLabel.set('');
-    if (!spaceKey) return;
+    if (!spaceKey) {
+      this.pageTree.set([]);
+      this.expandedNodes.set(new Set());
+      this.pageFilter.set('');
+      return;
+    }
     this.loadingPages.set(true);
     this.confluenceService.getPages(spaceKey).subscribe({
-      next: (data) => { this.pageTree.set(data.pages); this.loadingPages.set(false); },
+      next: (data) => {
+        this.pageTree.set(data.pages);
+        this.expandedNodes.set(new Set());
+        this.loadingPages.set(false);
+      },
       error: () => this.loadingPages.set(false),
     });
   }

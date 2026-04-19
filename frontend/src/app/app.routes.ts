@@ -48,6 +48,7 @@ export const routes: Routes = [
   { path: 'graph-schema', loadComponent: () => import('./graph-schema/graph-schema').then(m => m.GraphSchema) },
   { path: 'facets', loadComponent: () => import('./facets/facets').then(m => m.Facets) },
   { path: 'browse-dir', loadComponent: () => import('./dir-browser/dir-browser').then(m => m.DirBrowser) },
+  { path: 'git-diff/:repo', loadComponent: () => import('./git-diff/git-diff').then(m => m.GitDiff) },
   { path: 'contexts', loadComponent: () => import('./contexts/contexts').then(m => m.ContextsComponent) },
   { path: 'contexts/:name', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },
   { path: 'contexts/:name/:child', loadComponent: () => import('./contexts/context-detail').then(m => m.ContextDetail) },

@@ -4,14 +4,17 @@ import re
 import subprocess
 from pathlib import Path
 
+from datetime import datetime, timezone
+
 from app.job_store import job_store
 from app.models_jobs import JobStatus
-from app.neo4j_client import get_neo4j_driver, run_cypher_write
+from app.neo4j_client import get_neo4j_driver, run_cypher_read, run_cypher_write
 
 _JIRA_KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 _COMMIT_SEP = "COMMIT_SEP"
 _BATCH_SIZE = 500
 _GIT_LOG_TIMEOUT = 300
+_COMMIT_CHUNK_SIZE = None  # set to an int to limit commits per run (for testing)
 
 _GIT_LOG_FORMAT = f"{_COMMIT_SEP}%nH:%H%nP:%P%nAN:%an%nAE:%ae%nAI:%aI%nS:%s"
 
@@ -95,6 +98,99 @@ UNWIND $items AS item
 MATCH (c:Tooling:Commit {{hash: item.hash}})
 SET c.{prop} = item.value
 """
+
+_CYPHER_GET_INGESTION_STATE = """
+MATCH (r:Tooling:Repository {name: $repo_name})
+RETURN r.ingestion_state AS state
+"""
+
+_CYPHER_SET_INGESTION_STATE = """
+MATCH (r:Tooling:Repository {name: $repo_name})
+SET r.ingestion_state = $state
+"""
+
+_CYPHER_SET_COMMIT_PROC_VERSIONS = """
+UNWIND $items AS item
+MATCH (c:Tooling:Commit {hash: item.hash})
+SET c.processor_versions = item.versions
+"""
+
+_CYPHER_GET_LATEST_ACC = """
+MATCH (r:Tooling:Repository {{name: $repo_name}})-[:HAS_COMMIT]->(c:Tooling:Commit)
+WHERE c.{prop} IS NOT NULL
+RETURN c.{prop} AS acc
+ORDER BY c.date DESC
+LIMIT 1
+"""
+
+_CYPHER_REMOVE_STALE_BRANCH = """
+MATCH (r:Tooling:Repository {name: $repo_name})-[:HAS_BRANCH]->(b:Tooling:Branch {name: $branch_name})
+DETACH DELETE b
+"""
+
+_CYPHER_UNSTAMP_BRANCH = """
+MATCH (c:Tooling:Commit)
+WHERE c.repo_name = $repo_name AND $branch_name IN c.branches
+SET c.branches = [b IN c.branches WHERE b <> $branch_name]
+"""
+
+
+def _load_ingestion_state(driver, repo_name: str) -> dict | None:
+    """Read ingestion state JSON from the Repository node."""
+    rows = run_cypher_read(driver, _CYPHER_GET_INGESTION_STATE,
+                           {"repo_name": repo_name})
+    if rows and rows[0].get("state"):
+        return json.loads(rows[0]["state"])
+    return None
+
+
+def _save_ingestion_state(driver, repo_name: str, state: dict):
+    """Write ingestion state JSON to the Repository node."""
+    run_cypher_write(driver, _CYPHER_SET_INGESTION_STATE,
+                     {"repo_name": repo_name,
+                      "state": json.dumps(state)})
+
+
+def _build_incremental_git_cmd(branch_filter: list[str] | None,
+                               prior_tips: dict[str, str]) -> list[str]:
+    """Build git log args that fetch only commits beyond prior tips.
+
+    Uses origin/ remote tracking refs and git's ^hash exclusion to skip
+    commits reachable from any previously-known branch tip.
+    """
+    cmd = ["git", "log"]
+    if branch_filter:
+        cmd += [f"origin/{b}" for b in branch_filter]
+    else:
+        cmd.append("--all")
+    for tip_hash in prior_tips.values():
+        cmd.append(f"^{tip_hash}")
+    cmd += [f"--format={_GIT_LOG_FORMAT}", "--name-only"]
+    return cmd
+
+
+def _load_prior_accumulated(driver, repo_name: str,
+                            processors) -> dict[str, dict]:
+    """Load the latest accumulated model for each processor from Neo4j.
+
+    Returns {node_property: accumulated_dict}.
+    """
+    result: dict[str, dict] = {}
+    for proc in processors:
+        prop = f"{proc.node_property}_acc"
+        cypher = _CYPHER_GET_LATEST_ACC.format(prop=prop)
+        rows = run_cypher_read(driver, cypher, {"repo_name": repo_name})
+        if rows and rows[0].get("acc"):
+            try:
+                acc = json.loads(rows[0]["acc"])
+                # Rebuild per-file mapping from the snapshot
+                per_file: dict[str, dict] = {}
+                for f in acc.get("files", []):
+                    per_file[f] = acc
+                result[proc.node_property] = per_file
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return result
 
 
 def _parse_git_log_output(raw: str) -> list[dict]:
@@ -257,11 +353,47 @@ def _stamp_branch_on_commits(driver, branch_name: str, repo_name: str,
                       f"  {branch_name}: {len(hashes)} commits")
 
 
-def _discover_branches(repo_path: str) -> list[dict]:
-    """Get local branch names and their tip commit hashes."""
+def _fetch_remote_branches(repo_path: str,
+                           branches: list[str] | None = None,
+                           job_id: str | None = None) -> bool:
+    """Fetch remote tracking refs without touching the working tree.
+
+    If branches is given, fetches only those branches. Otherwise fetches all.
+    Returns True on success.
+    """
+    cmd = ["git", "fetch", "origin"]
+    if branches:
+        cmd += branches
+    else:
+        cmd.append("--all")
+    try:
+        proc = subprocess.run(
+            cmd, cwd=repo_path,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=60,
+        )
+        if proc.returncode != 0 and job_id:
+            job_store.add_log(job_id, "warn",
+                              f"git fetch failed: {(proc.stderr or '').strip()}")
+        return proc.returncode == 0
+    except Exception as e:
+        if job_id:
+            job_store.add_log(job_id, "warn", f"git fetch failed: {e}")
+        return False
+
+
+def _discover_branches(repo_path: str,
+                       use_remote: bool = True) -> list[dict]:
+    """Get branch names and their tip commit hashes.
+
+    When use_remote=True (default), reads from origin remote tracking refs.
+    This avoids depending on which branch is checked out locally.
+    """
+    ref_prefix = "refs/remotes/origin/" if use_remote else "refs/heads/"
     proc = subprocess.run(
         ["git", "for-each-ref", "--format=%(refname:short) %(objectname)",
-         "refs/heads/"],
+         ref_prefix],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -276,8 +408,14 @@ def _discover_branches(repo_path: str) -> list[dict]:
     for line in (proc.stdout or "").strip().splitlines():
         parts = line.split(None, 1)
         if len(parts) == 2:
+            name = parts[0]
+            # Strip "origin/" prefix from remote tracking refs
+            if use_remote and name.startswith("origin/"):
+                name = name[len("origin/"):]
+            if name == "HEAD":
+                continue
             branches.append({
-                "name": parts[0],
+                "name": name,
                 "tip_hash": parts[1][:12],
             })
     return branches
@@ -355,11 +493,16 @@ def _build_accumulated_snapshot(accumulated: dict[str, dict]) -> dict:
 def _run_processors(driver, processors, repo_path: str, commits: list[dict],
                     job_id: str,
                     documented: dict[str, set[str]] | None = None,
+                    prior_accumulated: dict[str, dict] | None = None,
                     ) -> dict[str, set[str]]:
     """Run commit processors and store results on Neo4j commit nodes.
 
     Processes commits in chronological order (oldest first) to build
     accumulated models. Stores both delta and accumulated state.
+
+    Args:
+        prior_accumulated: Optional {node_property: per_file_dict} to seed
+            accumulation from a previous incremental run.
 
     Returns the documented files mapping (hash -> set of file paths).
     """
@@ -368,6 +511,11 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
     # Track documented files per commit across all processors
     if documented is None:
         documented = {}
+    if prior_accumulated is None:
+        prior_accumulated = {}
+
+    # Track processor versions per commit
+    commit_proc_versions: dict[str, dict[str, int]] = {}
 
     # Sort commits oldest-first for accumulation
     sorted_commits = sorted(commits, key=lambda c: c.get("date", ""))
@@ -375,14 +523,15 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
     for proc in processors:
         proc: CommitProcessor
         job_store.add_log(job_id, "info",
-                          f"  Running processor: {proc.label}")
+                          f"  Running processor: {proc.label} (v{proc.version})")
         delta_batch: list[dict] = []
         acc_batch: list[dict] = []
         detected_count = 0
         processed_count = 0
 
-        # Per-file accumulation for this processor
-        accumulated: dict[str, dict] = {}
+        # Per-file accumulation — seed from prior state if available
+        accumulated: dict[str, dict] = dict(
+            prior_accumulated.get(proc.node_property, {}))
 
         for commit in sorted_commits:
             matched = proc.detect(commit.get("files_changed", []))
@@ -442,6 +591,10 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
                     "value": json.dumps(acc_snapshot),
                 })
 
+                # Record processor version for this commit
+                commit_proc_versions.setdefault(
+                    commit["hash"], {})[proc.name] = proc.version
+
         # Batch-write deltas to Neo4j
         if delta_batch:
             cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
@@ -494,12 +647,365 @@ def _run_processors(driver, processors, repo_path: str, commits: list[dict],
             f"  Documentation coverage: {len(documented)} commits, "
             f"{total_files} files documented")
 
+    # Write processor versions per commit
+    if commit_proc_versions:
+        pv_batch = [
+            {"hash": h, "versions": json.dumps(versions)}
+            for h, versions in commit_proc_versions.items()
+        ]
+        for i in range(0, len(pv_batch), _BATCH_SIZE):
+            chunk = pv_batch[i:i + _BATCH_SIZE]
+            run_cypher_write(driver, _CYPHER_SET_COMMIT_PROC_VERSIONS,
+                             {"items": chunk})
+
     return documented
 
 
+async def _ingest_repo(driver, job_id: str, repo: dict, repo_name: str,
+                       repo_path: str, branch_filter: list[str] | None,
+                       mode: str) -> tuple[int, int, int]:
+    """Ingest commits for a single repo. Returns (commits, issues, files)."""
+    is_incremental = mode == "incremental"
+    prior_state: dict | None = None
+    prior_tips: dict[str, str] = {}
+    prior_accumulated: dict[str, dict] | None = None
+
+    if is_incremental:
+        prior_state = await asyncio.to_thread(
+            _load_ingestion_state, driver, repo_name)
+        if prior_state is None:
+            job_store.add_log(job_id, "info",
+                              f"{repo_name}: no prior state, "
+                              f"falling back to full ingestion")
+            is_incremental = False
+        else:
+            prior_tips = prior_state.get("branch_tips", {})
+            job_store.add_log(
+                job_id, "info",
+                f"{repo_name}: incremental from "
+                f"{len(prior_tips)} known branch tip(s)")
+
+    # Fetch latest remote refs (safe — does not touch working tree)
+    job_store.add_log(job_id, "info",
+                      f"{repo_name}: fetching remote refs...")
+    await asyncio.to_thread(
+        _fetch_remote_branches, repo_path, branch_filter, job_id)
+
+    # Build git log command using origin/ remote tracking refs
+    if is_incremental and prior_tips:
+        git_cmd = _build_incremental_git_cmd(branch_filter, prior_tips)
+        job_store.add_log(job_id, "info",
+                          f"{repo_name}: fetching new commits only")
+    else:
+        git_cmd = ["git", "log"]
+        if branch_filter:
+            git_cmd += [f"origin/{b}" for b in branch_filter]
+            job_store.add_log(job_id, "info",
+                              f"{repo_name}: filtering by branches: "
+                              f"{', '.join(branch_filter)}")
+        else:
+            git_cmd.append("--all")
+        git_cmd += [f"--format={_GIT_LOG_FORMAT}", "--name-only"]
+
+    # Run git log
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            git_cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_GIT_LOG_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        job_store.add_log(job_id, "warn",
+                          f"{repo_name}: git log timed out after "
+                          f"{_GIT_LOG_TIMEOUT}s")
+        return 0, 0, 0
+    except Exception as e:
+        job_store.add_log(job_id, "warn",
+                          f"{repo_name}: git log failed: {e}")
+        return 0, 0, 0
+
+    if proc.returncode != 0:
+        # Incremental range may fail on force-pushed branches
+        if is_incremental:
+            job_store.add_log(
+                job_id, "warn",
+                f"{repo_name}: incremental git log failed "
+                f"(possible force push), retrying full ingestion")
+            return await _ingest_repo(
+                driver, job_id, repo, repo_name, repo_path,
+                branch_filter, mode="full")
+        job_store.add_log(job_id, "warn",
+                          f"{repo_name}: git log returned exit code "
+                          f"{proc.returncode}: "
+                          f"{(proc.stderr or '').strip()}")
+        return 0, 0, 0
+
+    # Parse
+    commits = _parse_git_log_output(proc.stdout or "")
+    total_available = len(commits)
+    job_store.add_log(job_id, "info",
+                      f"{repo_name}: parsed {total_available} "
+                      f"{'new ' if is_incremental else ''}commits")
+
+    # Chunk: take only the oldest N commits so we can test incremental
+    chunked = False
+    if _COMMIT_CHUNK_SIZE and len(commits) > _COMMIT_CHUNK_SIZE:
+        # git log returns newest-first; reverse → oldest-first, slice, reverse back
+        commits.reverse()
+        commits = commits[:_COMMIT_CHUNK_SIZE]
+        commits.reverse()
+        chunked = True
+        job_store.add_log(
+            job_id, "info",
+            f"{repo_name}: chunked to {len(commits)} oldest commits "
+            f"(of {total_available})")
+
+    # Full mode: clear existing data
+    if not is_incremental:
+        job_store.add_log(job_id, "info",
+                          f"{repo_name}: clearing existing data...")
+        await asyncio.to_thread(
+            run_cypher_write, driver, _CYPHER_CLEAR_BRANCHES,
+            {"repo_name": repo_name})
+        await asyncio.to_thread(
+            run_cypher_write, driver, _CYPHER_CLEAR_COMMITS,
+            {"repo_name": repo_name})
+
+    # Merge repo node
+    await asyncio.to_thread(
+        run_cypher_write, driver, _CYPHER_REPO,
+        {"repo_name": repo_name, "repo_path": repo_path})
+
+    # Link to Java:Repository (no-op if none exists)
+    await asyncio.to_thread(
+        run_cypher_write, driver, _CYPHER_LINK,
+        {"repo_name": repo_name})
+
+    # Write commits (MERGE is idempotent)
+    written = 0
+    if commits:
+        written = await asyncio.to_thread(
+            _write_commits_batch, driver, repo_name, commits, job_id)
+        await asyncio.to_thread(
+            _write_parent_edges, driver, commits, job_id)
+
+    # Discover and write branches with membership
+    branches = await asyncio.to_thread(
+        _discover_branches, repo_path)
+    if branch_filter:
+        branches = [b for b in branches if b["name"] in branch_filter]
+
+    # Clean up stale branches (in prior state but no longer in git)
+    if is_incremental and prior_tips:
+        current_names = {b["name"] for b in branches}
+        for old_name in prior_tips:
+            if old_name not in current_names:
+                job_store.add_log(job_id, "info",
+                                  f"{repo_name}: removing stale branch "
+                                  f"{old_name}")
+                await asyncio.to_thread(
+                    run_cypher_write, driver, _CYPHER_UNSTAMP_BRANCH,
+                    {"repo_name": repo_name, "branch_name": old_name})
+                await asyncio.to_thread(
+                    run_cypher_write, driver, _CYPHER_REMOVE_STALE_BRANCH,
+                    {"repo_name": repo_name, "branch_name": old_name})
+
+    if branches:
+        # When chunked, the real branch tips may not be in our commit set.
+        # Override tips to the newest commit we actually processed so that
+        # branch nodes point to an existing commit and walks stay in-bounds.
+        if chunked and commits:
+            newest_hash = commits[0]["hash"]  # commits[0] is newest
+            commit_hashes = {c["hash"] for c in commits}
+            for b in branches:
+                if b["tip_hash"] not in commit_hashes:
+                    b["tip_hash"] = newest_hash
+
+        await asyncio.to_thread(
+            run_cypher_write, driver, _CYPHER_BRANCHES,
+            {"repo_name": repo_name, "branches": branches})
+        # Stamp branch name on all reachable commits
+        ap_map = _build_all_parents_map(commits)
+        fp_map = _build_first_parent_map(commits)
+        for b in branches:
+            if is_incremental or chunked:
+                # In incremental/chunked mode the full ancestor chain is
+                # not in memory. Stamp all commits in this batch — they
+                # are all reachable from the branch. Prior commits were
+                # already stamped in earlier runs.
+                all_hashes = [c["hash"] for c in commits]
+                first_chain = _walk_first_parents(
+                    b["tip_hash"], fp_map)
+            else:
+                all_hashes = _walk_all_ancestors(
+                    b["tip_hash"], ap_map)
+                first_chain = _walk_first_parents(
+                    b["tip_hash"], fp_map)
+            await asyncio.to_thread(
+                _stamp_branch_on_commits, driver,
+                b["name"], repo_name, all_hashes,
+                first_chain[-1] if first_chain else None,
+                job_id)
+        branch_names = ", ".join(b["name"] for b in branches)
+        job_store.add_log(job_id, "info",
+                          f"{repo_name}: {len(branches)} branches "
+                          f"({branch_names})")
+
+    # Stats
+    issue_count = sum(len(c["issue_keys"]) for c in commits)
+    unique_files: set[str] = set()
+    for c in commits:
+        unique_files.update(c["files_changed"])
+
+    job_store.add_log(
+        job_id, "info",
+        f"{repo_name}: {written} commits, "
+        f"{issue_count} issue refs, "
+        f"{len(unique_files)} unique files")
+
+    # ── Run commit processors (on new commits only) ──
+    if not commits:
+        job_store.add_log(job_id, "info",
+                          f"{repo_name}: no new commits, "
+                          f"skipping processors")
+    else:
+        documented: dict[str, set[str]] = {}
+
+        # Load prior accumulated state for incremental mode
+        all_processors = []
+
+        # 1. Matured processors (configured per-repo)
+        repo_processor_names = repo.get("processors", [])
+        if repo_processor_names:
+            from app.analyzers.commit_processors import get_processors_by_name
+            matured = get_processors_by_name(repo_processor_names)
+            all_processors.extend(matured)
+
+        # 2. Incubating processors (global, from config)
+        from app.config import load_config_decrypted
+        from app.analyzers.commit_processors import get_incubating_processors
+        app_config = load_config_decrypted()
+        incubating = get_incubating_processors(app_config)
+        all_processors.extend(incubating)
+
+        if is_incremental and all_processors:
+            prior_accumulated = await asyncio.to_thread(
+                _load_prior_accumulated, driver, repo_name,
+                all_processors)
+            if prior_accumulated:
+                job_store.add_log(
+                    job_id, "info",
+                    f"{repo_name}: seeding accumulated state from "
+                    f"{len(prior_accumulated)} processor(s)")
+
+        if repo_processor_names:
+            from app.analyzers.commit_processors import get_processors_by_name
+            matured = get_processors_by_name(repo_processor_names)
+            if matured:
+                job_store.add_log(
+                    job_id, "info",
+                    f"{repo_name}: running matured processors: "
+                    f"{', '.join(p.label for p in matured)}")
+                documented = await asyncio.to_thread(
+                    _run_processors, driver, matured,
+                    repo_path, commits, job_id,
+                    prior_accumulated=prior_accumulated)
+
+        if incubating:
+            job_store.add_log(
+                job_id, "info",
+                f"{repo_name}: running incubating processors: "
+                f"{', '.join(p.label for p in incubating)}")
+            documented = await asyncio.to_thread(
+                _run_processors, driver, incubating,
+                repo_path, commits, job_id, documented,
+                prior_accumulated=prior_accumulated)
+
+        # 3. Coverage checker (always last)
+        from app.analyzers.commit_processors.coverage_checker import (
+            run_coverage_check, suggest_new_processors)
+        job_store.add_log(job_id, "info",
+                          f"{repo_name}: running coverage check...")
+        uncovered_map = run_coverage_check(
+            commits, documented, job_id)
+        if uncovered_map:
+            uncov_batch = [
+                {"hash": h, "value": files}
+                for h, files in uncovered_map.items()
+            ]
+            cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
+                prop="uncovered_files")
+            for i in range(0, len(uncov_batch), _BATCH_SIZE):
+                chunk = uncov_batch[i:i + _BATCH_SIZE]
+                await asyncio.to_thread(
+                    run_cypher_write, driver, cypher,
+                    {"items": chunk})
+
+            suggestions = await asyncio.to_thread(
+                suggest_new_processors, uncovered_map, job_id)
+            if suggestions:
+                job_store.add_log(
+                    job_id, "info",
+                    f"{repo_name}: processor suggestions stored "
+                    f"in job params")
+                job = job_store.get_job(job_id)
+                if job:
+                    existing = job.params.get(
+                        "processor_suggestions", {})
+                    existing[repo_name] = suggestions
+                    job.params["processor_suggestions"] = existing
+
+    # ── Save ingestion state ──
+    if chunked and commits:
+        # When chunked, save the newest processed commit as the tip
+        # so the next incremental run continues from here
+        newest_hash = commits[0]["full_hash"][:12]  # commits[0] is newest
+        new_tips = {b["name"]: newest_hash for b in branches}
+        job_store.add_log(
+            job_id, "info",
+            f"{repo_name}: chunked — saving checkpoint at {newest_hash}")
+    else:
+        new_tips = {b["name"]: b["tip_hash"] for b in branches}
+    # Collect processor versions used
+    all_proc_versions: dict[str, int] = {}
+    repo_processor_names = repo.get("processors", [])
+    if repo_processor_names:
+        from app.analyzers.commit_processors import get_processors_by_name
+        for p in get_processors_by_name(repo_processor_names):
+            all_proc_versions[p.name] = p.version
+    from app.config import load_config_decrypted
+    from app.analyzers.commit_processors import get_incubating_processors
+    app_config = load_config_decrypted()
+    for p in get_incubating_processors(app_config):
+        all_proc_versions[p.name] = p.version
+
+    state = {
+        "branch_tips": new_tips,
+        "processor_versions": all_proc_versions,
+        "last_ingested_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await asyncio.to_thread(
+        _save_ingestion_state, driver, repo_name, state)
+    job_store.add_log(job_id, "info",
+                      f"{repo_name}: ingestion state saved")
+
+    return written, issue_count, len(unique_files)
+
+
 async def run_ingest_commits(job_id: str, repos: list[dict],
-                             branch_filter: list[str] | None = None):
-    """Main entry point: ingest git commits into Neo4j for given repos."""
+                             branch_filter: list[str] | None = None,
+                             mode: str = "incremental"):
+    """Main entry point: ingest git commits into Neo4j for given repos.
+
+    Args:
+        mode: "incremental" (default) fetches only new commits since last
+              ingestion. "full" clears and re-ingests everything.
+    """
     job_store.update_status(job_id, JobStatus.RUNNING)
     try:
         driver = get_neo4j_driver()
@@ -511,6 +1017,9 @@ async def run_ingest_commits(job_id: str, repos: list[dict],
         total_commits_all = 0
         total_issues_all = 0
         total_files_all = 0
+
+        job_store.add_log(job_id, "info",
+                          f"Ingestion mode: {mode}")
 
         for repo in repos:
             repo_name = repo["name"]
@@ -524,192 +1033,12 @@ async def run_ingest_commits(job_id: str, repos: list[dict],
                                   f"{repo_path}")
                 continue
 
-            # Run git log
-            git_cmd = ["git", "log"]
-            if branch_filter:
-                git_cmd += branch_filter
-                job_store.add_log(job_id, "info",
-                                  f"{repo_name}: filtering by branches: "
-                                  f"{', '.join(branch_filter)}")
-            else:
-                git_cmd.append("--all")
-            git_cmd += [f"--format={_GIT_LOG_FORMAT}", "--name-only"]
-            try:
-                proc = await asyncio.to_thread(
-                    subprocess.run,
-                    git_cmd,
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=_GIT_LOG_TIMEOUT,
-                )
-            except subprocess.TimeoutExpired:
-                job_store.add_log(job_id, "warn",
-                                  f"{repo_name}: git log timed out after "
-                                  f"{_GIT_LOG_TIMEOUT}s")
-                continue
-            except Exception as e:
-                job_store.add_log(job_id, "warn",
-                                  f"{repo_name}: git log failed: {e}")
-                continue
-
-            if proc.returncode != 0:
-                job_store.add_log(job_id, "warn",
-                                  f"{repo_name}: git log returned exit code "
-                                  f"{proc.returncode}: "
-                                  f"{(proc.stderr or '').strip()}")
-                continue
-
-            # Parse
-            commits = _parse_git_log_output(proc.stdout or "")
-            job_store.add_log(job_id, "info",
-                              f"{repo_name}: parsed {len(commits)} commits")
-
-            if not commits:
-                job_store.add_log(job_id, "info",
-                                  f"{repo_name}: no commits found, skipping")
-                continue
-
-            # Clear existing data for this repo
-            job_store.add_log(job_id, "info",
-                              f"{repo_name}: clearing existing data...")
-            await asyncio.to_thread(
-                run_cypher_write, driver, _CYPHER_CLEAR_BRANCHES,
-                {"repo_name": repo_name})
-            await asyncio.to_thread(
-                run_cypher_write, driver, _CYPHER_CLEAR_COMMITS,
-                {"repo_name": repo_name})
-
-            # Merge repo node
-            await asyncio.to_thread(
-                run_cypher_write, driver, _CYPHER_REPO,
-                {"repo_name": repo_name, "repo_path": repo_path})
-
-            # Link to Java:Repository (no-op if none exists)
-            await asyncio.to_thread(
-                run_cypher_write, driver, _CYPHER_LINK,
-                {"repo_name": repo_name})
-
-            # Batch write commits
-            written = await asyncio.to_thread(
-                _write_commits_batch, driver, repo_name, commits, job_id)
-
-            # Create PARENT edges
-            parent_count = await asyncio.to_thread(
-                _write_parent_edges, driver, commits, job_id)
-
-            # Discover and write branches with membership
-            branches = await asyncio.to_thread(
-                _discover_branches, repo_path)
-            if branch_filter:
-                branches = [b for b in branches if b["name"] in branch_filter]
-            if branches:
-                await asyncio.to_thread(
-                    run_cypher_write, driver, _CYPHER_BRANCHES,
-                    {"repo_name": repo_name, "branches": branches})
-                # Stamp branch name on all reachable commits
-                ap_map = _build_all_parents_map(commits)
-                fp_map = _build_first_parent_map(commits)
-                for b in branches:
-                    all_hashes = _walk_all_ancestors(
-                        b["tip_hash"], ap_map)
-                    first_chain = _walk_first_parents(
-                        b["tip_hash"], fp_map)
-                    await asyncio.to_thread(
-                        _stamp_branch_on_commits, driver,
-                        b["name"], repo_name, all_hashes,
-                        first_chain[-1] if first_chain else None,
-                        job_id)
-                branch_names = ", ".join(b["name"] for b in branches)
-                job_store.add_log(job_id, "info",
-                                  f"{repo_name}: {len(branches)} branches "
-                                  f"({branch_names})")
-
-            # Stats
-            issue_count = sum(len(c["issue_keys"]) for c in commits)
-            unique_files = set()
-            for c in commits:
-                unique_files.update(c["files_changed"])
-
+            written, issue_count, file_count = await _ingest_repo(
+                driver, job_id, repo, repo_name, repo_path,
+                branch_filter, mode)
             total_commits_all += written
             total_issues_all += issue_count
-            total_files_all += len(unique_files)
-
-            job_store.add_log(
-                job_id, "info",
-                f"{repo_name}: {written} commits, "
-                f"{issue_count} issue refs, "
-                f"{len(unique_files)} unique files")
-
-            # ── Run commit processors ──
-            documented: dict[str, set[str]] = {}
-
-            # 1. Matured processors (configured per-repo)
-            repo_processor_names = repo.get("processors", [])
-            if repo_processor_names:
-                from app.analyzers.commit_processors import get_processors_by_name
-                matured = get_processors_by_name(repo_processor_names)
-                if matured:
-                    job_store.add_log(
-                        job_id, "info",
-                        f"{repo_name}: running matured processors: "
-                        f"{', '.join(p.label for p in matured)}")
-                    documented = await asyncio.to_thread(
-                        _run_processors, driver, matured,
-                        repo_path, commits, job_id)
-
-            # 2. Incubating processors (global, from config)
-            from app.config import load_config_decrypted
-            from app.analyzers.commit_processors import get_incubating_processors
-            app_config = load_config_decrypted()
-            incubating = get_incubating_processors(app_config)
-            if incubating:
-                job_store.add_log(
-                    job_id, "info",
-                    f"{repo_name}: running incubating processors: "
-                    f"{', '.join(p.label for p in incubating)}")
-                documented = await asyncio.to_thread(
-                    _run_processors, driver, incubating,
-                    repo_path, commits, job_id, documented)
-
-            # 3. Coverage checker (always last)
-            from app.analyzers.commit_processors.coverage_checker import (
-                run_coverage_check, suggest_new_processors)
-            job_store.add_log(job_id, "info",
-                              f"{repo_name}: running coverage check...")
-            uncovered_map = run_coverage_check(
-                commits, documented, job_id)
-            if uncovered_map:
-                # Store uncovered_files on commit nodes
-                uncov_batch = [
-                    {"hash": h, "value": files}
-                    for h, files in uncovered_map.items()
-                ]
-                cypher = _CYPHER_SET_PROCESSOR_RESULT_TPL.format(
-                    prop="uncovered_files")
-                for i in range(0, len(uncov_batch), _BATCH_SIZE):
-                    chunk = uncov_batch[i:i + _BATCH_SIZE]
-                    await asyncio.to_thread(
-                        run_cypher_write, driver, cypher,
-                        {"items": chunk})
-
-                # AI suggestions for new processors
-                suggestions = await asyncio.to_thread(
-                    suggest_new_processors, uncovered_map, job_id)
-                if suggestions:
-                    # Store suggestions on the job for review
-                    job_store.add_log(
-                        job_id, "info",
-                        f"{repo_name}: processor suggestions stored "
-                        f"in job params")
-                    job = job_store.get_job(job_id)
-                    if job:
-                        existing = job.params.get(
-                            "processor_suggestions", {})
-                        existing[repo_name] = suggestions
-                        job.params["processor_suggestions"] = existing
+            total_files_all += file_count
 
         job_store.add_log(job_id, "info",
                           f"Done. {total_commits_all} commits, "

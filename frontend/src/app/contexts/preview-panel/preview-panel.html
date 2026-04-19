@@ -47,6 +47,13 @@
                   <i class="bi bi-folder2-open"></i>{{ section.id }}
                 </a>
               }
+              @if (section.type === 'git_repo' && section.path) {
+                <a class="scratch-dir-link"
+                   [routerLink]="['/git-diff', section.id]" [queryParams]="{returnTo: '/contexts/' + contextName()}"
+                   title="View working directory diff">
+                  <i class="bi bi-folder2-open"></i>{{ section.path }}
+                </a>
+              }
             </div>
             <pre class="preview-card-content">{{ getSectionContent(section) }}</pre>
           </div>

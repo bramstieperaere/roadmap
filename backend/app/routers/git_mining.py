@@ -5,9 +5,12 @@ import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel
 
-from app.analyzers.git_log_analyzer import run_ingest_commits
+from app.analyzers.git_log_analyzer import (
+    run_ingest_commits, _load_ingestion_state)
 from app.analyzers.jira_issue_importer import run_import_jira_issues
 from app.analyzers.jira_ticket_linker import run_link_jira_tickets
 from app.config import CONFIG_PATH, load_config
@@ -26,6 +29,7 @@ class StartMiningRequest(BaseModel):
     repo_names: list[str] = []
     branches: list[str] | None = None
     processing_config: str | None = None  # name of a GitProcessingConfig
+    mode: Literal["incremental", "full"] = "incremental"
 
 
 
@@ -230,7 +234,7 @@ async def start_mining(request: StartMiningRequest):
                     "processing_config": proc_config_name},
         )
         asyncio.create_task(run_ingest_commits(
-            job.id, repos, branches))
+            job.id, repos, branches, mode=request.mode))
     elif request.action == "import_jira_issues":
         job = job_store.create_job(
             module_name=f"Import Jira Issues ({len(repos)} repo(s))",
@@ -273,13 +277,15 @@ def list_processors():
         result.append({"name": p.name, "label": p.label,
                         "description": p.description,
                         "node_property": p.node_property,
-                        "status": "matured"})
+                        "status": "matured",
+                        "version": p.version})
     config = load_config()
     for p in get_incubating_processors(config):
         result.append({"name": p.name, "label": p.label,
                         "description": p.description,
                         "node_property": p.node_property,
-                        "status": "incubating"})
+                        "status": "incubating",
+                        "version": p.version})
     return result
 
 
@@ -291,6 +297,159 @@ def get_processor_suggestions(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job.params.get("processor_suggestions", {})
+
+
+@router.get("/repos/{repo_name}/ingestion-state")
+def get_ingestion_state(repo_name: str):
+    """Return the current ingestion state for a repository."""
+    _require_unlocked()
+    from app.neo4j_client import get_neo4j_driver
+    driver = get_neo4j_driver()
+    state = _load_ingestion_state(driver, repo_name)
+    if state is None:
+        return {"has_state": False}
+    return {"has_state": True, **state}
+
+
+def _resolve_processors_for_config(config, gp) -> list[str]:
+    """Resolve processor names for a git processing config."""
+    repo = next((r for r in config.repositories if r.name == gp.repo_name), None)
+    processors = list(gp.processors) if gp.processors else []
+    if gp.profile:
+        profile = next((p for p in config.processing_profiles
+                        if p.name == gp.profile), None)
+        if profile:
+            for p_name in profile.processors:
+                if p_name not in processors:
+                    processors.append(p_name)
+    if not processors and repo:
+        processors = repo.processors
+    return processors
+
+
+@router.post("/check-remotes")
+async def check_remotes(ingest: bool = False):
+    """Check all git processing configs for new remote commits.
+
+    Compares remote branch tip (via git ls-remote) with stored ingestion
+    state tip. When ingest=True, starts incremental ingestion jobs for
+    configs that have new commits.
+    """
+    import logging
+    log = logging.getLogger("roadmap.polling")
+
+    _require_unlocked()
+    config = load_config()
+
+    if not config.git_processing:
+        return {"checked": 0, "results": [],
+                "message": "No git processing configs"}
+
+    repo_map = {r.name: r for r in config.repositories}
+    driver = None
+    results = []
+    jobs_started = []
+
+    for gp in config.git_processing:
+        repo = repo_map.get(gp.repo_name)
+        if not repo:
+            log.warning("check-remotes: repo %s not found in config",
+                        gp.repo_name)
+            continue
+        if not gp.branch:
+            continue
+        repo_path = repo.path
+        if not Path(repo_path).is_dir():
+            log.warning("check-remotes: %s path does not exist: %s",
+                        gp.repo_name, repo_path)
+            continue
+
+        # Get remote tip via ls-remote (network call)
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "ls-remote", "--heads", "origin", gp.branch],
+                cwd=repo_path,
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=30,
+            )
+        except Exception as e:
+            log.error("check-remotes: %s/%s ls-remote failed: %s",
+                      gp.repo_name, gp.branch, e)
+            results.append({"name": gp.name, "status": "error",
+                            "detail": str(e)})
+            continue
+
+        if proc.returncode != 0 or not proc.stdout.strip():
+            log.warning("check-remotes: %s/%s ls-remote returned nothing",
+                        gp.repo_name, gp.branch)
+            results.append({"name": gp.name, "status": "no_remote",
+                            "detail": "Branch not found on remote"})
+            continue
+
+        remote_tip = proc.stdout.strip().split()[0][:12]
+
+        # Get stored tip from ingestion state
+        if driver is None:
+            from app.neo4j_client import get_neo4j_driver
+            driver = get_neo4j_driver()
+        state = _load_ingestion_state(driver, gp.repo_name)
+        stored_tip = None
+        if state:
+            stored_tip = state.get("branch_tips", {}).get(gp.branch)
+
+        has_changes = remote_tip != stored_tip
+        entry = {
+            "name": gp.name,
+            "repo_name": gp.repo_name,
+            "branch": gp.branch,
+            "remote_tip": remote_tip,
+            "stored_tip": stored_tip,
+            "has_changes": has_changes,
+            "status": "changed" if has_changes else "up_to_date",
+        }
+
+        if has_changes:
+            log.info("check-remotes: %s — NEW COMMITS "
+                     "(remote=%s, stored=%s)",
+                     gp.name, remote_tip, stored_tip or "none")
+
+            if ingest:
+                processors = _resolve_processors_for_config(config, gp)
+                repos = [{"name": repo.name, "path": repo.path,
+                          "processors": processors}]
+                branches = [gp.branch]
+                job = job_store.create_job(
+                    module_name=f"Incremental Ingest ({gp.name})",
+                    module_type="git_mining",
+                    params={"action": "ingest_commits",
+                            "repo_names": [gp.repo_name],
+                            "branches": branches,
+                            "processing_config": gp.name,
+                            "triggered_by": "polling"},
+                )
+                asyncio.create_task(run_ingest_commits(
+                    job.id, repos, branches, mode="incremental"))
+                entry["job_id"] = job.id
+                entry["status"] = "ingestion_started"
+                jobs_started.append(job.id)
+                log.info("check-remotes: %s — started ingestion job %s",
+                         gp.name, job.id)
+        else:
+            log.info("check-remotes: %s — up to date (%s)",
+                     gp.name, remote_tip)
+
+        results.append(entry)
+
+    changed = sum(1 for r in results if r.get("has_changes"))
+    log.info("check-remotes: checked %d config(s), %d with changes, "
+             "%d jobs started",
+             len(results), changed, len(jobs_started))
+
+    return {"checked": len(results), "changed": changed,
+            "jobs_started": jobs_started,
+            "results": results}
 
 
 @router.post("/incubating-processors")

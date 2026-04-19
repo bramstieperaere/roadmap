@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, inject, Injector, OnInit, signal, ViewChild, afterNextRender, DestroyRef } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, inject, Injector, OnInit, signal, ViewChild, afterNextRender, DestroyRef } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -869,6 +869,46 @@ export class ContextDetail implements OnInit {
     if (listId === 'parent') return ctx.items;
     const childName = listId.replace('child:', '');
     return ctx.children?.find(c => c.name === childName)?.items ?? null;
+  }
+
+  // ── Item popup menu ──
+
+  itemMenuKey = signal<string | null>(null);
+  itemMenuPosition = signal<{ top: number; left: number }>({ top: 0, left: 0 });
+  copiedItemRef = signal<string | null>(null);
+
+  toggleItemMenu(item: ContextItemEntry, event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = itemKey(item);
+    if (this.itemMenuKey() === key) {
+      this.itemMenuKey.set(null);
+      return;
+    }
+    const btn = event.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    this.itemMenuPosition.set({ top: rect.bottom + 2, left: rect.right });
+    this.itemMenuKey.set(key);
+  }
+
+  @HostListener('document:click')
+  closeItemMenu() {
+    this.itemMenuKey.set(null);
+  }
+
+  copyItemRef(item: ContextItemEntry, index: number, event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const contextPath = this.child() ? `${this.name()}/${this.child()}` : this.name();
+    const label = item.label || item.title || item.id;
+    const text = `Use roadmap MCP to read context item "${label}" from context "${contextPath}":\n`
+      + `get_context_item("${contextPath}", ${index})`;
+    const key = itemKey(item);
+    navigator.clipboard.writeText(text).then(() => {
+      this.itemMenuKey.set(null);
+      this.copiedItemRef.set(key);
+      setTimeout(() => { if (this.copiedItemRef() === key) this.copiedItemRef.set(null); }, 1500);
+    });
   }
 
   // ── Helpers ──

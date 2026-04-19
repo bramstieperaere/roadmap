@@ -195,6 +195,7 @@ class LiquibaseProcessor(CommitProcessor):
     label = "Liquibase DB Changes"
     description = "Detects Liquibase changelog XML files and extracts database schema changes"
     node_property = "db_changes"
+    version = 1
 
     def detect(self, files_changed: list[str]) -> list[str]:
         matched = []

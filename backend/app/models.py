@@ -54,6 +54,7 @@ class AIProviderConfig(BaseModel):
     base_url: str = "https://api.openai.com/v1"
     api_key: str = ""
     default_model: str = "gpt-4o"
+    privacy_level: str = "private"
 
 
 class AITaskConfig(BaseModel):
@@ -110,6 +111,12 @@ class GitProcessingConfig(BaseModel):
     processors: list[str] = []
 
 
+class SchedulingConfig(BaseModel):
+    enabled: bool = False
+    policy: str = "polling"          # only "polling" for now
+    polling_schedule: str = ""       # cron expression, e.g. "0 9-17 * * 1-5"
+
+
 class AppConfig(BaseModel):
     neo4j: Neo4jConfig = Neo4jConfig()
     atlassian: AtlassianConfig = AtlassianConfig()
@@ -124,6 +131,7 @@ class AppConfig(BaseModel):
     databases: list[DatabaseOverride] = []
     processing_profiles: list[ProcessingProfileConfig] = []
     git_processing: list[GitProcessingConfig] = []
+    scheduling: SchedulingConfig = SchedulingConfig()
     incubating_processors: list[IncubatingProcessorConfig] = []
 
 

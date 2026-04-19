@@ -28,6 +28,14 @@ def run_cypher_write(driver, query: str, parameters: dict = None):
         result.consume()
 
 
+def run_cypher_read(driver, query: str, parameters: dict = None) -> list[dict]:
+    """Execute a read-only Cypher query and return rows as dicts."""
+    config = load_config_decrypted()
+    with driver.session(database=config.neo4j.database) as s:
+        result = s.run(query, parameters or {})
+        return [dict(r) for r in result]
+
+
 def run_cypher_read_graph(driver, query: str, parameters: dict = None) -> dict:
     """Execute a read-only Cypher query and return nodes + relationships."""
     config = load_config_decrypted()
